@@ -278,4 +278,73 @@ function expPanel(id,o){
    <h3>What the results show</h3><ul class="k">${o.points.map(p=>`<li>${p}</li>`).join('')}</ul>
    ${o.next?`<p class="next-reason"><b>Next.</b> ${o.next}</p>`:''}`;
 }
+
+/* ---------------- render ---------------- */
+const TABS=[["01","Methods & data"],["02","Experiment 1 · Architecture"],["03","Experiment 2 · Channels"],["04","Experiment 3 · Target & loss"]];
+document.getElementById('tabs').innerHTML=TABS.map((t,i)=>`<button class="tab" role="tab" id="t${i}" aria-controls="p${i}" aria-selected="${i===0}"><span class="n">${t[0]}</span>${t[1]}</button>`).join('');
+function show(i){document.querySelectorAll('.tab').forEach((b,j)=>b.setAttribute('aria-selected',j===i));document.querySelectorAll('.panel').forEach((p,j)=>p.classList.toggle('on',j===i));window.scrollTo(0,0);}
+document.querySelectorAll('.tab').forEach((b,i)=>b.addEventListener('click',()=>show(i)));
+
+document.getElementById('mdefs').innerHTML=[
+ ["Dice (macro)","Mean over positive scenes of the per scene Dice overlap.","2·TP / (2·TP + FP + FN)"],
+ ["Dice (micro)","Same formula over all test pixels pooled together.","2·ΣTP / (2·ΣTP + ΣFP + ΣFN)"],
+ ["IoU","Overlap of the two masks over their union.","TP / (TP + FP + FN)"],
+ ["Precision","Predicted plume pixels that are correct.","TP / (TP + FP)"],
+ ["Recall","Truth plume pixels that are found.","TP / (TP + FN)"],
+ ["Boundary IoU","IoU inside a band along the mask boundary.","|∂G ∩ ∂P| / |∂G ∪ ∂P|"],
+ ["NSD 2 px","Fraction of each boundary within 2 pixels of the other.","(|∂P within τ of ∂G| + |∂G within τ of ∂P|) / (|∂P| + |∂G|)"],
+ ["HD95 (px)","95th percentile of the boundary to boundary distances.","P95( d(∂P,∂G) ∪ d(∂G,∂P) )"],
+ ["ASSD (px)","Average of the boundary to boundary distances, both directions.","mean( d(∂P,∂G) ∪ d(∂G,∂P) )"],
+ ["Background FP","Fraction of pixels wrongly called plume on empty scenes.","FP / (all pixels)"],
+].map(r=>`<tr><td style="text-align:left"><b>${r[0]}</b></td><td class="mdef">${r[1]}</td><td class="frm">${r[2]}</td></tr>`).join('');
+document.getElementById('chart-data').innerHTML=stackedBar();
+
+/* Experiment 1 */
+const s1=rowsS(1),s1b=maxBy(s1,'d');
+expPanel('p1',{title:"Experiment 1: which architecture and loss",
+ goal:"compare model architectures and losses on a fixed split.",
+ exp:"10 runs",varied:"Architecture, loss. A few runs also changed target and channels.",fixed:"Split, patch training, full scene evaluation.",
+ chartId:"chart-s1",tblId:"tbl-s1",caption:"Test Dice (macro) for the 10 runs, sorted. Colour encodes the value. The best run is outlined.",
+ best:"<b>UNet++ with Focal Tversky, 0.628 macro Dice, 0.704 micro.</b> Highest test macro Dice of the ten runs.",
+ points:["Architecture Dice ranged from 0.594 to 0.628. The range is 0.034.",
+  "The dBZ ≥ 0 target raised DeepLabV3+ from 0.594 to 0.619. Ten channels raised it to 0.626. These changed the score more than the architecture.",
+  "The Dice plus Boundary loss lowered the score to 0.597.",
+  "Boundary IoU stayed between 0.26 and 0.39 for every run."],
+ next:"The target and the channels changed the score. Experiment 2 fixed three architectures and tested the channels."});
+document.getElementById('chart-s1').innerHTML=hBar(s1.slice().sort((a,b)=>b.d-a.d),.58,.64,s1b);
+document.getElementById('tbl-s1').innerHTML=mtable(s1.slice().sort((a,b)=>b.d-a.d),s1b);
+
+/* Experiment 2 */
+const s2=rowsS(2),s2b=maxBy(s2,'d'),arch=["UNet++","DeepLabV3+","Attention UNet"],chans=["radar","+DEM","+beam","+DEM+beam"];
+const v2=(ar,ch)=>{const o=EXP.find(e=>e.s===2&&e.ar===ar&&e.ch===ch);return o?o.d:null;};
+expPanel('p2',{title:"Experiment 2: do the terrain channels help",
+ goal:"measure whether DEM and beam height raise the score.",
+ exp:"12 runs, 3 architectures by 4 channel sets",varied:"Channel set: radar, plus DEM, plus beam, plus both.",fixed:"Target dBZ ≥ 0, radar at 3 elevations, best loss per architecture.",
+ chartId:"chart-s2",tblId:"tbl-s2",caption:"Test Dice (macro) by architecture and channel set. The best bar is outlined.",
+ best:"<b>UNet++ with DEM and beam, 0.623 macro Dice.</b> UNet++ had the highest validation in all four channel sets. Its four sets differ by 0.010.",
+ points:["For DeepLabV3+, adding one terrain channel raised Dice from 0.592 to 0.622.",
+  "For UNet++, the four channel sets ranged from 0.613 to 0.623. The change is small.",
+  "Adding both DEM and beam did not beat adding one. DEM and beam carry similar information."],
+ next:"Terrain channels help DeepLabV3+ and have little effect on UNet++. UNet++ was fixed. Experiment 3 tested the target and the loss."});
+document.getElementById('chart-s2').innerHTML=groupBar(arch,chans,chans.map(c=>CH_COL[c]),v2,.56,.64,(a,ch)=>a===s2b.ar&&ch===s2b.ch,"test Dice (macro)");
+document.getElementById('tbl-s2').innerHTML=mtable(s2.slice().sort((a,b)=>b.d-a.d),s2b);
+
+/* Experiment 3 */
+const s3=rowsS(3),s3b=maxBy(s3,'d'),tgts=["any echo","dBZ≥0","dBZ≥5"];
+const v3=(ar,tg)=>{const cs=EXP.filter(e=>e.s===3&&e.ar===ar&&e.tg===tg);return cs.length?Math.max(...cs.map(e=>e.d)):null;};
+expPanel('p3',{title:"Experiment 3: which target and loss",
+ goal:"select the target and the loss on the fixed architecture set.",
+ exp:"18 runs, 3 architectures by 3 targets by 2 losses",varied:"Target: any echo, dBZ ≥ 0, dBZ ≥ 5. Loss: Focal, Focal Tversky.",fixed:"Channels DEM and beam, radar at 3 elevations.",
+ chartId:"chart-s3",tblId:"tbl-s3",caption:"Test Dice (macro) by architecture and target, using the better loss per cell. All three drop at dBZ ≥ 5.",
+ decideTag:"Selected",
+ best:"<b>UNet++ with dBZ ≥ 0 and Focal Tversky, 0.623 macro Dice, 0.714 micro.</b> Highest test macro Dice and highest validation of the 18 runs. This is the selected configuration.",
+ points:["Target effect on UNet++ with Focal Tversky: any echo 0.616, dBZ ≥ 0 0.623, dBZ ≥ 5 0.531.",
+  "The dBZ ≥ 0 target raised Boundary IoU from 0.304 to 0.381 against the any echo target.",
+  "The dBZ ≥ 5 target lowered recall to about 0.57 and Dice to about 0.53. It keeps only the dense cores.",
+  "Focal Tversky matched or beat Focal by validation in most cells. Focal gave higher precision."]});
+document.getElementById('chart-s3').innerHTML=groupBar(arch,tgts,tgts.map(t=>TG_COL[t]),v3,.48,.64,(a,tg)=>a===s3b.ar&&tg===s3b.tg,"test Dice (macro)");
+document.getElementById('tbl-s3').innerHTML=mtable(s3.slice().sort((a,b)=>b.d-a.d),s3b);
+
+document.getElementById('tbtn').addEventListener('click',()=>{const r=document.documentElement;const cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');r.setAttribute('data-theme',cur==='dark'?'light':'dark');});
+show(0);
 </script>
