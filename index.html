@@ -206,4 +206,51 @@ const ramp=(v,lo,hi)=>lerp("#8fb6dc","#123f83",clamp((v-lo)/(hi-lo)));
 const CH_COL={"radar":"#98a6b6","+DEM":"#2f9d8c","+beam":"#e2a33d","+DEM+beam":"#3a6fce"};
 const TG_COL={"any echo":"#98a6b6","dBZ≥0":"#3a6fce","dBZ≥5":"#cf6a5c"};
 const SPL_COL=["#3a6fce","#2f9d8c","#e2a33d"];
+
+/* ---------------- charts ---------------- */
+function stackedBar(){
+  const cats=DATA.years, series=["train","val","test"], ymax=440;
+  const W=880,H=330,padL=42,padR=14,padT=14,padB=62,x0=padL,x1=W-padR,y0=H-padB,y1=padT;
+  const gw=(x1-x0)/cats.length, bw=Math.min(54,gw*0.56), sy=v=>y0-(v/ymax)*(y0-y1);
+  let g='';
+  [0,100,200,300,400].forEach(t=>{const Y=sy(t);g+=`<line x1="${x0}" y1="${Y}" x2="${x1}" y2="${Y}" style="stroke:var(--grid)"/><text x="${x0-7}" y="${Y}" text-anchor="end" dominant-baseline="middle" class="ax">${t}</text>`;});
+  cats.forEach((c,ci)=>{const cx=x0+ci*gw+gw/2; let base=0; const vals=DATA.counts[c];
+    vals.forEach((v,si)=>{const yTop=sy(base+v),hgt=sy(base)-sy(base+v);
+      g+=`<rect x="${cx-bw/2}" y="${yTop}" width="${bw}" height="${hgt}" fill="${SPL_COL[si]}"><title>${c} ${series[si]}: ${v}</title></rect>`; base+=v;});
+    g+=`<text x="${cx}" y="${sy(base)-6}" text-anchor="middle" class="val" style="font-size:11px">${base}</text>`;
+    g+=`<text x="${cx}" y="${y0+18}" text-anchor="middle" class="lab">${c}</text>`;});
+  g+=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y0}" style="stroke:var(--ink)"/>`;
+  let lx=x0;const ly=H-26;
+  series.forEach((s,si)=>{g+=`<rect x="${lx}" y="${ly}" width="12" height="12" rx="2" fill="${SPL_COL[si]}"/><text x="${lx+17}" y="${ly+10}" class="ax" style="font-family:var(--sans)">${s}</text>`;lx+=24+s.length*7.4+14;});
+  g+=`<text transform="translate(11,${(y0+y1)/2}) rotate(-90)" text-anchor="middle" class="ax">positive scenes</text>`;
+  return`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Positive scenes per year by split">${g}</svg>`;
+}
+function hBar(items,lo,hi,best){
+  const W=880,padL=214,padR=52,padT=24,padB=6,barH=18,gap=9,x0=padL,x1=W-padR;
+  const H=padT+padB+items.length*(barH+gap)-gap, sx=v=>x0+clamp((v-lo)/(hi-lo))*(x1-x0);
+  let g='';
+  for(let t=Math.ceil(lo/0.05)*0.05;t<=hi+1e-9;t+=0.05){const T=+t.toFixed(2),X=sx(T);g+=`<line x1="${X}" y1="${padT-4}" x2="${X}" y2="${H-padB}" style="stroke:var(--grid)"/><text x="${X}" y="${padT-9}" text-anchor="middle" class="ax">${T.toFixed(2)}</text>`;}
+  items.forEach((it,i)=>{const y=padT+i*(barH+gap),bw=sx(it.d)-x0,isb=it===best;
+    g+=`<text x="${x0-10}" y="${y+barH/2}" text-anchor="end" dominant-baseline="middle" class="lab">${it.m} <tspan class="sub">${it.l}</tspan></text>`;
+    g+=`<rect x="${x0}" y="${y}" width="${Math.max(bw,1)}" height="${barH}" rx="2" fill="${ramp(it.d,lo,hi)}" ${isb?'stroke="var(--best)" stroke-width="2"':''}/>`;
+    g+=`<text x="${sx(it.d)+6}" y="${y+barH/2}" dominant-baseline="middle" class="val" ${isb?'style="fill:var(--best)"':''}>${f3(it.d)}</text>`;});
+  return`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Test Dice ranking">${g}</svg>`;
+}
+function groupBar(cats,series,colors,valFn,lo,hi,bestFn,ylabel){
+  const W=880,H=360,padL=48,padR=14,padT=16,padB=70,x0=padL,x1=W-padR,y0=H-padB,y1=padT;
+  const gw=(x1-x0)/cats.length, bw=Math.min(50,(gw*0.72)/series.length), sy=v=>y0-((v-lo)/(hi-lo))*(y0-y1);
+  let g='';
+  for(let t=Math.ceil(lo/0.05)*0.05;t<=hi+1e-9;t+=0.05){const T=+t.toFixed(2),Y=sy(T);g+=`<line x1="${x0}" y1="${Y}" x2="${x1}" y2="${Y}" style="stroke:var(--grid)"/><text x="${x0-8}" y="${Y}" text-anchor="end" dominant-baseline="middle" class="ax">${T.toFixed(2)}</text>`;}
+  cats.forEach((c,ci)=>{const cx=x0+ci*gw+gw/2,tot=series.length*bw+(series.length-1)*5; let bx=cx-tot/2;
+    series.forEach((s,si)=>{const v=valFn(c,s); if(v!=null){const isb=bestFn&&bestFn(c,s);
+      g+=`<rect x="${bx}" y="${sy(v)}" width="${bw}" height="${y0-sy(v)}" rx="2" fill="${colors[si]}" ${isb?'stroke="var(--best)" stroke-width="2.5"':''}><title>${c} ${s}: ${f3(v)}</title></rect>`;
+      g+=`<text x="${bx+bw/2}" y="${sy(v)-4}" text-anchor="middle" class="ax" style="font-size:9.5px">${f3(v).slice(1)}</text>`;}
+      bx+=bw+5;});
+    g+=`<text x="${cx}" y="${y0+18}" text-anchor="middle" class="lab">${c}</text>`;});
+  g+=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y0}" style="stroke:var(--ink)"/>`;
+  let lx=x0;const ly=H-30;
+  series.forEach((s,si)=>{g+=`<rect x="${lx}" y="${ly}" width="12" height="12" rx="2" fill="${colors[si]}"/><text x="${lx+17}" y="${ly+10}" class="ax" style="font-family:var(--sans)">${s}</text>`;lx+=22+s.length*7.3+14;});
+  g+=`<text transform="translate(13,${(y0+y1)/2}) rotate(-90)" text-anchor="middle" class="ax">${ylabel}</text>`;
+  return`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${ylabel}">${g}</svg>`;
+}
 </script>
