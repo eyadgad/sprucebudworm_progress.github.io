@@ -253,4 +253,29 @@ function groupBar(cats,series,colors,valFn,lo,hi,bestFn,ylabel){
   g+=`<text transform="translate(13,${(y0+y1)/2}) rotate(-90)" text-anchor="middle" class="ax">${ylabel}</text>`;
   return`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${ylabel}">${g}</svg>`;
 }
+function mtable(rows,best){
+  const head=["Configuration","Val","Dice M","Dice µ","IoU","Prec","Rec","bIoU","NSD","HD95","ASSD","bgFP"];
+  return`<div class="tscroll"><table><thead><tr>${head.map((h,i)=>`<th${i?'':' style="text-align:left"'}>${h}</th>`).join('')}</tr></thead><tbody>`+
+    rows.map(x=>{const b=x===best;return`<tr class="${b?'best':''}"><td><span class="cfg">${x.m}</span><span class="pill">${x.l}</span><span class="pill">${x.t}</span><span class="pill">${x.c}</span>${b?'<span class="star">★</span>':''}</td>`+
+    [x.v,x.d,x.dm,x.io].map(v=>`<td class="n">${f3(v)}</td>`).join('')+[x.p,x.r].map(v=>`<td class="n">${f2(v)}</td>`).join('')+
+    [x.bi,x.ns].map(v=>`<td class="n">${f3(v)}</td>`).join('')+`<td class="n">${x.h.toFixed(1)}</td><td class="n">${x.a.toFixed(1)}</td><td class="n">${x.fp.toFixed(5)}</td></tr>`;}).join('')+`</tbody></table></div>`;
+}
+const rowsS=s=>EXP.filter(e=>e.s===s), maxBy=(rows,k)=>rows.reduce((a,b)=>b[k]>a[k]?b:a);
+
+/* ---------------- experiment panel builder ---------------- */
+function expPanel(id,o){
+  document.getElementById(id).innerHTML=`
+   <h2>${o.title}</h2>
+   <p class="goalline">Goal: ${o.goal}</p>
+   <div class="meta">
+     <div><div class="l">Experiments</div><div class="d">${o.exp}</div></div>
+     <div><div class="l">Varied</div><div class="d">${o.varied}</div></div>
+     <div><div class="l">Fixed</div><div class="d">${o.fixed}</div></div>
+   </div>
+   <figure><div class="viz" id="${o.chartId}"></div><figcaption>${o.caption}</figcaption></figure>
+   <h3>All metrics</h3><div id="${o.tblId}"></div>
+   <div class="decide"><div class="tg">${o.decideTag||'Best'}</div><div class="b">${o.best}</div></div>
+   <h3>What the results show</h3><ul class="k">${o.points.map(p=>`<li>${p}</li>`).join('')}</ul>
+   ${o.next?`<p class="next-reason"><b>Next.</b> ${o.next}</p>`:''}`;
+}
 </script>
