@@ -196,4 +196,14 @@ const EXP=[
  {ar:"Attention UNet",tg:"dBZ≥5",m:"Attention UNet",l:"Focal",t:"dBZ≥5",c:"+DEM+beam",v:.6487,d:.5049,dm:.6131,io:.3627,p:.4214,r:.7091,bi:.3222,ns:.3355,h:93.6,a:28.0,fp:.00472,s:3},
  {ar:"Attention UNet",tg:"dBZ≥5",m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥5",c:"+DEM+beam",v:.6525,d:.5211,dm:.6458,io:.3819,p:.4802,r:.6377,bi:.3389,ns:.3298,h:86.5,a:25.2,fp:.00232,s:3},
 ];
+const DATA={years:["2013","2014","2015","2016","2017","2018","2019"],
+  counts:{"2013":[92,26,12],"2014":[62,20,9],"2015":[118,34,17],"2016":[185,59,32],"2017":[298,82,46],"2018":[101,31,16],"2019":[236,65,38]}};
+
+const f3=x=>x.toFixed(3), f2=x=>x.toFixed(2), clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+function hx(h){h=h.replace('#','');return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+function lerp(a,b,t){const A=hx(a),B=hx(b);return`rgb(${Math.round(A[0]+(B[0]-A[0])*t)},${Math.round(A[1]+(B[1]-A[1])*t)},${Math.round(A[2]+(B[2]-A[2])*t)})`;}
+const ramp=(v,lo,hi)=>lerp("#8fb6dc","#123f83",clamp((v-lo)/(hi-lo)));
+const CH_COL={"radar":"#98a6b6","+DEM":"#2f9d8c","+beam":"#e2a33d","+DEM+beam":"#3a6fce"};
+const TG_COL={"any echo":"#98a6b6","dBZ≥0":"#3a6fce","dBZ≥5":"#cf6a5c"};
+const SPL_COL=["#3a6fce","#2f9d8c","#e2a33d"];
 </script>
