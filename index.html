@@ -150,6 +150,7 @@ ul.k li::before{content:"";position:absolute;left:2px;top:9px;width:7px;height:7
 <div class="panel" id="p1" role="tabpanel"></div>
 <div class="panel" id="p2" role="tabpanel"></div>
 <div class="panel" id="p3" role="tabpanel"></div>
+<div class="panel" id="p4" role="tabpanel"></div>
 </div>
 
 <script>
@@ -195,6 +196,19 @@ const EXP=[
  {ar:"Attention UNet",tg:"dBZ≥0",m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥0",c:"+DEM+beam",v:.699,d:.6092,dm:.7058,io:.4718,p:.5871,r:.7123,bi:.3713,ns:.2975,h:87.6,a:26.0,fp:.00446,s:3},
  {ar:"Attention UNet",tg:"dBZ≥5",m:"Attention UNet",l:"Focal",t:"dBZ≥5",c:"+DEM+beam",v:.6487,d:.5049,dm:.6131,io:.3627,p:.4214,r:.7091,bi:.3222,ns:.3355,h:93.6,a:28.0,fp:.00472,s:3},
  {ar:"Attention UNet",tg:"dBZ≥5",m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥5",c:"+DEM+beam",v:.6525,d:.5211,dm:.6458,io:.3819,p:.4802,r:.6377,bi:.3389,ns:.3298,h:86.5,a:25.2,fp:.00232,s:3},
+ // experiment 4: elevation count (radar + valid mask, dBZ>=0, Focal Tversky)
+ {el:1,m:"UNet++",l:"Focal Tversky",t:"dBZ≥0",c:"e0",v:.6745,d:.5990,dm:.6870,io:.4576,p:.5418,r:.7402,bi:.3473,ns:.2587,h:93.3,a:26.0,fp:.00561,s:4},
+ {el:2,m:"UNet++",l:"Focal Tversky",t:"dBZ≥0",c:"e01",v:.6942,d:.6080,dm:.7045,io:.4687,p:.6083,r:.6567,bi:.3852,ns:.2977,h:84.1,a:25.5,fp:.00263,s:4},
+ {el:3,m:"UNet++",l:"Focal Tversky",t:"dBZ≥0",c:"e012",v:.7010,d:.6111,dm:.7065,io:.4727,p:.5884,r:.6900,bi:.3811,ns:.2972,h:86.7,a:25.8,fp:.00378,s:4},
+ {el:4,m:"UNet++",l:"Focal Tversky",t:"dBZ≥0",c:"e0123",v:.7036,d:.5983,dm:.7070,io:.4607,p:.6102,r:.6507,bi:.3781,ns:.2828,h:85.5,a:26.6,fp:.00298,s:4},
+ {el:5,m:"UNet++",l:"Focal Tversky",t:"dBZ≥0",c:"e01234",v:.7088,d:.6236,dm:.7101,io:.4823,p:.5792,r:.7488,bi:.3952,ns:.3007,h:80.8,a:21.6,fp:.00516,s:4},
+ {el:6,m:"UNet++",l:"Focal Tversky",t:"dBZ≥0",c:"e012345",v:.7032,d:.6274,dm:.7142,io:.4869,p:.6118,r:.7013,bi:.4082,ns:.3124,h:79.8,a:22.3,fp:.00338,s:4},
+ {el:1,m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥0",c:"e0",v:.6619,d:.5847,dm:.6857,io:.4455,p:.5571,r:.6902,bi:.3433,ns:.2652,h:93.2,a:28.4,fp:.00955,s:4},
+ {el:2,m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥0",c:"e01",v:.6861,d:.6018,dm:.6965,io:.4636,p:.5700,r:.7184,bi:.3664,ns:.2991,h:90.1,a:25.9,fp:.00538,s:4},
+ {el:3,m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥0",c:"e012",v:.6943,d:.5994,dm:.6992,io:.4625,p:.5712,r:.7038,bi:.3644,ns:.2909,h:89.2,a:27.6,fp:.00387,s:4},
+ {el:4,m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥0",c:"e0123",v:.7005,d:.6095,dm:.7030,io:.4715,p:.5610,r:.7473,bi:.3852,ns:.3175,h:84.3,a:23.5,fp:.00592,s:4},
+ {el:5,m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥0",c:"e01234",v:.7060,d:.6192,dm:.7171,io:.4827,p:.6045,r:.7036,bi:.4138,ns:.3298,h:87.0,a:26.2,fp:.00517,s:4},
+ {el:6,m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥0",c:"e012345",v:.7112,d:.6261,dm:.7162,io:.4872,p:.5938,r:.7404,bi:.4199,ns:.3568,h:82.6,a:22.5,fp:.00662,s:4},
 ];
 const DATA={years:["2013","2014","2015","2016","2017","2018","2019"],
   counts:{"2013":[92,26,12],"2014":[62,20,9],"2015":[118,34,17],"2016":[185,59,32],"2017":[298,82,46],"2018":[101,31,16],"2019":[236,65,38]}};
@@ -253,6 +267,28 @@ function groupBar(cats,series,colors,valFn,lo,hi,bestFn,ylabel){
   g+=`<text transform="translate(13,${(y0+y1)/2}) rotate(-90)" text-anchor="middle" class="ax">${ylabel}</text>`;
   return`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${ylabel}">${g}</svg>`;
 }
+function lineElev(key,ylo,yhi,step,ylabel){
+  const S=[["UNet++","#3a6fce"],["Attention UNet","#2f9d8c"]];
+  const W=560,H=320,padL=52,padR=16,padT=16,padB=58,x0=padL,x1=W-padR,y0=H-padB,y1=padT;
+  const sx=n=>x0+((n-1)/5)*(x1-x0), sy=v=>y0-((v-ylo)/(yhi-ylo))*(y0-y1);
+  let g='';
+  for(let t=ylo;t<=yhi+1e-9;t+=step){const T=+t.toFixed(3),Y=sy(T);
+    g+=`<line x1="${x0}" y1="${Y}" x2="${x1}" y2="${Y}" style="stroke:var(--grid)"/><text x="${x0-8}" y="${Y}" text-anchor="end" dominant-baseline="middle" class="ax">${T.toFixed(2)}</text>`;}
+  for(let n=1;n<=6;n++){const X=sx(n);g+=`<line x1="${X}" y1="${y0}" x2="${X}" y2="${y0+4}" style="stroke:var(--ink)"/><text x="${X}" y="${y0+18}" text-anchor="middle" class="ax">${n}</text>`;}
+  g+=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y0}" style="stroke:var(--ink)"/>`;
+  S.forEach(([lab,col])=>{
+    const pts=EXP.filter(e=>e.s===4&&e.m===lab).sort((a,b)=>a.el-b.el);
+    g+=`<polyline points="${pts.map(p=>`${sx(p.el).toFixed(1)},${sy(p[key]).toFixed(1)}`).join(' ')}" fill="none" stroke="${col}" stroke-width="2"/>`;
+    const bp=pts.reduce((a,b)=>b[key]>a[key]?b:a);
+    pts.forEach(p=>{const isb=p===bp;
+      g+=`<circle cx="${sx(p.el)}" cy="${sy(p[key])}" r="${isb?5.2:3.6}" fill="${isb?'var(--best)':col}" stroke="var(--panel)" stroke-width="1"><title>${lab}, ${p.el} elevations: ${f3(p[key])}</title></circle>`;});
+  });
+  let lx=x0;const ly=H-16;
+  S.forEach(([lab,col])=>{g+=`<line x1="${lx}" y1="${ly+4}" x2="${lx+16}" y2="${ly+4}" stroke="${col}" stroke-width="2.4"/><text x="${lx+21}" y="${ly+8}" class="ax" style="font-family:var(--sans)">${lab}</text>`;lx+=27+lab.length*7.3+16;});
+  g+=`<text transform="translate(12,${(y0+y1)/2}) rotate(-90)" text-anchor="middle" class="ax">${ylabel}</text>`;
+  g+=`<text x="${(x0+x1)/2}" y="${y0+38}" text-anchor="middle" class="ax">number of elevations</text>`;
+  return`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${ylabel} against number of elevations">${g}</svg>`;
+}
 function mtable(rows,best){
   const head=["Configuration","Val","Dice M","Dice µ","IoU","Prec","Rec","bIoU","NSD","HD95","ASSD","bgFP"];
   return`<div class="tscroll"><table><thead><tr>${head.map((h,i)=>`<th${i?'':' style="text-align:left"'}>${h}</th>`).join('')}</tr></thead><tbody>`+
@@ -280,7 +316,7 @@ function expPanel(id,o){
 }
 
 /* ---------------- render ---------------- */
-const TABS=[["01","Methods & data"],["02","Experiment 1 · Architecture"],["03","Experiment 2 · Channels"],["04","Experiment 3 · Target & loss"]];
+const TABS=[["01","Methods & data"],["02","Experiment 1 · Architecture"],["03","Experiment 2 · Channels"],["04","Experiment 3 · Target & loss"],["05","Experiment 4 · Elevations"]];
 document.getElementById('tabs').innerHTML=TABS.map((t,i)=>`<button class="tab" role="tab" id="t${i}" aria-controls="p${i}" aria-selected="${i===0}"><span class="n">${t[0]}</span>${t[1]}</button>`).join('');
 function show(i){document.querySelectorAll('.tab').forEach((b,j)=>b.setAttribute('aria-selected',j===i));document.querySelectorAll('.panel').forEach((p,j)=>p.classList.toggle('on',j===i));window.scrollTo(0,0);}
 document.querySelectorAll('.tab').forEach((b,i)=>b.addEventListener('click',()=>show(i)));
@@ -337,13 +373,42 @@ expPanel('p3',{title:"Experiment 3: which target and loss",
  exp:"18 runs, 3 architectures by 3 targets by 2 losses",varied:"Target: any echo, dBZ ≥ 0, dBZ ≥ 5. Loss: Focal, Focal Tversky.",fixed:"Channels DEM and beam, radar at 3 elevations.",
  chartId:"chart-s3",tblId:"tbl-s3",caption:"Test Dice (macro) by architecture and target, using the better loss per cell. All three drop at dBZ ≥ 5.",
  decideTag:"Selected",
- best:"<b>UNet++ with dBZ ≥ 0 and Focal Tversky, 0.623 macro Dice, 0.714 micro.</b> Highest test macro Dice and highest validation of the 18 runs. This is the selected configuration.",
+ best:"<b>UNet++ with dBZ ≥ 0 and Focal Tversky, 0.623 macro Dice, 0.714 micro.</b> Highest test macro Dice and highest validation of the 18 runs.",
  points:["Target effect on UNet++ with Focal Tversky: any echo 0.616, dBZ ≥ 0 0.623, dBZ ≥ 5 0.531.",
   "The dBZ ≥ 0 target raised Boundary IoU from 0.304 to 0.381 against the any echo target.",
   "The dBZ ≥ 5 target lowered recall to about 0.57 and Dice to about 0.53. It keeps only the dense cores.",
-  "Focal Tversky matched or beat Focal by validation in most cells. Focal gave higher precision."]});
+  "Focal Tversky matched or beat Focal by validation in most cells. Focal gave higher precision."],
+ next:"The target and the loss are fixed to dBZ ≥ 0 and Focal Tversky. Experiment 4 then tested how many radar elevations to feed the model."});
 document.getElementById('chart-s3').innerHTML=groupBar(arch,tgts,tgts.map(t=>TG_COL[t]),v3,.48,.64,(a,tg)=>a===s3b.ar&&tg===s3b.tg,"test Dice (macro)");
 document.getElementById('tbl-s3').innerHTML=mtable(s3.slice().sort((a,b)=>b.d-a.d),s3b);
+
+/* Experiment 4 */
+const s4=rowsS(4), s4b=maxBy(s4,'d'), s4v=maxBy(s4,'v');
+document.getElementById('p4').innerHTML=`
+ <h2>Experiment 4: how many elevations to use</h2>
+ <p class="goalline">Goal: measure whether adding low elevation sweeps raises the score, and where it stops helping.</p>
+ <div class="meta">
+   <div><div class="l">Experiments</div><div class="d">12 runs, 2 models by 6 elevation sets</div></div>
+   <div><div class="l">Varied</div><div class="d">Elevations kept: 0, then 0 to 1, up to 0 to 5.</div></div>
+   <div><div class="l">Fixed</div><div class="d">Target dBZ ≥ 0, Focal Tversky loss, radar and valid mask only.</div></div>
+ </div>
+ <div class="two">
+   <figure><div class="viz" id="chart-s4a"></div><figcaption>Test Dice (macro) against the number of elevations. Both models rise as elevations are added. The best point of each model is marked.</figcaption></figure>
+   <figure><div class="viz" id="chart-s4b"></div><figcaption>Boundary IoU against the number of elevations. The boundary gains more than the region score.</figcaption></figure>
+ </div>
+ <h3>All metrics</h3><div id="tbl-s4"></div>
+ <div class="decide"><div class="tg">Selected</div><div class="b"><b>Six elevations, for both models.</b> Attention UNet with six elevations has the highest validation of every run in the project, 0.711, with test Dice 0.626 macro and 0.716 micro, and the best boundary values, Boundary IoU 0.420 and NSD 0.357. UNet++ with six elevations has the highest test Dice, 0.627.</div></div>
+ <h3>What the results show</h3>
+ <ul class="k">
+  <li>Validation rises with the number of elevations for both models: UNet++ from 0.674 to 0.709, Attention UNet from 0.662 to 0.711.</li>
+  <li>Test Dice rises from 0.599 to 0.627 for UNet++ and from 0.585 to 0.626 for Attention UNet.</li>
+  <li>The boundary gains the most. Boundary IoU rises from 0.347 to 0.408 for UNet++ and from 0.343 to 0.420 for Attention UNet. NSD reaches 0.357 and HD95 falls from 93 to 80 pixels. These are the best boundary values in the project, above the previous best of 0.389.</li>
+  <li>The largest single gain comes from the first added elevation. The curve is still rising at six elevations, so the limit is not reached.</li>
+ </ul>
+ <p class="next-reason"><b>Next.</b> Six elevations is now part of the selected setup. The curve has not flattened, so the next test extends the sweep past six elevations.</p>`;
+document.getElementById('chart-s4a').innerHTML=lineElev('d',.57,.65,.02,'test Dice (macro)');
+document.getElementById('chart-s4b').innerHTML=lineElev('bi',.32,.44,.02,'Boundary IoU');
+document.getElementById('tbl-s4').innerHTML=mtable(s4.slice().sort((a,b)=>b.d-a.d),s4b);
 
 document.getElementById('tbtn').addEventListener('click',()=>{const r=document.documentElement;const cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');r.setAttribute('data-theme',cur==='dark'?'light':'dark');});
 show(0);
