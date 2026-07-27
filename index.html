@@ -282,7 +282,7 @@ function lineElev(key,ylo,yhi,step,ylabel){
   const sx=n=>x0+((n-1)/9)*(x1-x0), sy=v=>y0-((v-ylo)/(yhi-ylo))*(y0-y1);
   let g='';
   for(let t=ylo;t<=yhi+1e-9;t+=step){const T=+t.toFixed(3),Y=sy(T);
-    g+=`<line x1="${X}" y1="${padT-4}" x2="${X}" y2="${H-padB}" style="stroke:var(--grid)"/><text x="${X}" y="${padT-9}" text-anchor="middle" class="ax">${T.toFixed(2)}</text>`;}
+    g+=`<line x1="${x0}" y1="${Y}" x2="${x1}" y2="${Y}" style="stroke:var(--grid)"/><text x="${x0-8}" y="${Y}" text-anchor="end" dominant-baseline="middle" class="ax">${T.toFixed(2)}</text>`;}
   for(let n=1;n<=10;n++){const X=sx(n);g+=`<line x1="${X}" y1="${y0}" x2="${X}" y2="${y0+4}" style="stroke:var(--ink)"/><text x="${X}" y="${y0+18}" text-anchor="middle" class="ax">${n}</text>`;}
   g+=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y0}" style="stroke:var(--ink)"/>`;
   S.forEach(([lab,col])=>{
