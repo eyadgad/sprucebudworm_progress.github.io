@@ -209,6 +209,15 @@ const EXP=[
  {el:4,m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥0",c:"e0123",v:.7005,d:.6095,dm:.7030,io:.4715,p:.5610,r:.7473,bi:.3852,ns:.3175,h:84.3,a:23.5,fp:.00592,s:4},
  {el:5,m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥0",c:"e01234",v:.7060,d:.6192,dm:.7171,io:.4827,p:.6045,r:.7036,bi:.4138,ns:.3298,h:87.0,a:26.2,fp:.00517,s:4},
  {el:6,m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥0",c:"e012345",v:.7112,d:.6261,dm:.7162,io:.4872,p:.5938,r:.7404,bi:.4199,ns:.3568,h:82.6,a:22.5,fp:.00662,s:4},
+ // Experiment 4 extension: elevations 7–10
+ {el:7,m:"UNet++",l:"Focal Tversky",t:"dBZ≥0",c:"e0123456",v:.7074,d:.6134,dm:.7141,io:.4755,p:.6167,r:.6814,bi:.3788,ns:.2750,h:88.9,a:24.3,fp:.00324,s:4},
+ {el:8,m:"UNet++",l:"Focal Tversky",t:"dBZ≥0",c:"e01234567",v:.7054,d:.6188,dm:.7105,io:.4791,p:.5764,r:.7357,bi:.3877,ns:.2903,h:83.7,a:24.3,fp:.00503,s:4},
+ {el:9,m:"UNet++",l:"Focal Tversky",t:"dBZ≥0",c:"e012345678",v:.7073,d:.6198,dm:.7153,io:.4813,p:.5728,r:.7386,bi:.3969,ns:.3122,h:78.5,a:22.8,fp:.00486,s:4},
+ {el:10,m:"UNet++",l:"Focal Tversky",t:"dBZ≥0",c:"e0123456789",v:.7114,d:.6246,dm:.7213,io:.4859,p:.6150,r:.6927,bi:.4140,ns:.3204,h:84.3,a:24.5,fp:.00398,s:4},
+ {el:7,m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥0",c:"e0123456",v:.7038,d:.6200,dm:.7057,io:.4803,p:.5754,r:.7612,bi:.4126,ns:.3544,h:88.6,a:22.7,fp:.00664,s:4},
+ {el:8,m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥0",c:"e01234567",v:.7074,d:.6239,dm:.7135,io:.4845,p:.5852,r:.7420,bi:.4100,ns:.3503,h:91.3,a:25.8,fp:.00580,s:4},
+ {el:9,m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥0",c:"e012345678",v:.7073,d:.6246,dm:.7127,io:.4857,p:.5791,r:.7520,bi:.4112,ns:.3492,h:85.9,a:24.5,fp:.00670,s:4},
+ {el:10,m:"Attention UNet",l:"Focal Tversky",t:"dBZ≥0",c:"e0123456789",v:.7078,d:.6208,dm:.7188,io:.4842,p:.5868,r:.7264,bi:.4053,ns:.3361,h:82.6,a:23.4,fp:.00551,s:4},
 ];
 const DATA={years:["2013","2014","2015","2016","2017","2018","2019"],
   counts:{"2013":[92,26,12],"2014":[62,20,9],"2015":[118,34,17],"2016":[185,59,32],"2017":[298,82,46],"2018":[101,31,16],"2019":[236,65,38]}};
@@ -270,11 +279,11 @@ function groupBar(cats,series,colors,valFn,lo,hi,bestFn,ylabel){
 function lineElev(key,ylo,yhi,step,ylabel){
   const S=[["UNet++","#3a6fce"],["Attention UNet","#2f9d8c"]];
   const W=560,H=320,padL=52,padR=16,padT=16,padB=58,x0=padL,x1=W-padR,y0=H-padB,y1=padT;
-  const sx=n=>x0+((n-1)/5)*(x1-x0), sy=v=>y0-((v-ylo)/(yhi-ylo))*(y0-y1);
+  const sx=n=>x0+((n-1)/9)*(x1-x0), sy=v=>y0-((v-ylo)/(yhi-ylo))*(y0-y1);
   let g='';
   for(let t=ylo;t<=yhi+1e-9;t+=step){const T=+t.toFixed(3),Y=sy(T);
-    g+=`<line x1="${x0}" y1="${Y}" x2="${x1}" y2="${Y}" style="stroke:var(--grid)"/><text x="${x0-8}" y="${Y}" text-anchor="end" dominant-baseline="middle" class="ax">${T.toFixed(2)}</text>`;}
-  for(let n=1;n<=6;n++){const X=sx(n);g+=`<line x1="${X}" y1="${y0}" x2="${X}" y2="${y0+4}" style="stroke:var(--ink)"/><text x="${X}" y="${y0+18}" text-anchor="middle" class="ax">${n}</text>`;}
+    g+=`<line x1="${X}" y1="${padT-4}" x2="${X}" y2="${H-padB}" style="stroke:var(--grid)"/><text x="${X}" y="${padT-9}" text-anchor="middle" class="ax">${T.toFixed(2)}</text>`;}
+  for(let n=1;n<=10;n++){const X=sx(n);g+=`<line x1="${X}" y1="${y0}" x2="${X}" y2="${y0+4}" style="stroke:var(--ink)"/><text x="${X}" y="${y0+18}" text-anchor="middle" class="ax">${n}</text>`;}
   g+=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y0}" style="stroke:var(--ink)"/>`;
   S.forEach(([lab,col])=>{
     const pts=EXP.filter(e=>e.s===4&&e.m===lab).sort((a,b)=>a.el-b.el);
@@ -388,24 +397,24 @@ document.getElementById('p4').innerHTML=`
  <h2>Experiment 4: how many elevations to use</h2>
  <p class="goalline">Goal: measure whether adding low elevation sweeps raises the score, and where it stops helping.</p>
  <div class="meta">
-   <div><div class="l">Experiments</div><div class="d">12 runs, 2 models by 6 elevation sets</div></div>
-   <div><div class="l">Varied</div><div class="d">Elevations kept: 0, then 0 to 1, up to 0 to 5.</div></div>
+   <div><div class="l">Experiments</div><div class="d">20 runs, 2 models by 10 elevation sets</div></div>
+   <div><div class="l">Varied</div><div class="d">Elevations kept: 0, then 0 to 1, up to 0 to 9.</div></div>
    <div><div class="l">Fixed</div><div class="d">Target dBZ ≥ 0, Focal Tversky loss, radar and valid mask only.</div></div>
  </div>
  <div class="two">
-   <figure><div class="viz" id="chart-s4a"></div><figcaption>Test Dice (macro) against the number of elevations. Both models rise as elevations are added. The best point of each model is marked.</figcaption></figure>
-   <figure><div class="viz" id="chart-s4b"></div><figcaption>Boundary IoU against the number of elevations. The boundary gains more than the region score.</figcaption></figure>
+   <figure><div class="viz" id="chart-s4a"></div><figcaption>Test Dice (macro) against the number of elevations. Both models peak near six and the curve flattens from seven onward. The best point of each model is marked.</figcaption></figure>
+   <figure><div class="viz" id="chart-s4b"></div><figcaption>Boundary IoU against the number of elevations. The boundary gains are large from one to six elevations and flatten beyond that.</figcaption></figure>
  </div>
  <h3>All metrics</h3><div id="tbl-s4"></div>
- <div class="decide"><div class="tg">Selected</div><div class="b"><b>Six elevations, for both models.</b> Attention UNet with six elevations has the highest validation of every run in the project, 0.711, with test Dice 0.626 macro and 0.716 micro, and the best boundary values, Boundary IoU 0.420 and NSD 0.357. UNet++ with six elevations has the highest test Dice, 0.627.</div></div>
+ <div class="decide"><div class="tg">Selected</div><div class="b"><b>Six elevations, for both models.</b> Extending the sweep to ten elevations shows the curve flattening beyond six. UNet++ with ten elevations reaches the highest validation across all runs (0.711) but six elevations still gives the highest test Dice (0.627). Attention UNet with six elevations retains the best boundary values: Boundary IoU 0.420 and NSD 0.357.</div></div>
  <h3>What the results show</h3>
  <ul class="k">
-  <li>Validation rises with the number of elevations for both models: UNet++ from 0.674 to 0.709, Attention UNet from 0.662 to 0.711.</li>
-  <li>Test Dice rises from 0.599 to 0.627 for UNet++ and from 0.585 to 0.626 for Attention UNet.</li>
-  <li>The boundary gains the most. Boundary IoU rises from 0.347 to 0.408 for UNet++ and from 0.343 to 0.420 for Attention UNet. NSD reaches 0.357 and HD95 falls from 93 to 80 pixels. These are the best boundary values in the project, above the previous best of 0.389.</li>
-  <li>The largest single gain comes from the first added elevation. The curve is still rising at six elevations, so the limit is not reached.</li>
+  <li>Validation rises with the number of elevations: UNet++ from 0.674 to 0.711 (at ten elevations), Attention UNet from 0.662 to 0.711 (at six elevations). Both reach 0.711 but at different elevation counts.</li>
+  <li>Test Dice peaks near six elevations for both models: 0.627 for UNet++ and 0.626 for Attention UNet. Adding seven to ten elevations produces no further gain in test Dice.</li>
+  <li>Boundary IoU peaks at six elevations for Attention UNet (0.420) and rises slightly further for UNet++ at ten elevations (0.414 vs 0.408 at six). NSD and HD95 also flatten beyond six elevations.</li>
+  <li>The largest single gain comes from the first added elevation. The six-to-ten extension confirms the elevation sweep has converged.</li>
  </ul>
- <p class="next-reason"><b>Next.</b> Six elevations is now part of the selected setup. The curve has not flattened, so the next test extends the sweep past six elevations.</p>`;
+ <p class="next-reason"><b>Next.</b> The elevation sweep has converged. The remaining free gain is ensemble averaging and test-time augmentation on the best models (estimated +0.04 macro Dice). After that, temporal context from consecutive radar scans is the most promising path to higher performance.</p>`;
 document.getElementById('chart-s4a').innerHTML=lineElev('d',.57,.65,.02,'test Dice (macro)');
 document.getElementById('chart-s4b').innerHTML=lineElev('bi',.32,.44,.02,'Boundary IoU');
 document.getElementById('tbl-s4').innerHTML=mtable(s4.slice().sort((a,b)=>b.d-a.d),s4b);
