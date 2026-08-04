@@ -111,7 +111,7 @@ ul.k li::before{content:"";position:absolute;left:2px;top:9px;width:7px;height:7
     <span class="eyebrow">Research progress</span>
   </div>
   <h1>Segmentation of spruce budworm</h1>
-  <p class="lede">Three experiments select the model, the input channels, the target, and the loss.</p>
+  <p class="lede">Five experiments select the model, the input channels, the target, the loss, and the elevation count, then test two methods that need no training.</p>
   <button class="tbtn" id="tbtn">Theme</button>
 </header>
 
@@ -151,6 +151,7 @@ ul.k li::before{content:"";position:absolute;left:2px;top:9px;width:7px;height:7
 <div class="panel" id="p2" role="tabpanel"></div>
 <div class="panel" id="p3" role="tabpanel"></div>
 <div class="panel" id="p4" role="tabpanel"></div>
+<div class="panel" id="p5" role="tabpanel"></div>
 </div>
 
 <script>
@@ -324,7 +325,7 @@ function expPanel(id,o){
 }
 
 /* ---------------- render ---------------- */
-const TABS=[["01","Methods & data"],["02","Experiment 1 · Architecture"],["03","Experiment 2 · Channels"],["04","Experiment 3 · Target & loss"],["05","Experiment 4 · Elevations"]];
+const TABS=[["01","Methods & data"],["02","Experiment 1 · Architecture"],["03","Experiment 2 · Channels"],["04","Experiment 3 · Target & loss"],["05","Experiment 4 · Elevations"],["06","Experiment 5 · TTA & ensemble"]];
 document.getElementById('tabs').innerHTML=TABS.map((t,i)=>`<button class="tab" role="tab" id="t${i}" aria-controls="p${i}" aria-selected="${i===0}"><span class="n">${t[0]}</span>${t[1]}</button>`).join('');
 function show(i){document.querySelectorAll('.tab').forEach((b,j)=>b.setAttribute('aria-selected',j===i));document.querySelectorAll('.panel').forEach((p,j)=>p.classList.toggle('on',j===i));window.scrollTo(0,0);}
 document.querySelectorAll('.tab').forEach((b,i)=>b.addEventListener('click',()=>show(i)));
@@ -413,10 +414,55 @@ document.getElementById('p4').innerHTML=`
   <li>The boundary gains the most. Boundary IoU reaches 0.425 for UNet++ and 0.431 for Attention UNet, and NSD reaches 0.377. These are the best boundary values in the project, above the previous best of 0.389.</li>
   <li>The largest single gain comes from the first few added elevations. The curve is flat from about five to nine, so more elevations past nine do not help.</li>
  </ul>
- <p class="next-reason"><b>Next.</b> Nine elevations with Attention UNet is the selected setup. This completes the planned sweeps over architecture, channels, target, loss, and elevation count. The remaining options are test time augmentation and ensembling on this setup, then adding temporal context from consecutive scans.</p>`;
+ <p class="next-reason"><b>Next.</b> Nine elevations with Attention UNet is the selected setup. This completes the planned sweeps over architecture, channels, target, loss, and elevation count. Experiment 5 tests test time augmentation and ensembling on this setup.</p>`;
 document.getElementById('chart-s4a').innerHTML=lineElev('d',.57,.65,.02,'test Dice (macro)');
 document.getElementById('chart-s4b').innerHTML=lineElev('bi',.32,.44,.02,'Boundary IoU');
 document.getElementById('tbl-s4').innerHTML=mtable(s4.slice().sort((a,b)=>b.d-a.d),s4b);
+
+/* Experiment 5: TTA and ensemble (eval only, no training). Single-model no-TTA
+   numbers are the 9-elevation rows from Experiment 4. */
+const E5=[
+ {name:"Attention UNet, 9 elev",vr:"no TTA",d:.6347,dm:.7189,io:.4958,p:.589,r:.751,bi:.4311,ns:.3769,h:84.0,fp:.00635,sel:1},
+ {name:"UNet++, 9 elev",vr:"no TTA",d:.6317,dm:.7214,io:.4934,p:.604,r:.718,bi:.4250,ns:.3413,h:80.4,fp:.00468},
+ {name:"UNet++, 9 elev",vr:"+ TTA",d:.6322,dm:.7155,io:null,p:.569,r:.773,bi:.413,ns:.340,h:null,fp:null},
+ {name:"Attention UNet, 9 elev",vr:"+ TTA",d:.6308,dm:.7130,io:null,p:.571,r:.770,bi:.422,ns:.370,h:null,fp:null},
+ {name:"Ensemble of the two",vr:"no TTA",d:.6335,dm:.7142,io:.4932,p:.569,r:.782,bi:.4184,ns:.3609,h:83.0,fp:.00715},
+ {name:"Ensemble of the two",vr:"+ TTA",d:.6341,dm:.7131,io:.4932,p:.567,r:.790,bi:.4148,ns:.3568,h:81.6,fp:.00717},
+];
+const or_=(x,f)=>x==null?'—':f(x);
+function e5table(rows){
+  const head=["Configuration","Dice M","Dice µ","IoU","Prec","Rec","bIoU","NSD","HD95","bgFP"];
+  return`<div class="tscroll"><table><thead><tr>${head.map((h,i)=>`<th${i?'':' style="text-align:left"'}>${h}</th>`).join('')}</tr></thead><tbody>`+
+   rows.map(x=>`<tr class="${x.sel?'best':''}"><td><span class="cfg">${x.name}</span><span class="pill">${x.vr}</span>${x.sel?'<span class="star">★</span>':''}</td>`+
+    `<td class="n">${f3(x.d)}</td><td class="n">${f3(x.dm)}</td><td class="n">${or_(x.io,f3)}</td>`+
+    `<td class="n">${or_(x.p,f2)}</td><td class="n">${or_(x.r,f2)}</td>`+
+    `<td class="n">${or_(x.bi,f3)}</td><td class="n">${or_(x.ns,f3)}</td>`+
+    `<td class="n">${or_(x.h,v=>v.toFixed(1))}</td><td class="n">${or_(x.fp,v=>v.toFixed(5))}</td></tr>`).join('')+
+   `</tbody></table></div>`;
+}
+document.getElementById('p5').innerHTML=`
+ <h2>Experiment 5: test time augmentation and ensembling</h2>
+ <p class="goalline">Goal: test whether two methods that need no training, test time augmentation and model averaging, raise the score of the selected setup.</p>
+ <div class="meta">
+   <div><div class="l">Experiments</div><div class="d">Six evaluations on the test set, no new training.</div></div>
+   <div><div class="l">Varied</div><div class="d">Each model alone, with and without TTA, and the two averaged.</div></div>
+   <div><div class="l">Fixed</div><div class="d">Nine elevations, dBZ ≥ 0, Focal Tversky. Threshold set on validation.</div></div>
+ </div>
+ <figure><div class="viz" id="chart-s5"></div><figcaption>Test Dice (macro) for the six evaluations. All sit within 0.004 of each other. The best is the single Attention UNet with no added method.</figcaption></figure>
+ <h3>All metrics</h3><div id="tbl-s5"></div>
+ <div class="decide"><div class="tg">Selected</div><div class="b"><b>No change. Attention UNet, nine elevations, dBZ ≥ 0, Focal Tversky, no TTA.</b> It keeps the highest test Dice, 0.635 macro and 0.719 micro. TTA and ensembling move the score by less than 0.004 and do not beat it.</div></div>
+ <h3>What the results show</h3>
+ <ul class="k">
+  <li>TTA changes each model by less than 0.005 test Dice. It lowers Attention UNet from 0.635 to 0.631.</li>
+  <li>The ensemble of the two models scores 0.634, between the two single models and below the best single model.</li>
+  <li>The ensemble and TTA raise recall to 0.79 and lower precision, so the region Dice stays flat.</li>
+  <li>No setting moves the score past 0.635. The 0.63 macro Dice level is a ceiling for this data and these labels.</li>
+ </ul>
+ <p class="next-reason"><b>Next.</b> The methods that need no training are spent. A higher score needs new signal, not more tuning: temporal context from consecutive scans, dual polarization variables if available, or cleaner labels.</p>`;
+const e5items=E5.map(x=>({m:x.name,l:x.vr,d:x.d})).sort((a,b)=>b.d-a.d);
+const e5best=e5items.reduce((a,b)=>b.d>a.d?b:a);
+document.getElementById('chart-s5').innerHTML=hBar(e5items,.625,.638,e5best);
+document.getElementById('tbl-s5').innerHTML=e5table(E5);
 
 document.getElementById('tbtn').addEventListener('click',()=>{const r=document.documentElement;const cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');r.setAttribute('data-theme',cur==='dark'?'light':'dark');});
 show(0);
