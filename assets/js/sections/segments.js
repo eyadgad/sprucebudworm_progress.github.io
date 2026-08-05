@@ -4,7 +4,7 @@
 
 import { load } from '../lib/data.js';
 import { M, fmtOr, int, esc, mean, std, quantile, bootCI } from '../lib/metrics.js';
-import { boxPlot, barChart } from '../lib/charts.js';
+import { boxPlot, barChart, BOXPLOT_KEY } from '../lib/charts.js';
 import { DataTable } from '../lib/table.js';
 
 const MIN_N = 5;   // groups below this are shown but flagged as unreliable
@@ -28,6 +28,9 @@ export async function render(mount) {
       ${['dice','iou','precision','recall','boundary_iou','nsd'].map(k=>
         `<option value="${k}">${M[k].label}</option>`).join('')}</select></div>
   </div>
+  <div class="note"><span class="tag">reading the box plots</span><div class="bd">
+    ${BOXPLOT_KEY}
+  </div></div>
   <div class="note"><span class="tag">reading groups</span><div class="bd">
     Bars and boxes show the group mean or distribution; <b>n</b> is always printed. A group with a high
     mean and n = 2 tells you almost nothing. Use the confidence intervals in the tables rather than the
@@ -94,7 +97,7 @@ export async function render(mount) {
         const s = summarize(gy.get(y), metric);
         return s ? {label: String(y), n: s.n, c: 'var(--accent2)', lo: s.lo, q1: s.q1, med: s.med, q3: s.q3, hi: s.hi, mean: s.mean}
                  : {label: String(y), n: 0, q1: null};
-      }), ylo: 0, yhi: 1, ylabel: `per-scene ${label}`, W: 880, H: 330,
+      }), ylo: 0, yhi: 1, ylabel: `per-scene ${label}`, xlabel: 'season (year)', W: 880, H: 330,
       aria: `${label} by year`,
     });
     mount.querySelector('#cap-year').textContent =
@@ -108,7 +111,8 @@ export async function render(mount) {
     mount.querySelector('#c-hour').innerHTML = barChart({
       cats: hours.map(h => String(h).padStart(2, '0')),
       series: [{label, c: 'var(--accent2)', values: hours.map(h => summarize(gh.get(h), metric)?.mean)}],
-      lo: 0, hi: 1, ylabel: `mean ${label}`, W: 880, H: 280, aria: `${label} by hour`,
+      lo: 0, hi: 1, ylabel: `mean ${label}`, xlabel: 'hour of day (UTC)',
+      W: 880, H: 280, aria: `${label} by hour`,
     });
     const thin = hours.filter(h => gh.get(h).length < MIN_N).length;
     mount.querySelector('#cap-hour').textContent =
@@ -129,7 +133,8 @@ export async function render(mount) {
         const s = summarize(b.rows, metric);
         return s ? {label: b.key, n: s.n, c: 'var(--accent2)', lo: s.lo, q1: s.q1, med: s.med, q3: s.q3, hi: s.hi, mean: s.mean}
                  : {label: b.key, n: b.rows.length, q1: null};
-      }), ylo: 0, yhi: 1, ylabel: `per-scene ${label}`, W: 880, H: 340,
+      }), ylo: 0, yhi: 1, ylabel: `per-scene ${label}`,
+      xlabel: 'ground-truth plume area (pixels)', W: 880, H: 340,
       aria: `${label} by plume size`,
     });
     const smallB = summarize(bandRows[0].rows, metric), bigB = summarize(bandRows.at(-1).rows, metric);
@@ -147,7 +152,8 @@ export async function render(mount) {
         const s = summarize(rows.filter(f), metric);
         return s ? {label: k, n: s.n, c: 'var(--accent2)', lo: s.lo, q1: s.q1, med: s.med, q3: s.q3, hi: s.hi, mean: s.mean}
                  : {label: k, n: 0, q1: null};
-      }), ylo: 0, yhi: 1, ylabel: `per-scene ${label}`, W: 520, H: 300,
+      }), ylo: 0, yhi: 1, ylabel: `per-scene ${label}`,
+      xlabel: 'connected regions in the ground truth', W: 520, H: 300,
       aria: `${label} by number of truth regions`,
     });
     mount.querySelector('#cap-frag').textContent =
@@ -161,7 +167,8 @@ export async function render(mount) {
         const s = summarize(rows.filter(r => r.gt_dist_km != null && f(r)), metric);
         return s ? {label: k, n: s.n, c: 'var(--accent2)', lo: s.lo, q1: s.q1, med: s.med, q3: s.q3, hi: s.hi, mean: s.mean}
                  : {label: k, n: 0, q1: null};
-      }), ylo: 0, yhi: 1, ylabel: `per-scene ${label}`, W: 520, H: 300,
+      }), ylo: 0, yhi: 1, ylabel: `per-scene ${label}`,
+      xlabel: 'mean range of the plume from the radar', W: 520, H: 300,
       aria: `${label} by mean distance from the radar`,
     });
     mount.querySelector('#cap-dist').textContent =

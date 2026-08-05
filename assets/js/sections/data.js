@@ -3,7 +3,7 @@
 
 import { load } from '../lib/data.js';
 import { int, pct, esc, SPLIT_COLOR, quantile, mean } from '../lib/metrics.js';
-import { barChart, histogram, boxPlot, legend } from '../lib/charts.js';
+import { barChart, histogram, boxPlot, legend, BOXPLOT_KEY } from '../lib/charts.js';
 
 const SPLITS = ['train', 'val', 'test'];
 
@@ -67,8 +67,9 @@ export async function render(mount) {
   Experiment 3 selected <b>dBZ ≥ 0</b>. This is what each choice keeps:</p>
   <div id="thr-table"></div>
   <figure><div class="viz" id="c-thr"></div>
-    <figcaption>Plume area per scene under each label definition. Raising the threshold to 5 dBZ discards
-    most of the signal, which is why the dBZ ≥ 5 runs scored far lower.</figcaption></figure>
+    <figcaption>Plume area per scene under each label definition, on a log10 scale. Raising the
+    threshold to 5 dBZ discards most of the signal, which is why the dBZ ≥ 5 runs scored far lower.
+    ${BOXPLOT_KEY}</figcaption></figure>
 
   <h2>Are the splits comparable?</h2>
   <p>If the test split were systematically different from training, the reported score would not be
@@ -127,8 +128,8 @@ export async function render(mount) {
       {label: 'with plume', c: 'var(--accent2)', values: SPLITS.map(s => cnt[s].positives)},
       {label: 'plume free', c: 'var(--tn)', values: SPLITS.map(s => cnt[s].negatives)},
     ],
-    stacked: true, ylabel: 'scenes', W: 420, H: 300, valueLabels: true,
-    aria: 'Scenes per split by type',
+    stacked: true, ylabel: 'scenes', xlabel: 'data split', W: 420, H: 300, valueLabels: true,
+    aria: 'Scenes per split by type', inlineLegend: true,
   });
   mount.querySelector('#l-split').innerHTML = legend([
     {c: 'var(--accent2)', label: 'Scene contains a plume (positive)'},
@@ -143,8 +144,8 @@ export async function render(mount) {
       label: s, c: SPLIT_COLOR[s],
       values: years.map(y => pps[y]?.[s] ?? 0),
     })),
-    stacked: true, ylabel: 'positive scenes', W: 420, H: 300, valueLabels: true,
-    aria: 'Positive scenes per year stacked by split',
+    stacked: true, ylabel: 'positive scenes', xlabel: 'season (year)', W: 420, H: 300,
+    valueLabels: true, aria: 'Positive scenes per year stacked by split', inlineLegend: true,
   });
 
   /* ---------- label-threshold table (whole dataset) ---------- */
@@ -181,8 +182,8 @@ export async function render(mount) {
     groups: [box('any echo', areasFor('area_isfinite'), 'var(--tn)'),
              box('dBZ ≥ 0', areasFor('area'), 'var(--accent2)'),
              box('dBZ ≥ 5', areasFor('area_dbz5'), 'var(--fp)')],
-    ylo: 1.5, yhi: 6, ylabel: 'plume area, log10(pixels)', W: 560, H: 320,
-    aria: 'Plume area by label definition',
+    ylo: 1.5, yhi: 6, ylabel: 'plume area, log10(pixels)', xlabel: 'label definition',
+    W: 560, H: 320, aria: 'Plume area by label definition',
   });
 
   /* ---------- comparability table ---------- */
@@ -274,7 +275,7 @@ export async function render(mount) {
     mount.querySelector('#c-hour').innerHTML = barChart({
       cats: Array.from({length: 24}, (_, h) => String(h).padStart(2, '0')),
       series: [{label: 'scenes', c: 'var(--accent2)', values: hours}],
-      ylabel: 'scenes', W: 880, H: 260, aria: 'Scenes by hour of day',
+      ylabel: 'scenes', xlabel: 'hour of day (UTC)', W: 880, H: 260, aria: 'Scenes by hour of day',
     });
 
     const areas = f.filter(s => s.label === 1 && s.area > 0).map(s => s.area);
@@ -316,8 +317,8 @@ export async function render(mount) {
       } : {label: sp, n: 0, q1: null, c: SPLIT_COLOR[sp]};
     });
     mount.querySelector('#c-areasplit').innerHTML = boxPlot({
-      groups, ylo: 1.5, yhi: 6, ylabel: 'plume area, log10(pixels)', W: 520, H: 300,
-      aria: 'Plume area by split',
+      groups, ylo: 1.5, yhi: 6, ylabel: 'plume area, log10(pixels)', xlabel: 'data split',
+      W: 520, H: 300, aria: 'Plume area by split',
     });
   }
   draw();

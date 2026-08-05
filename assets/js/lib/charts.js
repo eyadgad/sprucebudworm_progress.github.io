@@ -54,9 +54,13 @@ export function legend(items) {
 }
 
 /* ---------------- grouped / stacked bars ---------------- */
-export function barChart({cats, series, lo=0, hi=null, ylabel='', W=860, H=320, stacked=false, valueLabels=false, aria='bar chart'}) {
-  const maxV = hi ?? Math.max(...series.flatMap(s => s.values.map(v => N(v) ?? 0))) * 1.08;
-  const f = frame({W, H, padB: 56});
+export function barChart({cats, series, lo=0, hi=null, ylabel='', xlabel='', W=860, H=320, stacked=false, valueLabels=false, aria='bar chart', inlineLegend=false}) {
+  // Guard the degenerate case where every value is zero/absent: without it the
+  // scale collapses and every coordinate becomes NaN, silently blanking the chart.
+  const rawMax = Math.max(...series.flatMap(s => s.values.map(v => N(v) ?? 0)), 0) * 1.08;
+  const maxV = hi ?? (rawMax > lo ? rawMax : lo + 1);
+  // room for the axis title and, when asked, an in-figure key
+  const f = frame({W, H, padB: 56 + (xlabel ? 20 : 0) + (inlineLegend ? 22 : 0)});
   let g = yAxis(f, lo, maxV, ylabel);
   const gw = (f.x1-f.x0)/cats.length;
   const sy = v => f.y0 - ((v-lo)/(maxV-lo))*(f.y0-f.y1);
@@ -86,21 +90,33 @@ export function barChart({cats, series, lo=0, hi=null, ylabel='', W=860, H=320, 
     g += `<text x="${cx}" y="${f.y0+16}" text-anchor="middle" class="ax">${esc(c)}</text>`;
   });
   g += `<line x1="${f.x0}" y1="${f.y0}" x2="${f.x1}" y2="${f.y0}" stroke="var(--ink)"/>`;
+  if (xlabel) g += `<text x="${(f.x0+f.x1)/2}" y="${f.y0+36}" text-anchor="middle" class="axlab">${esc(xlabel)}</text>`;
+  if (inlineLegend && series.length > 1) {
+    const y = f.y0 + (xlabel ? 52 : 34);
+    let lx = f.x0;
+    series.forEach(s => {
+      g += `<rect x="${lx}" y="${y-9}" width="11" height="11" rx="2" fill="${s.c}"/>`
+         + `<text x="${lx+16}" y="${y}" class="ax" style="font-family:var(--sans)">${esc(s.label)}</text>`;
+      lx += 22 + String(s.label).length * 6.6 + 14;
+    });
+  }
   return wrap(f, g, aria);
 }
 
 /* ---------------- horizontal ranked bars ---------------- */
-export function hBarChart({items, lo, hi, W=860, labelW=250, aria='ranked bars', fmtV=(v)=>v.toFixed(3)}) {
+export function hBarChart({items, lo, hi, W=860, labelW=250, aria='ranked bars', fmtV=(v)=>v.toFixed(3), xlabel=''}) {
   const barH=17, gap=7, padT=22;
-  const H = padT + items.length*(barH+gap) + 6;
+  const H = padT + items.length*(barH+gap) + 6 + (xlabel ? 22 : 0);
   const x0=labelW, x1=W-58;
   const sx = v => x0 + clamp((v-lo)/(hi-lo))*(x1-x0);
   let g = '';
+  const axisBottom = H - (xlabel ? 22 : 0) - 4;
   ticks(lo, hi, 5).forEach(t => {
     const X = sx(t);
-    g += `<line x1="${X}" y1="${padT-5}" x2="${X}" y2="${H-4}" stroke="var(--grid)"/>`
+    g += `<line x1="${X}" y1="${padT-5}" x2="${X}" y2="${axisBottom}" stroke="var(--grid)"/>`
        + `<text x="${X}" y="${padT-9}" text-anchor="middle" class="ax">${fmtTick(t)}</text>`;
   });
+  if (xlabel) g += `<text x="${(x0+x1)/2}" y="${H-5}" text-anchor="middle" class="axlab">${esc(xlabel)}</text>`;
   items.forEach((it, i) => {
     const y = padT + i*(barH+gap);
     g += `<text x="${x0-9}" y="${y+barH/2}" text-anchor="end" dominant-baseline="middle" class="lab" style="font-size:11.5px">${esc(it.label)}</text>`;
@@ -212,8 +228,8 @@ export function histogram({bins, counts, xlabel='', ylabel='count', W=560, H=280
 }
 
 /* ---------------- box plots (distribution per group) ---------------- */
-export function boxPlot({groups, ylo, yhi, ylabel='', W=860, H=330, aria='box plot'}) {
-  const f = frame({W, H, padB:66});
+export function boxPlot({groups, ylo, yhi, ylabel='', xlabel='', W=860, H=330, aria='box plot'}) {
+  const f = frame({W, H, padB: 66 + (xlabel ? 20 : 0)});
   let g = yAxis(f, ylo, yhi, ylabel);
   const gw = (f.x1-f.x0)/groups.length;
   const sy = v => f.y0 - ((v-ylo)/(yhi-ylo))*(f.y0-f.y1);
@@ -235,8 +251,15 @@ export function boxPlot({groups, ylo, yhi, ylabel='', W=860, H=330, aria='box pl
     g += `<text x="${cx}" y="${f.y0+28}" text-anchor="middle" class="ax" style="font-size:9.5px">n=${gr.n}</text>`;
   });
   g += `<line x1="${f.x0}" y1="${f.y0}" x2="${f.x1}" y2="${f.y0}" stroke="var(--ink)"/>`;
+  if (xlabel) g += `<text x="${(f.x0+f.x1)/2}" y="${f.y0+48}" text-anchor="middle" class="axlab">${esc(xlabel)}</text>`;
   return wrap(f, g, aria);
 }
+
+/** Shared reading note for box plots, so the encoding is explained once. */
+export const BOXPLOT_KEY =
+  'Box spans the interquartile range (25th to 75th percentile), the thick line is the median, ' +
+  'the dot is the mean, and the whiskers reach the 5th and 95th percentiles. ' +
+  'n under each box is the number of scenes it summarises.';
 
 /* ---------------- confusion matrix ---------------- */
 export function confusion({tp, fp, fn, tn, W=430, title=''}) {
@@ -271,11 +294,15 @@ export function parallel({rows, dims, W=880, H=360, aria='parallel coordinates'}
   let g = '';
   dims.forEach((d,i) => {
     const X = ax(i);
+    // The outermost axis titles are anchored inward: centred text on the first
+    // and last axis would run past the edge of the figure.
+    const anchor = i === 0 ? 'start' : (i === n-1 ? 'end' : 'middle');
     g += `<line x1="${X}" y1="${f.y1}" x2="${X}" y2="${f.y0}" stroke="var(--hair)"/>`;
-    g += `<text x="${X}" y="${f.y1-9}" text-anchor="middle" class="ax" style="font-weight:600">${esc(d.label)}</text>`;
-    g += `<text x="${X}" y="${f.y0+15}" text-anchor="middle" class="ax">${fmtTick(d.lo)}</text>`;
-    g += `<text x="${X}" y="${f.y1+2}" text-anchor="middle" class="ax">${fmtTick(d.hi)}</text>`;
+    g += `<text x="${X}" y="${f.y1-9}" text-anchor="${anchor}" class="ax" style="font-weight:600">${esc(d.label)}</text>`;
+    g += `<text x="${X}" y="${f.y0+15}" text-anchor="${anchor}" class="ax">${fmtTick(d.lo)}</text>`;
+    g += `<text x="${X}" y="${f.y1+2}" text-anchor="${anchor}" class="ax">${fmtTick(d.hi)}</text>`;
   });
+  g += `<text x="${(f.x0+f.x1)/2}" y="${f.y0+38}" text-anchor="middle" class="axlab">each line is one run — higher on every axis is better</text>`;
   rows.forEach(r => {
     const pts = dims.map((d,i) => {
       const v = N(r.values[i]);

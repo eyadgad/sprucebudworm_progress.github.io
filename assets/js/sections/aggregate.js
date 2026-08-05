@@ -3,7 +3,7 @@
 
 import { load } from '../lib/data.js';
 import { fmtOr, tip, int, esc, mean, std, quantile, bootCI } from '../lib/metrics.js';
-import { confusion, boxPlot, legend } from '../lib/charts.js';
+import { confusion, boxPlot, legend, BOXPLOT_KEY } from '../lib/charts.js';
 
 export async function render(mount) {
   const [sm, ex] = await Promise.all([load('samples'), load('experiments')]);
@@ -40,9 +40,8 @@ export async function render(mount) {
   <p>A single average hides how uneven performance is. These distributions come from
   ${int(pos('test').length)} test and ${int(pos('val').length)} validation scenes.</p>
   <figure><div class="viz" id="c-box"></div>
-    <figcaption>Distribution of per-scene Dice, IoU, precision and recall. The box spans the
-    interquartile range, the thick line is the median, the dot is the mean, and whiskers are the 5th and
-    95th percentiles.</figcaption></figure>
+    <figcaption>Distribution of per-scene Dice, IoU, precision and recall, validation beside test.
+    ${BOXPLOT_KEY}</figcaption></figure>
 
   <h2>Uncertainty on the headline number</h2>
   <p class="small">Bootstrap percentile intervals over scenes (2000 resamples, fixed seed so the numbers
@@ -163,8 +162,8 @@ export async function render(mount) {
       mkBox('Prec', 'precision', 'val', 'var(--accent2)'), mkBox('Prec', 'precision', 'test', 'var(--best)'),
       mkBox('Rec', 'recall', 'val', 'var(--accent2)'), mkBox('Rec', 'recall', 'test', 'var(--best)'),
     ],
-    ylo: 0, yhi: 1, ylabel: 'per-scene value', W: 880, H: 350,
-    aria: 'Per-scene metric distributions for validation and test',
+    ylo: 0, yhi: 1, ylabel: 'per-scene value', xlabel: 'metric and split',
+    W: 880, H: 350, aria: 'Per-scene metric distributions for validation and test',
   });
 
   /* ---------------- bootstrap CIs ---------------- */

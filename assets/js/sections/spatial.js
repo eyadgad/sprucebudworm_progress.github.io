@@ -122,8 +122,8 @@ export async function render(mount) {
         {label: 'TP', c: SEG.tp.c, values: R.tp},
         {label: 'FN', c: SEG.fn.c, values: R.fn},
         {label: 'FP', c: SEG.fp.c, values: R.fp},
-      ], stacked: true, ylabel: 'pixels', W: 880, H: 320,
-      aria: 'Pixel outcomes by distance ring',
+      ], stacked: true, ylabel: 'pixels', xlabel: 'distance from the radar (km)',
+      W: 880, H: 320, aria: 'Pixel outcomes by distance ring', inlineLegend: true,
     });
     mount.querySelector('#l-radial').innerHTML = legend([
       {c: SEG.tp.c, label: SEG.tp.label}, {c: SEG.fn.c, label: SEG.fn.label}, {c: SEG.fp.c, label: SEG.fp.label},

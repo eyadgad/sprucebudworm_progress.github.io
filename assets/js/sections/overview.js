@@ -141,6 +141,7 @@ export async function render(mount) {
       c: r.selected ? 'var(--best)' : 'var(--accent2)',
     })),
     lo: 0.60, hi: 0.645, labelW: 210, aria: 'Test Dice for the six best runs',
+    xlabel: 'test Dice (macro) — higher is better',
   });
   mount.querySelector('#altleg').innerHTML = legend([
     {c: 'var(--best)', label: 'Selected configuration'},

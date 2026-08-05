@@ -51,7 +51,9 @@ export async function render(mount) {
   <h2>Score against training cost</h2>
   <figure><div class="viz" id="c-cost"></div>
     <figcaption>Test Dice against wall-clock training time. Longer training does not buy a better score:
-    the cheapest and most expensive runs land within the same narrow band.</figcaption></figure>
+    the cheapest and most expensive runs land within the same narrow band. Colour encodes architecture
+    (same key as above); the selected run is the enlarged marker.</figcaption></figure>
+  <div id="l-cost"></div>
 
   <h2>Multi-metric comparison</h2>
   <p class="small">Each line is one run crossing five axes. A run that is genuinely better is high on all
@@ -193,8 +195,9 @@ export async function render(mount) {
       aria:'Precision versus recall for every run',
       trend:{x0:sel.precision,y0:.40,x1:sel.precision,y1:.90},
     });
-    mount.querySelector('#l-pr').innerHTML = legend(
-      models.map(m=>({c:MODEL_C[m]||'var(--accent2)', label:MODEL_NAME[m]||m})));
+    const archKey = legend(models.map(m=>({c:MODEL_C[m]||'var(--accent2)', label:MODEL_NAME[m]||m})));
+    mount.querySelector('#l-pr').innerHTML = archKey;
+    mount.querySelector('#l-cost').innerHTML = archKey;
 
     mount.querySelector('#c-cost').innerHTML = scatter({
       points: f.filter(r=>r.train_seconds&&r.dice!=null).map(r=>({
@@ -241,7 +244,8 @@ export async function render(mount) {
     mount.querySelector('#c-axis').innerHTML = hBarChart({
       items: axes.map(a=>({label:a.label, value:a.spread, c:'var(--accent2)'})),
       lo:0, hi:Math.max(...axes.map(a=>a.spread))*1.15, labelW:150, W:520,
-      fmtV:v=>v.toFixed(3), aria:'Spread of mean test Dice caused by each design axis',
+      fmtV:v=>v.toFixed(3), xlabel:'spread in mean test Dice across that axis',
+      aria:'Spread of mean test Dice caused by each design axis',
     });
 
     const byArch = models.map(m=>{
@@ -251,6 +255,7 @@ export async function render(mount) {
     }).sort((a,b)=>(b.value??0)-(a.value??0));
     mount.querySelector('#c-arch').innerHTML = hBarChart({
       items:byArch, lo:.55, hi:.65, labelW:150, W:520,
+      xlabel:'best test Dice (macro) achieved by that architecture',
       aria:'Best test Dice per architecture',
     });
   }
