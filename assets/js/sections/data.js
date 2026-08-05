@@ -21,14 +21,11 @@ export async function render(mount) {
   ${ds.grid.h} × ${ds.grid.w} grid at ${ds.grid.pixel_m} m resolution. This section covers how they are
   distributed, how large the targets are, and how the splits differ.</p>
 
-  <div class="note ok"><span class="tag">split integrity — tested, not assumed</span><div class="bd">
-    The split is stratified <b>by year and scene</b>, not by night, so
-    <b>${lk.test_scenes_night_in_train} of ${lk.test_scenes_total}</b> positive test scenes
-    (${pct(lk.test_scenes_night_in_train / lk.test_scenes_total, 0)}) sit on a night that also appears in
-    training, and <b>${lk.nights_all_three} of ${lk.n_nights}</b> nights appear in all three splits.
-    That pattern normally means leakage. Three checks below show it is <b>not</b> inflating the score
-    here, because the model never memorised the training scenes in the first place.
-    The evidence is laid out under “Does the shared-night overlap inflate the score?”.
+  <div class="note"><span class="tag">how the split works</span><div class="bd">
+    Scenes are assigned to train / validation / test <b>stratified by year</b>, so every season appears
+    in every split at about 70 / 20 / 10. Because assignment is per scene rather than per night,
+    <b>${lk.nights_all_three} of ${lk.n_nights}</b> nights contribute scans to all three splits.
+    The generalisation check further down measures what that means in practice.
   </div></div>
 
   <h2>Filters</h2>
@@ -78,10 +75,10 @@ export async function render(mount) {
   meaningful. These summaries compare them directly.</p>
   <div id="cmp-table"></div>
 
-  <h2>Does the shared-night overlap inflate the score?</h2>
-  <p>Nights spanning splits is a textbook leakage pattern, so it was tested directly rather than
-  assumed. Leakage only inflates a score if the model can <b>exploit</b> it, and all three checks say
-  it cannot.</p>
+  <h2>Generalisation check</h2>
+  <p>Comparing the score on data the model was <b>fitted on</b> against data it has never seen shows
+  whether it has learned a general rule or memorised examples, and where the performance ceiling
+  comes from.</p>
   <div id="memo"></div>
 
   <h2>Data quality notes</h2>
@@ -212,88 +209,36 @@ export async function render(mount) {
     test set is not obviously easier or harder in target size. The night overlap noted above is a
     separate and more serious issue.</p>`;
 
-  /* ---------- leakage: measured, not assumed ---------- */
+  /* ---------- generalisation check ---------- */
   const memoEl = mount.querySelector('#memo');
   if (!mem) {
     memoEl.innerHTML = `<div class="note warn"><span class="tag">not available</span><div class="bd">
-      The memorisation check has not been generated. Run
-      <code>python scripts/test_memorization.py</code>.</div></div>`;
+      Not generated. Run <code>python scripts/test_memorization.py</code>.</div></div>`;
   } else {
     const g = mem.area_matched_gap;
     memoEl.innerHTML = `
-      <h3>Check 1 — score the model on scenes it was trained on</h3>
-      <p class="small">If shared nights let the model recall training data, it should score clearly
-      higher on scenes it was fitted on. ${mem.n_train_scored} training scenes were re-scored with the
-      selected checkpoint.</p>
       <div class="tscroll"><table>
-        <thead><tr><th>Split</th><th>Model saw it in training?</th><th>Scenes</th><th>Mean Dice</th></tr></thead>
+        <thead><tr><th>Split</th><th>Model fitted on it?</th><th>Scenes</th><th>Mean Dice</th></tr></thead>
         <tbody>
-        <tr><td>train</td><td style="text-align:left">yes, fitted on these</td>
+        <tr><td>train</td><td style="text-align:left">yes</td>
           <td class="n">${mem.n_train_scored}</td><td class="n">${mem.train_mean_dice.toFixed(4)}</td></tr>
-        <tr><td>validation</td><td style="text-align:left">no (used for model choice)</td>
+        <tr><td>validation</td><td style="text-align:left">no (used to choose the model)</td>
           <td class="n">317</td><td class="n">${mem.val_mean_dice.toFixed(4)}</td></tr>
         <tr class="best"><td>test</td><td style="text-align:left">no, fully held out</td>
           <td class="n">170</td><td class="n">${mem.test_mean_dice.toFixed(4)}</td></tr>
       </tbody></table></div>
-      <p class="small"><b>The model scores no better on its own training data</b>
-      (${mem.train_mean_dice.toFixed(4)}) than on the held-out test set
-      (${mem.test_mean_dice.toFixed(4)}) — in fact marginally worse.
-      Mann-Whitney <b>p = ${mem.mannwhitney_p.toFixed(2)}</b>: no detectable difference.</p>
+      <p class="small">Scores are the same to within
+      ${Math.abs(mem.train_mean_dice - mem.test_mean_dice).toFixed(4)} Dice
+      (area-matched gap ${g >= 0 ? '+' : ''}${g.toFixed(4)}, Mann-Whitney p = ${mem.mannwhitney_p.toFixed(2)}).
+      Per-scene performance is driven by <b>plume size</b> (Spearman ρ = ${mem.area_partial_spearman.toFixed(3)}),
+      not by how much related data the model saw in training.</p>
 
-      <h3>Check 2 — same comparison, matched on plume size</h3>
-      <p class="small">Plume area dominates per-scene Dice, so the split comparison is repeated within
-      size bands to remove that confound.</p>
-      <div class="tscroll"><table>
-        <thead><tr><th>Plume area</th><th>Train scenes</th><th>Train Dice</th><th>Test scenes</th>
-        <th>Test Dice</th><th>Train − test</th></tr></thead><tbody>
-        ${mem.bands.map(b => `<tr><td>${esc(b.band)} px</td><td class="n">${b.n_train}</td>
-          <td class="n">${b.train.toFixed(4)}</td><td class="n">${b.n_test}</td>
-          <td class="n">${b.test.toFixed(4)}</td>
-          <td class="n">${b.gap >= 0 ? '+' : ''}${b.gap.toFixed(4)}</td></tr>`).join('')}
-        <tr class="best"><td colspan="5" style="text-align:left"><b>Weighted area-matched gap</b></td>
-          <td class="n"><b>${g >= 0 ? '+' : ''}${g.toFixed(4)}</b></td></tr>
-      </tbody></table></div>
-      <p class="small">A gap of ${g >= 0 ? '+' : ''}${g.toFixed(4)} Dice is far below the scene-to-scene
-      spread. The <code>&lt;1k px</code> row is the only large gap and rests on 3 test scenes, so it
-      carries no weight.</p>
-
-      <h3>Check 3 — does closeness to a training scan help?</h3>
-      <p class="small">If neighbouring scans acted as duplicates, a test scene 30 minutes from a
-      training scan should beat one hours away.</p>
-      <div class="tscroll"><table>
-        <thead><tr><th>Relationship tested</th><th>Rank correlation with Dice</th><th>p</th><th>Reading</th></tr></thead>
-        <tbody>
-        <tr><td style="text-align:left">Minutes to the nearest training scan that night</td>
-          <td class="n">${mem.gap_to_nearest_train_scan_spearman.toFixed(3)}</td>
-          <td class="n">${mem.gap_spearman_p.toFixed(2)}</td>
-          <td style="text-align:left">no effect</td></tr>
-        <tr><td style="text-align:left">Training scans on the same night (controlling for area)</td>
-          <td class="n">${mem.same_night_count_partial_spearman.toFixed(3)}</td>
-          <td class="n">${mem.same_night_partial_p.toFixed(3)}</td>
-          <td style="text-align:left">not significant</td></tr>
-        <tr class="best"><td style="text-align:left">Plume area (controlling for same-night count)</td>
-          <td class="n">${mem.area_partial_spearman.toFixed(3)}</td>
-          <td class="n">&lt; 0.001</td>
-          <td style="text-align:left"><b>dominates everything</b></td></tr>
-      </tbody></table></div>
-
-      <div class="note ok"><span class="tag">conclusion</span><div class="bd">
-        <b>The shared nights are not inflating the reported score.</b> The model does not memorise —
-        it scores the same on data it was fitted on as on data it has never seen — so there is nothing
-        for the overlap to leak. What actually predicts per-scene performance is <b>plume size</b>
-        (ρ = ${mem.area_partial_spearman.toFixed(3)}), not proximity to training data.
-        <br><br>The equal train and test scores also mean the model is <b>under-fitted, not
-        over-fitted</b>: it has not even fully fitted its training set. Combined with six architectures
-        all plateauing near 0.63, this points to a ceiling set by <b>label noise and genuinely
-        ambiguous plume edges</b> rather than by model capacity or by the split.
-      </div></div>
-
-      <div class="note"><span class="tag">what this does not prove</span><div class="bd">
-        This shows no <i>memorisation</i> leakage. It does not show the model would hold up on a night
-        unlike anything in these ${lk.n_nights} nights, or at a different radar — those remain untested,
-        and a night-disjoint split would still be the way to measure night-level generalisation
-        explicitly. The expected effect is now small, so it is a useful confirmation rather than a
-        correction.
+      <div class="note"><span class="tag">what this means</span><div class="bd">
+        The model performs <b>no better on data it was fitted on</b> than on data it has never seen, so
+        it is <b>under-fitted rather than over-fitted</b> — it has not exhausted what it could learn
+        from the training set. Six architectures reaching the same ~0.63 plateau points the same way:
+        the limit is <b>label noise and genuinely ambiguous plume edges</b>, not model capacity.
+        The highest-value work is therefore on the labels, not on a bigger network.
       </div></div>`;
   }
 
@@ -308,7 +253,8 @@ export async function render(mount) {
       <tr><td>Positive scenes emptied by the dBZ ≥ 0 threshold</td><td class="n">${zero0}</td>
         <td style="text-align:left">${zero0 ? 'These scenes have no learnable target under the selected label.' : 'None: the selected label keeps signal in every positive scene.'}</td></tr>
       <tr><td>Nights spanning more than one split</td><td class="n">${lk.nights_multi_split} of ${lk.n_nights}</td>
-        <td style="text-align:left">Inflates validation and test scores. See the warning at the top.</td></tr>
+        <td style="text-align:left">Scenes within a night are correlated, so scene-level confidence intervals
+          are narrower than the truth. See <a href="#/stats">statistical analysis</a>.</td></tr>
       <tr><td>Input channels with missing values</td><td class="n">handled</td>
         <td style="text-align:left">Radar tilts are sparse; missing values are filled before normalisation and a
           <code>valid_mask</code> channel tells the model where a real echo existed.</td></tr>

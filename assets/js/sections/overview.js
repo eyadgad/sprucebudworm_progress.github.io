@@ -117,17 +117,14 @@ export async function render(mount) {
     </ul></div>
   </div>
 
-  <div class="note ok"><span class="tag">split integrity, tested</span><div class="bd">
-    ${lk.test_scenes_night_in_train} of ${lk.test_scenes_total} positive test scenes share a night with a
-    training scene, which normally raises a leakage concern. It was <b>tested rather than assumed</b>:
-    the model was re-scored on 300 scenes it was actually trained on and reached
-    <b>${(mem ? mem.train_mean_dice : 0).toFixed(4)}</b> mean Dice, against
-    <b>${(mem ? mem.test_mean_dice : 0).toFixed(4)}</b> on the held-out test set — no better, and
-    statistically indistinguishable (area-matched gap ${mem ? (mem.area_matched_gap >= 0 ? '+' : '') + mem.area_matched_gap.toFixed(4) : '—'},
-    Mann-Whitney p = ${mem ? mem.mannwhitney_p.toFixed(2) : '—'}).
-    <b>The model does not memorise, so the shared nights are not inflating the score.</b>
-    Full working in <a href="#/data">data exploration</a>.
-  </div></div>
+  ${mem ? `<div class="note"><span class="tag">what limits the score</span><div class="bd">
+    The model scores the same on data it was trained on (<b>${mem.train_mean_dice.toFixed(3)}</b> Dice)
+    as on the held-out test set (<b>${mem.test_mean_dice.toFixed(3)}</b>), so it is
+    <b>under-fitted rather than over-fitted</b>. Together with six architectures all plateauing near
+    0.63, that points to the ceiling being set by <b>label noise and genuinely ambiguous plume
+    edges</b>, not by the network. Improving the labels is worth more than a bigger model.
+    <a href="#/data">Details</a>.
+  </div></div>` : ''}
 
   <h2>Where to go next</h2>
   <div class="cards">

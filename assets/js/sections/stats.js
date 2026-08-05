@@ -22,8 +22,6 @@ export async function render(mount) {
     scans repeat every ~30 minutes within a night, so scenes from one night are correlated.
     Confidence intervals computed over scenes are therefore <b>narrower than the truth</b>, and p-values
     are optimistic. The night-level summaries below are the more trustworthy view.
-    <br>Note this is a <i>statistical</i> dependence issue, separate from leakage: the shared nights
-    were tested directly and are <a href="#/data">not inflating the score</a>.
   </div></div>
 
   <div class="ctrls">

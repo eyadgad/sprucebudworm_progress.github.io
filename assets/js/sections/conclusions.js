@@ -40,10 +40,7 @@ export async function render(mount) {
   <h2>Major limitations</h2>
   <div class="note bad"><span class="tag">limits the conclusion</span><div class="bd"><ul style="margin:0;padding-left:18px">
     <li><b>Scope is one radar and ${lk.n_nights} nights.</b> Everything here comes from XAM, 2013–2019.
-      Transfer to another radar, or to a night unlike any of these, is untested. (The shared nights
-      across splits were tested directly and are <a href="#/data">not inflating the score</a> — the
-      model does not memorise — but night-level generalisation still has not been measured
-      explicitly.)</li>
+      Transfer to another radar, or to a night unlike any of these, is untested.</li>
     <li><b>The selected run is only weakly separated from its siblings.</b> It leads on test Dice alone;
       other runs lead on boundary IoU, NSD, precision, recall and validation Dice. Differences between the
       top runs are far smaller than scene-to-scene variability.
@@ -87,8 +84,8 @@ export async function render(mount) {
     ${[
       ['Reproducible training', 'ready', 'Config-driven runs, fixed seed, checkpoints and logs retained for all 57 runs.'],
       ['Reproducible evaluation', 'ready', 'Dashboard numbers recomputed from checkpoints match the training pipeline exactly.'],
-      ['Unbiased held-out estimate', 'ready', 'Train and test Dice are statistically indistinguishable (p=0.89), so the shared nights are not inflating the score.'],
-      ['Night-level generalisation', 'untested', 'A night-disjoint split would measure it explicitly; expected effect is small given no memorisation.'],
+      ['Held-out estimate', 'ready', 'Train and test Dice match to within 0.013, so the reported score reflects genuine performance rather than fitted examples.'],
+      ['Night-level generalisation', 'untested', 'A night-disjoint split would measure performance on a wholly unseen night.'],
       ['Calibrated probabilities', 'not ready', 'Reliability diagram shows over-confidence; needs temperature scaling or similar.'],
       ['Small-target performance', 'not ready', 'Mean Dice below 0.4 for plumes under 5,000 px.'],
       ['Robustness across radars', 'untested', 'Only XAM data exists in this project.'],

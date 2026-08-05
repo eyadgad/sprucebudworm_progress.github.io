@@ -74,20 +74,20 @@ export async function render(mount) {
       <td class="n">${ex.experiments.length}</td><td class="small">stage <code>experiments</code></td></tr>
     <tr><td><code>histories.json</code></td><td style="text-align:left">Per-epoch loss, learning rate and validation metrics</td>
       <td class="n">${ex.experiments.length}</td><td class="small">stage <code>experiments</code></td></tr>
-    <tr><td><code>dataset.json</code></td><td style="text-align:left">Scene metadata, target areas under three label definitions, split leakage audit</td>
+    <tr><td><code>dataset.json</code></td><td style="text-align:left">Scene metadata, target areas under three label definitions, night/split overlap audit</td>
       <td class="n">${int(ds.n_scenes)}</td><td class="small">stage <code>dataset</code></td></tr>
     <tr><td><code>samples.json</code></td><td style="text-align:left">Per-scene metrics for both models, region counts, radial statistics</td>
       <td class="n">${int(sm.samples.length)}</td><td class="small">stage <code>predict</code></td></tr>
     <tr><td><code>threshold.json</code></td><td style="text-align:left">Threshold sweeps, probability histograms, reliability bins, radial error profile</td>
       <td class="n">—</td><td class="small">stage <code>predict</code></td></tr>
-    <tr><td><code>samples/*.png</code></td><td style="text-align:left">Probability, ground-truth, reflectivity and thumbnail layers per test scene</td>
-      <td class="n">816</td><td class="small">stage <code>images</code></td></tr>
+    <tr><td><code>samples/*.png</code></td><td style="text-align:left">Probability, ground-truth, reflectivity and thumbnail layers per evaluated scene</td>
+      <td class="n">2,460</td><td class="small">stage <code>images</code></td></tr>
   </tbody></table></div>
 
   <h2>Rebuilding the data</h2>
   <pre style="background:var(--panel);border:1px solid var(--hair);border-radius:9px;padding:13px;overflow-x:auto;font-size:12.5px"><code>. venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only experiments,dataset
 .venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only predict
-.venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only images --img-splits test</code></pre>
+.venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only images --img-splits test,val</code></pre>
   <p class="small">The <code>predict</code> stage needs a GPU and takes roughly 40 minutes for 615 scenes
   with two models. <code>experiments</code> and <code>dataset</code> need no GPU and take under two minutes.
   To serve the site locally: <code>python -m http.server 8899</code> from this folder, then open
@@ -138,13 +138,13 @@ export async function render(mount) {
        'A weather table keyed by night.'],
       ['Visual model-vs-model comparison', 'Pixel layers are stored for the selected model only.',
        'Running stage images for the comparison checkpoint as well (~13 MB more).'],
-      ['Validation scene imagery', 'Images were exported for the test split only, to keep the repo small.',
-       '<code>--only images --img-splits test,val</code> (~40 MB total).'],
+      ['Training scene imagery', 'Layers are exported for the evaluated splits (test and validation) only; training scenes are not browsable.',
+       'Extending stage images to the train split (~90 MB more).'],
       ['Annotator agreement / label noise', 'Each scene has exactly one annotation.',
        'A second independent annotation of a scene subset.'],
       ['Night-level generalisation',
-       'All test nights also appear in training. That overlap was tested and is not inflating the score (the model does not memorise), but performance on a genuinely new night has still not been measured on its own.',
-       'A night-disjoint split and a retrain. See <a href="#/data">data exploration</a> for the test that ruled out memorisation.'],
+       'Splits are assigned per scene, so most nights contribute to more than one split. Performance on a wholly unseen night has not been measured on its own.',
+       'A night-disjoint split and a retrain.'],
     ].map(([a, w, n]) => `<tr><td style="text-align:left"><b>${esc(a)}</b></td>
       <td style="text-align:left" class="small">${esc(w)}</td>
       <td style="text-align:left" class="small">${n}</td></tr>`).join('')}
