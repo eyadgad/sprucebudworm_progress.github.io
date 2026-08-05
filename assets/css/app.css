@@ -188,6 +188,24 @@ th .tip::after{text-transform:none}
 @media(max-width:900px){.viewer{grid-template-columns:1fr}}
 .stage{position:relative;background:#000;border:1px solid var(--hair);border-radius:11px;overflow:hidden;aspect-ratio:1}
 .stage canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;touch-action:none}
+/* viewer legend: every colour carries a name, a plain-language meaning and a live count */
+.lgbox{border:1px solid var(--hair);border-radius:10px;background:var(--panel);padding:4px 2px;margin-top:10px}
+.lgrow{display:grid;grid-template-columns:16px minmax(120px,auto) 1fr auto;gap:10px;align-items:center;
+  padding:6px 12px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.lgrow:last-child{border-bottom:none}
+.swk{width:15px;height:15px;border-radius:4px;display:inline-block;border:1px solid rgba(128,128,128,.45);background-size:auto}
+.lgname{font-weight:640;color:var(--ink)}
+.lgwhat{color:var(--muted);font-size:12px}
+.lgn{font-family:var(--mono);font-size:11.5px;color:var(--ink2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.lgscale{display:flex;justify-content:space-between;padding:2px 12px 8px;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+@media(max-width:620px){
+  .lgrow{grid-template-columns:16px 1fr auto;gap:8px}
+  .lgwhat{display:none}
+}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2);
+  border:1px solid var(--hair);border-radius:8px;padding:6px 10px;cursor:pointer;background:var(--panel)}
+.chk input{accent-color:var(--accent2);margin:0}
+
 .kv{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:13px}
 .kv .k{color:var(--muted);font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
 .kv .v{font-variant-numeric:tabular-nums;text-align:right;font-family:var(--mono);font-size:12.5px}

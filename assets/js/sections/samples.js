@@ -16,7 +16,10 @@ const PREVIEW = 480;   // stored preview resolution; metrics come from full 960
 export async function render(mount, query) {
   const sm = await load('samples');
   const all = sm.samples;
-  const withImg = new Set(all.filter(s => s.split === 'test').map(s => s.ts));
+  // Splits whose pixel layers were exported by stage `images`. Scenes outside
+  // these splits still list their metrics but open without imagery.
+  const IMG_SPLITS = new Set(sm.image_splits || ['test', 'val']);
+  const withImg = new Set(all.filter(s => IMG_SPLITS.has(s.split)).map(s => s.ts));
   const state = {split: 'test', type: 'pos', sort: 'dice', dir: 1, q: '', view: 'grid', preset: 'all'};
 
   mount.innerHTML = `
@@ -24,11 +27,10 @@ export async function render(mount, query) {
   <p class="lede">Every evaluated scene, searchable and sortable. Open one to inspect the reflectivity
   input, the label, the probability map and the errors, and to move the decision threshold yourself.</p>
 
-  <div class="note"><span class="tag">image coverage</span><div class="bd">
-    Pixel layers were exported for the <b>${withImg.size} test scenes</b> (13 MB). Validation scenes are
-    listed with full metrics but have no stored imagery — regenerate with
-    <code>--only images --img-splits test,val</code> to add them.
-    <br>Previews are ${PREVIEW}×${PREVIEW}, downsampled from 960×960 by taking the maximum of each
+  <div class="note"><span class="tag">how to read the previews</span><div class="bd">
+    Pixel layers are stored for <b>${withImg.size} scenes</b> across the
+    ${[...IMG_SPLITS].join(' and ')} split${IMG_SPLITS.size > 1 ? 's' : ''}.
+    Previews are ${PREVIEW}×${PREVIEW}, downsampled from 960×960 by taking the maximum of each
     2×2 block so thin plumes stay visible. That thickens both masks, so the
     <b>interactive readout is systematically optimistic</b>, typically by a few hundredths of Dice.
     Use it to judge <i>shape and where the errors are</i>, not to quote a score. Every number in the
@@ -51,7 +53,7 @@ export async function render(mount, query) {
     w.querySelector('select').addEventListener('change', e => { state[key] = e.target.value; draw(); });
     ctrls.appendChild(w); return w.querySelector('select');
   };
-  mk('Split', 'split', [['test', 'Test (has imagery)'], ['val', 'Validation'], ['all', 'All']]);
+  mk('Split', 'split', [['test', 'Test (held out)'], ['val', 'Validation'], ['all', 'All']]);
   mk('Scene type', 'type', [['pos', 'With plume'], ['neg', 'Plume free'], ['all', 'All']]);
   mk('Sort by', 'sort', [['dice', 'Dice'], ['iou', 'IoU'], ['precision', 'Precision'], ['recall', 'Recall'],
     ['gt_area', 'Truth area'], ['pred_area', 'Predicted area'], ['boundary_iou', 'Boundary IoU'],
@@ -121,9 +123,10 @@ export async function render(mount, query) {
   let table = null;
   function draw() {
     const r = rows();
+    const missingImg = r.filter(s => !withImg.has(s.ts)).length;
     mount.querySelector('#count').innerHTML =
       `<b>${r.length}</b> scene${r.length === 1 ? '' : 's'} match. ` +
-      (state.split !== 'test' ? '<span style="color:var(--warn)">Imagery exists only for test scenes.</span>' : 'Click any scene to open it.');
+      (missingImg ? `<span style="color:var(--warn)">${missingImg} of them have no stored imagery.</span>` : 'Click any scene to open it.');
     const body = mount.querySelector('#body');
     if (!r.length) {
       body.innerHTML = `<div class="state"><div class="big">No scenes match</div>
@@ -142,7 +145,11 @@ export async function render(mount, query) {
             ? `<span class="m">Dice ${fmtOr(s.dice, 'dice')} · ${int(s.gt_area)} px</span>`
             : `<span class="m">no plume · FP ${fmtOr(s.bg_fp_rate, 'bg_fp_rate')}</span>`}</span>
         </button>`;
-      }).join('') + `</div>` +
+      }).join('') + `</div>
+        <p class="small" style="margin-top:10px">
+          <span class="swk" style="background:#fff;vertical-align:-3px"></span> <b>white</b> = predicted plume,
+          <span class="swk" style="background:#000;vertical-align:-3px"></span> <b>black</b> = background,
+          at the project threshold ${sm.threshold}. Open a scene for the labelled error view.</p>` +
         (r.length > 120 ? `<p class="small">Showing the first 120 of ${r.length}. Narrow the filters or switch to the table view to see the rest.</p>` : '');
       body.querySelectorAll('.scell').forEach(b =>
         b.addEventListener('click', () => open(+b.dataset.ts)));
@@ -197,7 +204,7 @@ export async function render(mount, query) {
                           aria-label="Segmentation overlay for ${tsLabel(ts)}"></canvas>`
                       : `<div class="state" style="height:100%;border:0;background:var(--panel)">
                            <div class="big">No imagery exported</div>
-                           <div class="small">This scene is in the ${esc(s.split)} split. Only test scenes have stored layers.</div></div>`}
+                           <div class="small">Pixel layers were not exported for the ${esc(s.split)} split. Metrics on the right are still full resolution.</div></div>`}
               </div>
               ${has ? `
               <div class="ctrls" style="margin-top:12px">
@@ -213,6 +220,8 @@ export async function render(mount, query) {
                   <input type="range" id="thr" min="0.02" max="0.9" step="0.01" value="${s.thr}"></div>
                 <div class="f"><label for="op">Overlay opacity</label>
                   <input type="range" id="op" min="0" max="1" step="0.05" value="0.75"></div>
+                <div class="f"><label for="pat">Accessibility</label>
+                  <label class="chk"><input type="checkbox" id="pat"> Hatch the error types</label></div>
                 <button id="rst" class="ghost">Reset to ${s.thr}</button>
               </div>
               <div id="leg2"></div>
@@ -320,7 +329,7 @@ export async function render(mount, query) {
     const out = ctx.createImageData(PREVIEW, PREVIEW);
     const thrEl = modal.querySelector('#thr'), opEl = modal.querySelector('#op'),
           layEl = modal.querySelector('#lay'), thv = modal.querySelector('#thv'),
-          live = modal.querySelector('#live');
+          live = modal.querySelector('#live'), patEl = modal.querySelector('#pat');
 
     const rgb = v => {
       // perceptually ordered heat ramp for probability
@@ -332,10 +341,15 @@ export async function render(mount, query) {
 
     function paint() {
       const t = +thrEl.value, op = +opEl.value, mode = layEl.value;
+      const patterns = patEl.checked;
       const cut = t * 255;
       let tp = 0, fp = 0, fn = 0;
       const d = out.data;
-      for (let i = 0, p = 0; i < P.length; i += 4, p += 4) {
+      // Each class gets its own hatch direction so the three error types stay
+      // distinguishable in greyscale or with colour-vision deficiency:
+      //   TP solid, FP "\" stripes, FN "/" stripes.
+      for (let i = 0, p = 0, n = 0; i < P.length; i += 4, p += 4, n++) {
+        const x = n % PREVIEW, y = (n / PREVIEW) | 0;
         const prob = P[i], gt = G[i] > 127, pred = prob > cut;
         if (gt && pred) tp++; else if (pred) fp++; else if (gt) fn++;
         const base = TH[i];                       // reflectivity as grey backdrop
@@ -350,7 +364,14 @@ export async function render(mount, query) {
         }
         if (mode !== 'th' && mode !== 'prob') {
           const on = (mode === 'err' && (gt || pred)) || (mode === 'gt' && gt) || (mode === 'pred' && pred);
-          if (on) { r = base * (1 - op) + r * op; g = base * (1 - op) + g * op; b = base * (1 - op) + b * op; }
+          if (on) {
+            if (patterns && mode === 'err' && !(gt && pred)) {
+              // brighten every 3rd of 7 rows along the class's diagonal
+              const stripe = pred ? ((x + y) % 7 < 3) : ((x - y + PREVIEW * 2) % 7 < 3);
+              if (stripe) { r = Math.min(255, r * 1.55 + 40); g = Math.min(255, g * 1.55 + 40); b = Math.min(255, b * 1.55 + 40); }
+            }
+            r = base * (1 - op) + r * op; g = base * (1 - op) + g * op; b = base * (1 - op) + b * op;
+          }
         }
         d[p] = r; d[p + 1] = g; d[p + 2] = b; d[p + 3] = 255;
       }
@@ -358,6 +379,7 @@ export async function render(mount, query) {
       const dice = tp ? 2 * tp / (2 * tp + fp + fn) : 0;
       const prec = (tp + fp) ? tp / (tp + fp) : 0, rec = (tp + fn) ? tp / (tp + fn) : 0;
       thv.textContent = t.toFixed(2);
+      drawLegend(mode, {tp, fp, fn}, patterns);
       live.innerHTML = s.label === 1
         ? `On this ${PREVIEW}px preview at threshold ${t.toFixed(2)}:
            Dice <b>${dice.toFixed(3)}</b>, precision ${prec.toFixed(3)}, recall ${rec.toFixed(3)}
@@ -366,14 +388,66 @@ export async function render(mount, query) {
            threshold ${s.thr} is ${fmtOr(s.dice, 'dice')}.</span>`
         : `Plume-free scene. ${int(fp)} preview pixels predicted as plume at threshold ${t.toFixed(2)}.`;
     }
-    [thrEl, opEl, layEl].forEach(el => el.addEventListener('input', paint));
+
+    /** Legend describing exactly what is on screen for the current layer, with a
+        live pixel count per class so each colour is named and quantified. */
+    function drawLegend(mode, counts, patterns) {
+      const total = PREVIEW * PREVIEW;
+      const swatch = (col, pat) => {
+        const stripes = pat === 'fp' ? 'repeating-linear-gradient(45deg,rgba(255,255,255,.85) 0 2px,transparent 2px 5px)'
+                      : pat === 'fn' ? 'repeating-linear-gradient(-45deg,rgba(255,255,255,.85) 0 2px,transparent 2px 5px)' : '';
+        return `<span class="swk" style="background:${col}${patterns && stripes ? `;background-image:${stripes}` : ''}"></span>`;
+      };
+      const row = (col, name, what, n, pat) => `
+        <div class="lgrow">
+          ${swatch(col, pat)}
+          <span class="lgname">${esc(name)}</span>
+          <span class="lgwhat">${what}</span>
+          <span class="lgn">${n == null ? '' : `${int(n)} px · ${((n / total) * 100).toFixed(n / total < 0.01 ? 2 : 1)}%`}</span>
+        </div>`;
+
+      let rows;
+      if (mode === 'err') {
+        rows = [
+          row(SEG.tp.c, 'TP — correct', 'model and label both say plume', counts.tp),
+          row(SEG.fp.c, 'FP — false alarm', 'model says plume, label does not', counts.fp, 'fp'),
+          row(SEG.fn.c, 'FN — missed', 'label says plume, model missed it', counts.fn, 'fn'),
+          row('#3f3f3f', 'Background', 'neither: shaded by radar reflectivity', null),
+        ];
+      } else if (mode === 'prob') {
+        rows = [`<div class="lgrow"><span class="swk" style="background:linear-gradient(90deg,#000,#f00,#ff0,#fff)"></span>
+          <span class="lgname">Probability</span>
+          <span class="lgwhat">model confidence that a pixel is plume</span>
+          <span class="lgn">0.0 → 1.0</span></div>
+          <div class="lgscale"><span>0.0 none</span><span>0.25</span><span>0.5</span><span>0.75</span><span>1.0 certain</span></div>`];
+      } else if (mode === 'th') {
+        rows = [`<div class="lgrow"><span class="swk" style="background:linear-gradient(90deg,#000,#fff)"></span>
+          <span class="lgname">Reflectivity</span>
+          <span class="lgwhat">raw radar return, lowest elevation (input channel)</span>
+          <span class="lgn">weak → strong</span></div>`];
+      } else if (mode === 'gt') {
+        rows = [
+          row(SEG.tp.c, 'Ground truth', 'pixels a human annotator marked as plume', counts.tp + counts.fn),
+          row('#3f3f3f', 'Background', 'everything else', null),
+        ];
+      } else {
+        rows = [
+          row('#2f7dd1', 'Prediction', `pixels the model calls plume at this threshold`, counts.tp + counts.fp),
+          row('#3f3f3f', 'Background', 'everything else', null),
+        ];
+      }
+      modal.querySelector('#leg2').innerHTML =
+        `<div class="lgbox">${rows.join('')}</div>` +
+        (mode === 'err' && patterns
+          ? `<p class="small" style="margin:6px 0 0">Hatching distinguishes the two error types without colour:
+             <b>“\\” stripes = false alarm</b>, <b>“/” stripes = missed</b>. Correct overlap is solid.</p>`
+          : '');
+    }
+
+    [thrEl, opEl, layEl, patEl].forEach(el => el.addEventListener('input', paint));
     layEl.addEventListener('change', paint);
+    patEl.addEventListener('change', paint);
     modal.querySelector('#rst').addEventListener('click', () => { thrEl.value = s.thr; paint(); });
-    modal.querySelector('#leg2').innerHTML = legend([
-      {c: SEG.tp.c, label: SEG.tp.label}, {c: SEG.fp.c, label: SEG.fp.label},
-      {c: SEG.fn.c, label: SEG.fn.label},
-      {c: 'var(--tn)', label: 'Grey backdrop: radar reflectivity'},
-    ]);
     paint();
   }
 
