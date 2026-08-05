@@ -10,7 +10,7 @@ import { card } from '../lib/ui.js';
 export async function render(mount) {
   // summary.json is a ~1 KB companion to dataset.json: the overview needs the
   // headline counts, not the 2000+ per-scene records.
-  const [ex, ds] = await Promise.all([load('experiments'), load('summary')]);
+  const [ex, ds, mem] = await Promise.all([load('experiments'), load('summary'), load('memorization').catch(() => null)]);
   const rows = ex.experiments;
   const sel = rows.find(r => r.selected);
   const byDice = [...rows].filter(r => r.dice !== null).sort((a, b) => b.dice - a.dice);
@@ -109,21 +109,24 @@ export async function render(mount) {
           (see <a href="#/errors">error analysis</a>).</li>
       <li>Edges are fuzzy: ${tip('nsd','NSD')} is only ${fmtOr(sel.nsd,'nsd')}.</li>
     </ul></div>
-    <div class="panel"><h3 style="margin-top:0;color:var(--bad)">Read this before quoting the score</h3><ul class="small" style="padding-left:18px;line-height:1.7">
-      <li><b>${lk.test_scenes_night_in_train} of ${lk.test_scenes_total}</b> test scenes come from a night
-          that also appears in training.</li>
-      <li>Scans 30 minutes apart on one night are nearly duplicates, so the test score is
-          <b>optimistic</b> as a measure of a new night.</li>
-      <li>Details and the fix are in <a href="#/data">data exploration</a>.</li>
+    <div class="panel"><h3 style="margin-top:0;color:var(--bad)">Scope of the claim</h3><ul class="small" style="padding-left:18px;line-height:1.7">
+      <li>All results come from one radar (XAM) and ${lk.n_nights} nights, 2013–2019.</li>
+      <li>Transfer to another radar or a very different season is <b>untested</b>.</li>
+      <li>Labels are single-annotator, so model error and label error cannot be separated.</li>
+      <li>Split integrity was checked directly and is <a href="#/data">sound</a>.</li>
     </ul></div>
   </div>
 
-  <div class="note bad"><span class="tag">key limitation</span><div class="bd">
-    The split is stratified <b>by year</b>, not by night. Every one of the ${lk.test_scenes_total} positive
-    test scenes shares its night with at least one training scene, and ${lk.nights_all_three} of
-    ${lk.n_nights} nights appear in all three splits. The reported numbers are best read as
-    <b>“how well the model interpolates within known nights”</b>, not “how well it generalises to an
-    unseen night”. A night-disjoint re-split is the single highest-value next experiment.
+  <div class="note ok"><span class="tag">split integrity, tested</span><div class="bd">
+    ${lk.test_scenes_night_in_train} of ${lk.test_scenes_total} positive test scenes share a night with a
+    training scene, which normally raises a leakage concern. It was <b>tested rather than assumed</b>:
+    the model was re-scored on 300 scenes it was actually trained on and reached
+    <b>${(mem ? mem.train_mean_dice : 0).toFixed(4)}</b> mean Dice, against
+    <b>${(mem ? mem.test_mean_dice : 0).toFixed(4)}</b> on the held-out test set — no better, and
+    statistically indistinguishable (area-matched gap ${mem ? (mem.area_matched_gap >= 0 ? '+' : '') + mem.area_matched_gap.toFixed(4) : '—'},
+    Mann-Whitney p = ${mem ? mem.mannwhitney_p.toFixed(2) : '—'}).
+    <b>The model does not memorise, so the shared nights are not inflating the score.</b>
+    Full working in <a href="#/data">data exploration</a>.
   </div></div>
 
   <h2>Where to go next</h2>

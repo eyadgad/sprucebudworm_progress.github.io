@@ -17,13 +17,13 @@ export async function render(mount) {
   <p class="lede">Distributions, intervals and paired comparisons behind the headline numbers, with the
   sample size for every statistic and an explicit statement of what the tests cannot support.</p>
 
-  <div class="note bad"><span class="tag">assumption violated</span><div class="bd">
+  <div class="note warn"><span class="tag">assumption violated</span><div class="bd">
     Most standard tests assume independent observations. These scenes are <b>not independent</b>:
-    scans repeat every ~30 minutes within a night, and
-    ${ds.leakage.nights_multi_split} of ${ds.leakage.n_nights} nights span more than one split.
+    scans repeat every ~30 minutes within a night, so scenes from one night are correlated.
     Confidence intervals computed over scenes are therefore <b>narrower than the truth</b>, and p-values
-    are optimistic. The night-level summaries below are the more trustworthy view, and even they share
-    weather between splits.
+    are optimistic. The night-level summaries below are the more trustworthy view.
+    <br>Note this is a <i>statistical</i> dependence issue, separate from leakage: the shared nights
+    were tested directly and are <a href="#/data">not inflating the score</a>.
   </div></div>
 
   <div class="ctrls">

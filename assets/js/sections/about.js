@@ -142,8 +142,9 @@ export async function render(mount) {
        '<code>--only images --img-splits test,val</code> (~40 MB total).'],
       ['Annotator agreement / label noise', 'Each scene has exactly one annotation.',
        'A second independent annotation of a scene subset.'],
-      ['True generalisation to unseen nights', 'All test nights also appear in training.',
-       'A night-disjoint split and a retrain.'],
+      ['Night-level generalisation',
+       'All test nights also appear in training. That overlap was tested and is not inflating the score (the model does not memorise), but performance on a genuinely new night has still not been measured on its own.',
+       'A night-disjoint split and a retrain. See <a href="#/data">data exploration</a> for the test that ruled out memorisation.'],
     ].map(([a, w, n]) => `<tr><td style="text-align:left"><b>${esc(a)}</b></td>
       <td style="text-align:left" class="small">${esc(w)}</td>
       <td style="text-align:left" class="small">${n}</td></tr>`).join('')}

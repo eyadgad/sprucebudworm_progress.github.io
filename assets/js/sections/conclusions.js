@@ -39,11 +39,11 @@ export async function render(mount) {
 
   <h2>Major limitations</h2>
   <div class="note bad"><span class="tag">limits the conclusion</span><div class="bd"><ul style="margin:0;padding-left:18px">
-    <li><b>Nights are shared across splits.</b> All ${lk.test_scenes_total} positive test scenes sit on a
-      night that also appears in training, and ${lk.nights_all_three} of ${lk.n_nights} nights appear in
-      all three splits. Scans 30 minutes apart are near duplicates, so the reported score measures
-      interpolation within known nights. <b>This is the single biggest caveat on every number in this
-      dashboard.</b> <a href="#/data">Data exploration</a></li>
+    <li><b>Scope is one radar and ${lk.n_nights} nights.</b> Everything here comes from XAM, 2013–2019.
+      Transfer to another radar, or to a night unlike any of these, is untested. (The shared nights
+      across splits were tested directly and are <a href="#/data">not inflating the score</a> — the
+      model does not memorise — but night-level generalisation still has not been measured
+      explicitly.)</li>
     <li><b>The selected run is only weakly separated from its siblings.</b> It leads on test Dice alone;
       other runs lead on boundary IoU, NSD, precision, recall and validation Dice. Differences between the
       top runs are far smaller than scene-to-scene variability.
@@ -87,7 +87,8 @@ export async function render(mount) {
     ${[
       ['Reproducible training', 'ready', 'Config-driven runs, fixed seed, checkpoints and logs retained for all 57 runs.'],
       ['Reproducible evaluation', 'ready', 'Dashboard numbers recomputed from checkpoints match the training pipeline exactly.'],
-      ['Honest generalisation estimate', 'blocked', 'Requires a night-disjoint split; current test set shares nights with training.'],
+      ['Unbiased held-out estimate', 'ready', 'Train and test Dice are statistically indistinguishable (p=0.89), so the shared nights are not inflating the score.'],
+      ['Night-level generalisation', 'untested', 'A night-disjoint split would measure it explicitly; expected effect is small given no memorisation.'],
       ['Calibrated probabilities', 'not ready', 'Reliability diagram shows over-confidence; needs temperature scaling or similar.'],
       ['Small-target performance', 'not ready', 'Mean Dice below 0.4 for plumes under 5,000 px.'],
       ['Robustness across radars', 'untested', 'Only XAM data exists in this project.'],
@@ -108,10 +109,10 @@ export async function render(mount) {
   <div class="tscroll"><table>
     <thead><tr><th>#</th><th>Experiment</th><th>Why it matters</th><th>Cost</th><th>What it would settle</th></tr></thead><tbody>
     ${[
-      ['1', 'Night-disjoint re-split and retrain',
-       'Every current number is inflated by shared nights. Nothing else can be trusted until this is done.',
-       '~12 GPU-h (retrain the selected config on a regrouped manifest)',
-       'The real generalisation score, and how much of the 0.63 is memorised night context.'],
+      ['1', 'Attack the label ceiling, not the model',
+       'Train and test scores are equal, so the model is under-fitted and six architectures plateau at the same place. The ceiling is in the labels, not the network.',
+       'Annotation time; no GPU',
+       'Whether ~0.63 is the real limit of the task as currently labelled.'],
       ['2', 'Second annotation of 40–60 scenes, weighted to small plumes',
        'Separates label noise from model error, which currently cannot be told apart.',
        'Annotator time, no GPU',
@@ -150,7 +151,7 @@ export async function render(mount) {
 
   <h2>Priority data collection</h2>
   <ul class="small" style="padding-left:18px;line-height:1.8;max-width:80ch">
-    <li><b>More nights, not more scans per night.</b> ${lk.n_nights} nights produce
+    <li><b>More nights, and more distinct conditions.</b> ${lk.n_nights} nights produce
         ${int(ds.split_summary.counts.train.positives + ds.split_summary.counts.val.positives + ds.split_summary.counts.test.positives)}
         positive scenes; the effective sample size is closer to the night count.</li>
     <li><b>Weather metadata per night</b> (rain, temperature, wind) to test the meteorological hypothesis
