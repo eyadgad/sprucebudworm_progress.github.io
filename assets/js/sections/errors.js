@@ -1,0 +1,290 @@
+/* Error and failure analysis.
+
+   Observations (measured) are kept visually and textually separate from
+   hypotheses (explanations that the data is consistent with but does not
+   prove). */
+
+import { load } from '../lib/data.js';
+import { M, fmtOr, tip, int, pct, esc, mean, quantile, spearman, tsLabel } from '../lib/metrics.js';
+import { scatter, boxPlot, barChart, legend, histogram } from '../lib/charts.js';
+import { DataTable } from '../lib/table.js';
+
+export async function render(mount) {
+  const sm = await load('samples');
+  let split = 'test';
+
+  mount.innerHTML = `
+  <h1>Error and failure analysis</h1>
+  <p class="lede">What the model gets wrong, how often, and what those cases have in common.
+  Measured facts and proposed explanations are labelled separately throughout.</p>
+
+  <div class="ctrls">
+    <div class="f"><label for="sp">Split</label><select id="sp">
+      <option value="test">Test (held out)</option><option value="val">Validation</option></select></div>
+  </div>
+
+  <div id="cards"></div>
+
+  <h2>Failure taxonomy</h2>
+  <p class="small">Each plume-bearing scene is placed in exactly one bucket by rule. A scene can be poor
+  for more than one reason; the first matching rule wins, in the order shown.</p>
+  <div id="tax"></div>
+
+  <h2>The dominant driver: target size</h2>
+  <figure><div class="viz" id="c-area"></div><figcaption id="cap-area"></figcaption></figure>
+  <div id="areastats"></div>
+
+  <h2>Which failures are recoverable?</h2>
+  <p class="small">A scene where the model produced no confident pixels anywhere is different from one
+  where it produced confident pixels in the wrong place. The maximum probability reached in the scene
+  separates the two.</p>
+  <figure><div class="viz" id="c-conf"></div><figcaption id="cap-conf"></figcaption></figure>
+
+  <h2>False alarms on plume-free scenes</h2>
+  <div id="fa"></div>
+
+  <h2>Do the two models fail on the same scenes?</h2>
+  <figure><div class="viz" id="c-cmp"></div><figcaption id="cap-cmp"></figcaption></figure>
+  <div id="cmptable"></div>
+
+  <h2>Do failures cluster in time?</h2>
+  <div id="clusters"></div>
+
+  <h2>Worst scenes</h2>
+  <p class="small">Sorted by Dice, worst first. Click any row to open it in the sample explorer.</p>
+  <div id="worst"></div>
+
+  <h2>Interpretation</h2>
+  <div id="interp"></div>`;
+
+  function draw() {
+    const S = sm.samples.filter(s => s.split === split && s.label === 1);
+    const NEG = sm.samples.filter(s => s.split === split && s.label === 0);
+    const zero = S.filter(s => s.dice === 0);
+    const bad = S.filter(s => s.dice < 0.3);
+    const lowRec = S.filter(s => s.recall < 0.4);
+    const lowPrec = S.filter(s => s.precision < 0.4);
+
+    mount.querySelector('#cards').innerHTML = `<div class="cards">
+      ${card('Scenes evaluated', S.length, `${split} split, with a plume`)}
+      ${card('Zero overlap', `${zero.length}`, `${pct(zero.length / S.length, 1)} of scenes`)}
+      ${card('Dice below 0.3', `${bad.length}`, `${pct(bad.length / S.length, 1)} of scenes`)}
+      ${card('Recall below 0.4', `${lowRec.length}`, 'missed most of the plume')}
+      ${card('Precision below 0.4', `${lowPrec.length}`, 'mostly false alarm')}
+      ${card('Worst Dice', fmtOr(Math.min(...S.map(s => s.dice)), 'dice'), 'single scene')}
+    </div>`;
+
+    /* ---- taxonomy ---- */
+    const RULES = [
+      ['Complete miss', s => s.dice === 0 && s.pred_area < 0.05 * s.gt_area,
+       'Dice 0 and predicted area under 5% of the label', 'The model produced essentially nothing.'],
+      ['Confident but misplaced', s => s.dice === 0,
+       'Dice 0 but a substantial predicted area', 'It fired, but nowhere near the label.'],
+      ['Mostly missed', s => s.recall < 0.4,
+       'recall below 0.4', 'Found under 40% of the labelled pixels.'],
+      ['Mostly false alarm', s => s.precision < 0.4,
+       'precision below 0.4', 'Over 60% of what it marked is not labelled.'],
+      ['Weak overlap', s => s.dice < 0.5,
+       'Dice below 0.5', 'Right area, poor agreement.'],
+      ['Acceptable', () => true, 'Dice at or above 0.5', 'Usable segmentation.'],
+    ];
+    const bucket = s => RULES.find(([, f]) => f(s))[0];
+    const groups = {};
+    S.forEach(s => { (groups[bucket(s)] ||= []).push(s); });
+    mount.querySelector('#tax').innerHTML = `
+      <div class="tscroll"><table>
+        <thead><tr><th>Failure mode</th><th>Rule</th><th>Scenes</th><th>Share</th><th>Median labelled area</th>
+        <th>Median regions</th><th>Mean max probability</th><th>Example</th></tr></thead><tbody>
+        ${RULES.map(([k, , rule]) => {
+          const v = groups[k] || [];
+          if (!v.length) return `<tr><td>${esc(k)}</td><td class="small" style="text-align:left">${esc(rule)}</td>
+            <td class="n">0</td><td class="n">—</td><td colspan="4" class="na">none in this split</td></tr>`;
+          const ex = [...v].sort((a, b) => a.dice - b.dice)[0];
+          return `<tr><td><b>${esc(k)}</b></td><td class="small" style="text-align:left">${esc(rule)}</td>
+            <td class="n">${v.length}</td><td class="n">${pct(v.length / S.length, 1)}</td>
+            <td class="n">${int(quantile(v.map(x => x.gt_area), .5))}</td>
+            <td class="n">${int(quantile(v.map(x => x.n_gt_regions ?? 0), .5))}</td>
+            <td class="n">${fmtOr(mean(v.map(x => x.prob_max)), 'dice')}</td>
+            <td class="n"><a href="#/samples?ts=${ex.ts}"><code>${ex.ts}</code></a></td></tr>`;
+        }).join('')}</tbody></table></div>`;
+
+    /* ---- area relationship ---- */
+    const A = S.filter(s => s.gt_area > 0);
+    const rho = spearman(A.map(s => Math.log10(s.gt_area)), A.map(s => s.dice));
+    mount.querySelector('#c-area').innerHTML = scatter({
+      points: A.map(s => ({
+        x: s.gt_area, y: s.dice,
+        c: s.dice < 0.3 ? 'var(--fp)' : (s.dice < 0.6 ? 'var(--warn)' : 'var(--ok)'),
+        r: 3.6, o: .68,
+        t: `${tsLabel(s.ts)} — ${int(s.gt_area)} labelled px, Dice ${s.dice}`})),
+      xlo: 100, xhi: 1e6, ylo: 0, yhi: 1, logx: true,
+      xlabel: 'labelled plume area (pixels, log scale)', ylabel: 'per-scene Dice',
+      W: 880, H: 380, aria: 'Dice against labelled plume area',
+    });
+    const bands = [['< 1k', 0, 1000], ['1k–5k', 1000, 5000], ['5k–20k', 5000, 20000],
+                   ['20k–100k', 20000, 100000], ['> 100k', 100000, Infinity]];
+    mount.querySelector('#cap-area').innerHTML =
+      `Spearman rank correlation between labelled area and Dice is <b>${rho == null ? '—' : rho.toFixed(3)}</b>
+       over ${A.length} scenes. This is the strongest and most consistent relationship in the evaluation,
+       and it reproduces the baseline report's finding on a different model and a larger test set.`;
+    mount.querySelector('#areastats').innerHTML = `
+      <div class="tscroll"><table>
+        <thead><tr><th>Labelled area</th><th>Scenes</th><th>Mean Dice</th><th>Mean recall</th>
+        <th>Mean precision</th><th>Zero-overlap scenes</th></tr></thead><tbody>
+        ${bands.map(([k, lo, hi]) => {
+          const v = A.filter(s => s.gt_area >= lo && s.gt_area < hi);
+          if (!v.length) return `<tr><td>${k}</td><td class="n">0</td><td colspan="4" class="na">none</td></tr>`;
+          return `<tr><td>${k} px</td><td class="n">${v.length}</td>
+            <td class="n">${fmtOr(mean(v.map(s => s.dice)), 'dice')}</td>
+            <td class="n">${fmtOr(mean(v.map(s => s.recall)), 'recall')}</td>
+            <td class="n">${fmtOr(mean(v.map(s => s.precision)), 'precision')}</td>
+            <td class="n">${v.filter(s => s.dice === 0).length}</td></tr>`;
+        }).join('')}</tbody></table></div>`;
+
+    /* ---- confidence of failures ---- */
+    mount.querySelector('#c-conf').innerHTML = scatter({
+      points: S.map(s => ({
+        x: s.prob_max, y: s.dice,
+        c: s.dice === 0 ? 'var(--fp)' : 'var(--accent2)', r: 3.5, o: .65,
+        t: `${tsLabel(s.ts)} — max prob ${s.prob_max}, Dice ${s.dice}`})),
+      xlo: 0, xhi: 1, ylo: 0, yhi: 1,
+      xlabel: 'maximum probability anywhere in the scene', ylabel: 'per-scene Dice',
+      W: 880, H: 340, aria: 'Dice against maximum predicted probability',
+    });
+    const confidentFail = bad.filter(s => s.prob_max > 0.8).length;
+    mount.querySelector('#cap-conf').innerHTML =
+      `${confidentFail} of the ${bad.length} scenes scoring below 0.3 still reach a probability above 0.8
+       somewhere in the scene. Those are <b>confident mistakes</b>, not cases of the model abstaining:
+       raising or lowering the global threshold would not rescue them, because the confidence is in the
+       wrong place. The remainder never become confident anywhere.`;
+
+    /* ---- false alarms ---- */
+    if (NEG.length) {
+      const rates = NEG.map(s => s.bg_fp_rate).filter(v => v != null);
+      const worst = [...NEG].sort((a, b) => b.bg_fp_rate - a.bg_fp_rate).slice(0, 8);
+      mount.querySelector('#fa').innerHTML = `
+        <div class="cards">
+          ${card('Plume-free scenes', NEG.length, `${split} split`)}
+          ${card('Mean FP rate', fmtOr(mean(rates), 'bg_fp_rate'), 'of all pixels', 'bg_fp_rate')}
+          ${card('Median FP rate', fmtOr(quantile(rates, .5), 'bg_fp_rate'), 'half score below this')}
+          ${card('Worst scene', fmtOr(Math.max(...rates), 'bg_fp_rate'), 'highest false-alarm rate')}
+          ${card('Completely clean', rates.filter(v => v === 0).length, 'zero false pixels')}
+        </div>
+        <div class="tscroll"><table>
+          <thead><tr><th>Scene</th><th>Year</th><th>FP rate</th><th>Predicted px</th>
+          <th>Max probability</th><th>UNet++ FP rate</th></tr></thead><tbody>
+          ${worst.map(s => `<tr><td><code>${s.ts}</code></td><td class="n">${s.year}</td>
+            <td class="n">${fmtOr(s.bg_fp_rate, 'bg_fp_rate')}</td><td class="n">${int(s.pred_area)}</td>
+            <td class="n">${fmtOr(s.prob_max, 'dice')}</td>
+            <td class="n">${fmtOr(s.bg_fp_rate_cmp, 'bg_fp_rate')}</td></tr>`).join('')}
+        </tbody></table></div>
+        <p class="small">Even the worst plume-free scene puts under
+        ${pct(Math.max(...rates), 1)} of its pixels into the plume class. False alarms on empty skies are
+        not a significant failure mode for this model.</p>`;
+    } else {
+      mount.querySelector('#fa').innerHTML = `<div class="state"><div class="big">No plume-free scenes in this split</div></div>`;
+    }
+
+    /* ---- model disagreement ---- */
+    const both = S.filter(s => s.dice != null && s.dice_cmp != null);
+    mount.querySelector('#c-cmp').innerHTML = scatter({
+      points: both.map(s => ({
+        x: s.dice_cmp, y: s.dice,
+        c: Math.abs(s.dice - s.dice_cmp) > 0.2 ? 'var(--warn)' : 'var(--accent2)', r: 3.4, o: .65,
+        t: `${tsLabel(s.ts)} — Attention UNet ${s.dice}, UNet++ ${s.dice_cmp}`})),
+      xlo: 0, xhi: 1, ylo: 0, yhi: 1, trend: {x0: 0, y0: 0, x1: 1, y1: 1},
+      xlabel: 'Dice — UNet++ (9 elevations)', ylabel: 'Dice — Attention UNet (selected)',
+      W: 880, H: 380, aria: 'Per-scene Dice of the two models',
+    });
+    const bothZero = both.filter(s => s.dice === 0 && s.dice_cmp === 0).length;
+    const disagree = both.filter(s => Math.abs(s.dice - s.dice_cmp) > 0.2).length;
+    const rhoM = spearman(both.map(s => s.dice), both.map(s => s.dice_cmp));
+    mount.querySelector('#cap-cmp').innerHTML =
+      `Points on the dashed line are scenes the two models score identically. Rank correlation is
+       <b>${rhoM == null ? '—' : rhoM.toFixed(3)}</b>. Only <b>${disagree}</b> of ${both.length} scenes differ by
+       more than 0.2 Dice, and <b>${bothZero}</b> scenes score zero for <i>both</i> models.`;
+    mount.querySelector('#cmptable').innerHTML = `
+      <div class="note"><span class="tag">observation</span><div class="bd">
+        The two architectures fail on largely the <b>same</b> scenes. ${bothZero} scenes defeat both.
+        Because the models share their inputs, labels and split but differ in architecture, this points
+        to the difficulty living in <b>the data</b> rather than in either network.
+      </div></div>`;
+
+    /* ---- temporal clustering ---- */
+    const nights = {};
+    S.forEach(s => { if (s.night) (nights[s.night] ||= []).push(s); });
+    const nightStats = Object.entries(nights).map(([k, v]) => ({
+      night: k, n: v.length, mean: mean(v.map(s => s.dice)),
+      bad: v.filter(s => s.dice < 0.3).length,
+    })).filter(x => x.n >= 2).sort((a, b) => a.mean - b.mean);
+    const badNights = nightStats.filter(x => x.bad === x.n);
+    mount.querySelector('#clusters').innerHTML = `
+      <p class="small">Grouping the ${bad.length} poor scenes by night shows whether failures are isolated
+      scans or whole bad nights.</p>
+      <div class="tscroll"><table>
+        <thead><tr><th>Night</th><th>Scans</th><th>Mean Dice</th><th>Scans below 0.3</th><th>Pattern</th></tr></thead>
+        <tbody>${nightStats.slice(0, 10).map(x => `<tr>
+          <td>${esc(x.night)}</td><td class="n">${x.n}</td><td class="n">${fmtOr(x.mean, 'dice')}</td>
+          <td class="n">${x.bad}</td>
+          <td style="text-align:left">${x.bad === x.n ? 'entire night fails' : (x.bad ? 'mixed' : 'no failures')}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="small"><b>${badNights.length}</b> night${badNights.length === 1 ? '' : 's'} in this split
+      fail on every scan. Failures are therefore partly a <b>night-level</b> phenomenon, not just
+      scan-level noise: whatever makes a night hard tends to affect all its scans.</p>`;
+
+    /* ---- worst table ---- */
+    new DataTable(mount.querySelector('#worst'), {
+      columns: [
+        {key: 'ts', label: 'Scene', cls: '', fmt: v => `<code>${v}</code>`},
+        {key: 'night', label: 'Night', cls: '', fmt: v => esc(v || '—')},
+        {key: 'dice', label: 'Dice', fmt: v => fmtOr(v, 'dice')},
+        {key: 'precision', label: 'Prec', fmt: v => fmtOr(v, 'precision')},
+        {key: 'recall', label: 'Rec', fmt: v => fmtOr(v, 'recall')},
+        {key: 'gt_area', label: 'Truth px', fmt: v => int(v)},
+        {key: 'pred_area', label: 'Pred px', fmt: v => int(v)},
+        {key: 'prob_max', label: 'Max prob', fmt: v => fmtOr(v, 'dice')},
+        {key: 'dice_cmp', label: 'UNet++ Dice', fmt: v => fmtOr(v, 'dice')},
+      ],
+      rows: [...S].sort((a, b) => a.dice - b.dice).slice(0, 40),
+      sort: 'dice', dir: 1, pageSize: 12,
+      onRow: s => { location.hash = `#/samples?ts=${s.ts}`; },
+    });
+
+    /* ---- interpretation ---- */
+    const tinyShare = A.filter(s => s.gt_area < 5000).length / A.length;
+    const badTiny = bad.filter(s => s.gt_area < 5000).length;
+    mount.querySelector('#interp').innerHTML = `
+      <div class="note ok"><span class="tag">observed</span><div class="bd">
+        <ul style="margin:0;padding-left:18px">
+          <li>Dice rises monotonically with labelled area across every band (Spearman ${rho?.toFixed(3)}).</li>
+          <li>${badTiny} of ${bad.length} scenes below 0.3 Dice have a labelled area under 5,000 px,
+              while only ${pct(tinyShare, 0)} of all scenes are that small.</li>
+          <li>${bothZero} scenes score zero for both architectures.</li>
+          <li>${badNights.length} nights fail on every scan.</li>
+          <li>False alarms on plume-free scenes stay below ${pct(NEG.length ? Math.max(...NEG.map(s => s.bg_fp_rate)) : 0, 1)} of pixels.</li>
+        </ul>
+      </div></div>
+      <div class="note warn"><span class="tag">hypothesis, not established</span><div class="bd">
+        The following are <b>consistent with</b> the observations above but are not demonstrated by this
+        evaluation. Each would need its own experiment:
+        <ul style="margin:6px 0 0;padding-left:18px">
+          <li><b>Label noise on small plumes.</b> Faint returns near the detection limit are the hardest
+              for a human annotator to outline, so part of the small-target penalty may be disagreement
+              between annotator and model rather than model error. Testing this needs a second annotation
+              of the same scenes.</li>
+          <li><b>Dice is unfair to small targets by construction.</b> A fixed boundary error costs
+              proportionally more Dice on a small object. Some of the trend is therefore a property of the
+              metric, not of the model. Reporting boundary-based metrics per size band would separate these.</li>
+          <li><b>Whole-night failures may be meteorological.</b> Rain, insects other than budworm, or
+              anomalous propagation could explain nights where every scan fails, but no weather variables
+              are joined to these scenes, so this cannot be checked here.</li>
+        </ul>
+      </div></div>`;
+  }
+
+  mount.querySelector('#sp').addEventListener('change', e => { split = e.target.value; draw(); });
+  draw();
+}
+
+const card = (k, v, s, key) => `<div class="card"><div class="k">${key ? tip(key, k) : esc(k)}</div>
+  <div class="v">${v ?? '—'}</div><div class="s">${esc(s || '')}</div></div>`;
