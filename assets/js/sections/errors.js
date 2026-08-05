@@ -6,7 +6,7 @@
 
 import { load } from '../lib/data.js';
 import { fmtOr, int, pct, esc, mean, quantile, spearman, tsLabel } from '../lib/metrics.js';
-import { scatter } from '../lib/charts.js';
+import { scatter, legend } from '../lib/charts.js';
 import { card } from '../lib/ui.js';
 import { DataTable } from '../lib/table.js';
 
@@ -33,6 +33,7 @@ export async function render(mount) {
 
   <h2>The dominant driver: target size</h2>
   <figure><div class="viz" id="c-area"></div><figcaption id="cap-area"></figcaption></figure>
+  <div id="l-area"></div>
   <div id="areastats"></div>
 
   <h2>Which failures are recoverable?</h2>
@@ -40,12 +41,14 @@ export async function render(mount) {
   where it produced confident pixels in the wrong place. The maximum probability reached in the scene
   separates the two.</p>
   <figure><div class="viz" id="c-conf"></div><figcaption id="cap-conf"></figcaption></figure>
+  <div id="l-conf"></div>
 
   <h2>False alarms on plume-free scenes</h2>
   <div id="fa"></div>
 
   <h2>Do the two models fail on the same scenes?</h2>
   <figure><div class="viz" id="c-cmp"></div><figcaption id="cap-cmp"></figcaption></figure>
+  <div id="l-cmp"></div>
   <div id="cmptable"></div>
 
   <h2>Do failures cluster in time?</h2>
@@ -122,6 +125,11 @@ export async function render(mount) {
       xlabel: 'labelled plume area (pixels, log scale)', ylabel: 'per-scene Dice',
       W: 880, H: 380, aria: 'Dice against labelled plume area',
     });
+    mount.querySelector('#l-area').innerHTML = legend([
+      {c: 'var(--ok)', label: 'good scene (Dice ≥ 0.6)'},
+      {c: 'var(--warn)', label: 'weak (0.3 ≤ Dice < 0.6)'},
+      {c: 'var(--fp)', label: 'failure (Dice < 0.3)'},
+    ]);
     const bands = [['< 1k', 0, 1000], ['1k–5k', 1000, 5000], ['5k–20k', 5000, 20000],
                    ['20k–100k', 20000, 100000], ['> 100k', 100000, Infinity]];
     mount.querySelector('#cap-area').innerHTML =
@@ -152,6 +160,10 @@ export async function render(mount) {
       xlabel: 'maximum probability anywhere in the scene', ylabel: 'per-scene Dice',
       W: 880, H: 340, aria: 'Dice against maximum predicted probability',
     });
+    mount.querySelector('#l-conf').innerHTML = legend([
+      {c: 'var(--fp)', label: 'zero-overlap scene (Dice = 0)'},
+      {c: 'var(--accent2)', label: 'some overlap (Dice > 0)'},
+    ]);
     const confidentFail = bad.filter(s => s.prob_max > 0.8).length;
     mount.querySelector('#cap-conf').innerHTML =
       `${confidentFail} of the ${bad.length} scenes scoring below 0.3 still reach a probability above 0.8
@@ -197,6 +209,11 @@ export async function render(mount) {
       xlabel: 'Dice — UNet++ (9 elevations)', ylabel: 'Dice — Attention UNet (selected)',
       W: 880, H: 380, aria: 'Per-scene Dice of the two models',
     });
+    mount.querySelector('#l-cmp').innerHTML = legend([
+      {c: 'var(--accent2)', label: 'models agree (Dice within 0.2)'},
+      {c: 'var(--warn)', label: 'models disagree (Dice differ by > 0.2)'},
+      {c: 'var(--best)', label: 'dashed line: identical score'},
+    ]);
     const bothZero = both.filter(s => s.dice === 0 && s.dice_cmp === 0).length;
     const disagree = both.filter(s => Math.abs(s.dice - s.dice_cmp) > 0.2).length;
     const rhoM = spearman(both.map(s => s.dice), both.map(s => s.dice_cmp));

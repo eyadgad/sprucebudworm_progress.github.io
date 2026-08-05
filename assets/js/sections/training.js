@@ -75,9 +75,10 @@ export async function render(mount) {
 
   <h2>Is it over- or under-fitting?</h2>
   <div class="two">
-    <figure><div class="viz" id="c-gap"></div>
-      <figcaption>Training loss and validation Dice on one plot, each rescaled to its own range. If
-      training loss keeps falling while validation Dice turns down, the run is over-fitting.</figcaption></figure>
+    <figure><div class="viz" id="c-gap"></div><div id="l-gap"></div>
+      <figcaption>Training progress (1 − rescaled loss) and validation Dice on one plot, both oriented
+      so up means improving. If training keeps improving while validation Dice turns down, the two lines
+      split and the run is over-fitting.</figcaption></figure>
     <div class="panel">
       <h3 style="margin-top:0">Reading of the selected run</h3>
       <div id="fitread"></div>
@@ -158,12 +159,18 @@ export async function render(mount) {
     const nrm = a => { const lo=Math.min(...a), hi=Math.max(...a); return a.map(v=>(v-lo)/((hi-lo)||1)); };
     mount.querySelector('#c-gap').innerHTML = lineChart({
       series:[
-        {label:'training loss (rescaled, down is better)', c:'var(--fp)', points:nrm(tl).map((v,i)=>[i,1-v]), dots:false},
-        {label:'validation Dice (rescaled)', c:'var(--accent2)', points:nrm(vd).map((v,i)=>[i,v]), dots:false},
+        // loss is plotted inverted (1 - rescaled loss) so that, like Dice, UP means
+        // improving; that makes over-fitting show up as the two lines splitting.
+        {label:'training progress (1 − loss)', c:'var(--fp)', points:nrm(tl).map((v,i)=>[i,1-v]), dots:false},
+        {label:'validation Dice', c:'var(--accent2)', points:nrm(vd).map((v,i)=>[i,v]), dots:false},
       ], xlo:0, xhi:Math.max(tl.length,vd.length)-1, ylo:0, yhi:1.05,
-      xlabel:'epoch', ylabel:'rescaled to own range', W:520, H:320,
-      marks:[{x:sel.best_epoch, label:'best'}], aria:'Training loss against validation Dice',
+      xlabel:'epoch', ylabel:'rescaled 0–1, up = better', W:520, H:320,
+      marks:[{x:sel.best_epoch, label:'best'}], aria:'Training progress against validation Dice',
     });
+    mount.querySelector('#l-gap').innerHTML = legend([
+      {c:'var(--fp)', label:'training progress (1 − loss)'},
+      {c:'var(--accent2)', label:'validation Dice'},
+    ]);
     const lastGain = vd.length>10 ? mean(vd.slice(-5)) - mean(vd.slice(-15,-10)) : null;
     mount.querySelector('#fitread').innerHTML = `
       <div class="kv">

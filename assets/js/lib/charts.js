@@ -229,7 +229,11 @@ export function histogram({bins, counts, xlabel='', ylabel='count', W=560, H=280
 
 /* ---------------- box plots (distribution per group) ---------------- */
 export function boxPlot({groups, ylo, yhi, ylabel='', xlabel='', W=860, H=330, aria='box plot'}) {
-  const f = frame({W, H, padB: 66 + (xlabel ? 20 : 0)});
+  // reserve room for multi-line tick labels ("Dice\nval") plus the n= line
+  const maxLines = Math.max(1, ...groups.map(gr => String(gr.label).split('\n').length));
+  const labelBlock = 15 + maxLines * 12;                 // matches the tick label layout below
+  const f = frame({W, H, padB: 40 + labelBlock + (xlabel ? 20 : 0)});
+  const xLabelY = f.y0 + labelBlock + 15;
   let g = yAxis(f, ylo, yhi, ylabel);
   const gw = (f.x1-f.x0)/groups.length;
   const sy = v => f.y0 - ((v-ylo)/(yhi-ylo))*(f.y0-f.y1);
@@ -242,16 +246,20 @@ export function boxPlot({groups, ylo, yhi, ylabel='', xlabel='', W=860, H=330, a
       g += `<line x1="${cx}" y1="${sy(gr.lo)}" x2="${cx}" y2="${sy(gr.hi)}" stroke="var(--muted)"/>`;
       g += `<line x1="${cx-bw/4}" y1="${sy(gr.lo)}" x2="${cx+bw/4}" y2="${sy(gr.lo)}" stroke="var(--muted)"/>`;
       g += `<line x1="${cx-bw/4}" y1="${sy(gr.hi)}" x2="${cx+bw/4}" y2="${sy(gr.hi)}" stroke="var(--muted)"/>`;
-      g += `<rect x="${cx-bw/2}" y="${sy(gr.q3)}" width="${bw}" height="${Math.max(sy(gr.q1)-sy(gr.q3),1)}" fill="${gr.c||'var(--accent2)'}" fill-opacity=".38" stroke="${gr.c||'var(--accent2)'}"><title>${esc(gr.label)} n=${gr.n} median=${gr.med?.toFixed(3)}</title></rect>`;
+      g += `<rect x="${cx-bw/2}" y="${sy(gr.q3)}" width="${bw}" height="${Math.max(sy(gr.q1)-sy(gr.q3),1)}" fill="${gr.c||'var(--accent2)'}" fill-opacity=".38" stroke="${gr.c||'var(--accent2)'}"><title>${esc(String(gr.label).replace(/\n/g,' '))} n=${gr.n} median=${gr.med?.toFixed(3)}</title></rect>`;
       g += `<line x1="${cx-bw/2}" y1="${sy(gr.med)}" x2="${cx+bw/2}" y2="${sy(gr.med)}" stroke="${gr.c||'var(--accent2)'}" stroke-width="2.5"/>`;
       if (gr.mean !== null && gr.mean !== undefined)
         g += `<circle cx="${cx}" cy="${sy(gr.mean)}" r="2.6" fill="var(--ink)"><title>mean ${gr.mean.toFixed(3)}</title></circle>`;
     }
-    g += `<text x="${cx}" y="${f.y0+15}" text-anchor="middle" class="ax">${esc(gr.label)}</text>`;
-    g += `<text x="${cx}" y="${f.y0+28}" text-anchor="middle" class="ax" style="font-size:9.5px">n=${gr.n}</text>`;
+    // A "\n" in the label becomes a real second line — SVG <text> does not wrap.
+    const parts = String(gr.label).split('\n');
+    parts.forEach((p, li) => {
+      g += `<text x="${cx}" y="${f.y0 + 15 + li * 12}" text-anchor="middle" class="ax">${esc(p)}</text>`;
+    });
+    g += `<text x="${cx}" y="${f.y0 + 15 + parts.length * 12 + 1}" text-anchor="middle" class="ax" style="font-size:9.5px">n=${gr.n}</text>`;
   });
   g += `<line x1="${f.x0}" y1="${f.y0}" x2="${f.x1}" y2="${f.y0}" stroke="var(--ink)"/>`;
-  if (xlabel) g += `<text x="${(f.x0+f.x1)/2}" y="${f.y0+48}" text-anchor="middle" class="axlab">${esc(xlabel)}</text>`;
+  if (xlabel) g += `<text x="${(f.x0+f.x1)/2}" y="${xLabelY}" text-anchor="middle" class="axlab">${esc(xlabel)}</text>`;
   return wrap(f, g, aria);
 }
 

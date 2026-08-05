@@ -68,6 +68,21 @@ ok('boxPlot renders the y-axis label', hasYLabel(box));
 ok('boxPlot prints the group size', box.includes('n=54'));
 ok('a shared box-plot key exists', BOXPLOT_KEY.includes('interquartile') && BOXPLOT_KEY.includes('median'));
 
+// a "\n" in a group label must become two <text> lines, never a literal newline
+const box2 = boxPlot({groups: [{label: 'Dice\nval', n: 317, lo: .2, q1: .5, med: .71, q3: .79, hi: .9, mean: .63, c: '#1'},
+                                {label: 'Dice\ntest', n: 170, lo: .2, q1: .5, med: .71, q3: .79, hi: .9, mean: .63, c: '#2'}],
+  ylo: 0, yhi: 1, ylabel: 'per-scene value', xlabel: 'metric and split', W: 880, H: 350});
+ok('multi-line box label has no literal newline in any text node',
+   ![...box2.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].some(m => m[1].includes('\n')));
+ok('multi-line box label renders both lines', /<text[^>]*>Dice<\/text>/.test(box2) &&
+   /<text[^>]*>val<\/text>/.test(box2) && /<text[^>]*>test<\/text>/.test(box2));
+ok('multi-line box: n= line does not collide with the x-axis title', (() => {
+  const ys = t => [...box2.matchAll(/<text x="[\d.]+" y="([\d.]+)"[^>]*>([^<]+)<\/text>/g)]
+    .filter(m => t.test(m[2])).map(m => +m[1]);
+  const nY = Math.max(...ys(/^n=/)), xlY = ys(/metric and split/)[0];
+  return xlY > nY;
+})());
+
 const hbar = hBarChart({items: [{label: 'Attention UNet · 9 elev', value: .6347, hl: true}],
   lo: .6, hi: .645, labelW: 210, xlabel: 'test Dice (macro)'});
 ok('hBarChart renders an axis label', hbar.includes('test Dice (macro)'));

@@ -28,7 +28,9 @@ export async function render(mount) {
   <div class="two">
     <figure><div class="viz" id="c-reg"></div>
       <figcaption>Predicted regions against labelled regions, one point per scene. Points on the dashed
-      line have matching structure; points far above it are fragmented predictions.</figcaption></figure>
+      line have matching structure; points far above it are fragmented predictions.
+      <span style="color:var(--fp)">Red</span> marks failing scenes (Dice &lt; 0.3),
+      <span style="color:var(--accent2)">blue</span> the rest.</figcaption></figure>
     <figure><div class="viz" id="c-regdist"></div>
       <figcaption>Distribution of the fragmentation ratio (predicted regions ÷ labelled regions).
       A ratio of 1 means the prediction has the same number of pieces as the label.</figcaption></figure>
