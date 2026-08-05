@@ -2,8 +2,8 @@
    strictly apart (they are never pooled into one headline number). */
 
 import { load } from '../lib/data.js';
-import { M, fmtOr, tip, int, pct, esc, mean, std, quantile, bootCI } from '../lib/metrics.js';
-import { confusion, barChart, boxPlot, legend, lineChart } from '../lib/charts.js';
+import { fmtOr, tip, int, esc, mean, std, quantile, bootCI } from '../lib/metrics.js';
+import { confusion, boxPlot, legend } from '../lib/charts.js';
 
 export async function render(mount) {
   const [sm, ex] = await Promise.all([load('samples'), load('experiments')]);

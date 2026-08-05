@@ -6,9 +6,9 @@
    traffic at all. */
 
 import { load } from '../lib/data.js';
-import { M, fmtOr, tip, int, pct, esc, tsLabel, hhmm, SEG, quantile } from '../lib/metrics.js';
+import { M, fmtOr, int, esc, tsLabel, hhmm, SEG, quantile } from '../lib/metrics.js';
 import { DataTable } from '../lib/table.js';
-import { legend, lineChart } from '../lib/charts.js';
+import { Modal } from '../lib/ui.js';
 
 const IMG = ts => `data/samples/${ts}`;
 const PREVIEW = 480;   // stored preview resolution; metrics come from full 960
@@ -178,8 +178,9 @@ export async function render(mount, query) {
   }
 
   /* ---------------- viewer ---------------- */
-  const modal = mount.querySelector('#modal');
-  function close() { modal.innerHTML = ''; document.body.style.overflow = ''; }
+  const modalEl = mount.querySelector('#modal');
+  const modal = new Modal(modalEl);
+  const close = () => modal.close();
 
   async function open(ts) {
     const s = all.find(x => x.ts === ts);
@@ -187,8 +188,7 @@ export async function render(mount, query) {
     const list = rows();
     const idx = list.findIndex(x => x.ts === ts);
     const has = withImg.has(ts);
-    document.body.style.overflow = 'hidden';
-    modal.innerHTML = `
+    const html = `
       <div class="modal" role="dialog" aria-modal="true" aria-label="Scene ${tsLabel(ts)}">
         <div class="box">
           <div class="hd">
@@ -269,27 +269,24 @@ export async function render(mount, query) {
         </div>
       </div>`;
 
-    modal.querySelector('#x').addEventListener('click', close);
-    modal.querySelector('.modal').addEventListener('click', e => { if (e.target.classList.contains('modal')) close(); });
+    // Modal owns focus, the key handler and the scroll lock, so re-rendering the
+    // body for the next scene cannot stack listeners or strand the page locked.
     const nav = d => { const t = list[idx + d]; if (t) open(t.ts); };
-    modal.querySelector('#prev').addEventListener('click', () => nav(-1));
-    modal.querySelector('#next').addEventListener('click', () => nav(1));
-    const onKey = e => {
-      if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); }
-      if (e.key === 'ArrowLeft') nav(-1);
-      if (e.key === 'ArrowRight') nav(1);
-    };
-    document.addEventListener('keydown', onKey);
+    modal.open(html, {onPrev: () => nav(-1), onNext: () => nav(1)});
+
+    modalEl.querySelector('#x').addEventListener('click', close);
+    modalEl.querySelector('#prev').addEventListener('click', () => nav(-1));
+    modalEl.querySelector('#next').addEventListener('click', () => nav(1));
 
     // sibling scans from the same night
     const sib = all.filter(x => x.night && x.night === s.night).sort((a, b) => a.ts - b.ts);
-    modal.querySelector('#night').innerHTML = sib.length > 1
+    modalEl.querySelector('#night').innerHTML = sib.length > 1
       ? `<div class="chips">` + sib.map(x =>
           `<button class="chip${x.ts === ts ? ' on' : ''}" data-ts="${x.ts}" title="${x.split} split">
             ${hhmm(x.ts)} ${x.label ? `· ${fmtOr(x.dice, 'dice')}` : '· empty'}</button>`).join('') + `</div>
          <p class="small">${sib.length} scans on ${esc(s.night)} across ${[...new Set(sib.map(x => x.split))].join(' / ')}.</p>`
       : `<p class="small">No other scans from this night.</p>`;
-    modal.querySelectorAll('#night .chip').forEach(b =>
+    modalEl.querySelectorAll('#night .chip').forEach(b =>
       b.addEventListener('click', () => open(+b.dataset.ts)));
 
     if (has) await setupCanvas(s);
@@ -297,7 +294,7 @@ export async function render(mount, query) {
 
   /* ---------------- canvas compositing ---------------- */
   async function setupCanvas(s) {
-    const cv = modal.querySelector('#cv');
+    const cv = modalEl.querySelector('#cv');
     const ctx = cv.getContext('2d', {willReadFrequently: true});
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, PREVIEW, PREVIEW);
     const px = (im) => {
@@ -320,16 +317,16 @@ export async function render(mount, query) {
         loadImg(`${IMG(s.ts)}_prob.png`), loadImg(`${IMG(s.ts)}_gt.png`), loadImg(`${IMG(s.ts)}_th.png`)]);
       P = px(ip); G = px(ig); TH = px(it);
     } catch (e) {
-      modal.querySelector('#stage').innerHTML =
+      modalEl.querySelector('#stage').innerHTML =
         `<div class="state" style="height:100%;border:0"><div class="big">Image failed to load</div>
          <div class="small">${esc(e.message)}</div></div>`;
       return;
     }
 
     const out = ctx.createImageData(PREVIEW, PREVIEW);
-    const thrEl = modal.querySelector('#thr'), opEl = modal.querySelector('#op'),
-          layEl = modal.querySelector('#lay'), thv = modal.querySelector('#thv'),
-          live = modal.querySelector('#live'), patEl = modal.querySelector('#pat');
+    const thrEl = modalEl.querySelector('#thr'), opEl = modalEl.querySelector('#op'),
+          layEl = modalEl.querySelector('#lay'), thv = modalEl.querySelector('#thv'),
+          live = modalEl.querySelector('#live'), patEl = modalEl.querySelector('#pat');
 
     const rgb = v => {
       // perceptually ordered heat ramp for probability
@@ -436,7 +433,7 @@ export async function render(mount, query) {
           row('#3f3f3f', 'Background', 'everything else', null),
         ];
       }
-      modal.querySelector('#leg2').innerHTML =
+      modalEl.querySelector('#leg2').innerHTML =
         `<div class="lgbox">${rows.join('')}</div>` +
         (mode === 'err' && patterns
           ? `<p class="small" style="margin:6px 0 0">Hatching distinguishes the two error types without colour:
@@ -447,11 +444,14 @@ export async function render(mount, query) {
     [thrEl, opEl, layEl, patEl].forEach(el => el.addEventListener('input', paint));
     layEl.addEventListener('change', paint);
     patEl.addEventListener('change', paint);
-    modal.querySelector('#rst').addEventListener('click', () => { thrEl.value = s.thr; paint(); });
+    modalEl.querySelector('#rst').addEventListener('click', () => { thrEl.value = s.thr; paint(); });
     paint();
   }
 
   draw();
   if (query && query.get('ts')) open(+query.get('ts'));
-  return {onQuery: q => { if (q.get('ts')) open(+q.get('ts')); }};
+  return {
+    onQuery: q => { if (q.get('ts')) open(+q.get('ts')); },
+    destroy: () => modal.destroy(),
+  };
 }

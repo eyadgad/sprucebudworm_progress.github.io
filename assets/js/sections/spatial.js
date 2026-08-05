@@ -2,8 +2,9 @@
    the errors concentrate. */
 
 import { load } from '../lib/data.js';
-import { M, fmtOr, tip, int, pct, esc, mean, quantile, SEG } from '../lib/metrics.js';
-import { barChart, scatter, histogram, legend, lineChart, boxPlot } from '../lib/charts.js';
+import { fmtOr, int, pct, esc, mean, quantile, SEG } from '../lib/metrics.js';
+import { barChart, scatter, histogram, legend, lineChart } from '../lib/charts.js';
+import { card } from '../lib/ui.js';
 
 export async function render(mount) {
   const [sm, th] = await Promise.all([load('samples'), load('threshold')]);
@@ -200,5 +201,3 @@ export async function render(mount) {
   draw();
 }
 
-const card = (k, v, s, key) => `<div class="card"><div class="k">${key ? tip(key, k) : esc(k)}</div>
-  <div class="v">${v ?? '—'}</div><div class="s">${esc(s || '')}</div></div>`;

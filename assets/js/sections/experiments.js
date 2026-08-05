@@ -2,9 +2,9 @@
    selection made explicit rather than implied by a single sorted column. */
 
 import { load } from '../lib/data.js';
-import { M, fmtOr, tip, int, esc, MODEL_NAME, LOSS_NAME, targetName, mean } from '../lib/metrics.js';
+import { M, fmtOr, tip, esc, MODEL_NAME, LOSS_NAME, targetName, mean } from '../lib/metrics.js';
 import { DataTable } from '../lib/table.js';
-import { scatter, parallel, legend, barChart, hBarChart } from '../lib/charts.js';
+import { scatter, parallel, legend, hBarChart } from '../lib/charts.js';
 
 const MODEL_C = {
   unet:'#98a6b6', attention_unet:'#2f9d8c', nnunet:'#b07aa1',

@@ -5,8 +5,9 @@
    or the conventional 0.5 is right. */
 
 import { load } from '../lib/data.js';
-import { M, fmtOr, tip, int, pct, esc, mean, quantile } from '../lib/metrics.js';
-import { lineChart, histogram, legend, scatter } from '../lib/charts.js';
+import { fmtOr, tip, pct, mean, quantile } from '../lib/metrics.js';
+import { lineChart, histogram, legend } from '../lib/charts.js';
+import { card } from '../lib/ui.js';
 
 export async function render(mount) {
   const [th, sm] = await Promise.all([load('threshold'), load('samples')]);
@@ -215,5 +216,3 @@ export async function render(mount) {
   draw();
 }
 
-const card = (k, v, s, key) => `<div class="card"><div class="k">${key ? tip(key, k) : esc(k)}</div>
-  <div class="v">${v ?? '—'}</div><div class="s">${esc(s || '')}</div></div>`;

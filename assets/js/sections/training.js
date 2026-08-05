@@ -5,8 +5,9 @@
    plotted initially. */
 
 import { load } from '../lib/data.js';
-import { M, fmtOr, tip, esc, MODEL_NAME, LOSS_NAME, mean, std } from '../lib/metrics.js';
+import { M, fmtOr, esc, MODEL_NAME, LOSS_NAME, mean, std } from '../lib/metrics.js';
 import { lineChart, legend, scatter } from '../lib/charts.js';
+import { card } from '../lib/ui.js';
 
 const PALETTE = ['#3a6fce','#2f9d8c','#e2a33d','#cf6a5c','#b07aa1','#6a3ea1','#1f7a54','#98a6b6'];
 
@@ -203,5 +204,3 @@ export async function render(mount) {
   drawChips(); drawMain();
 }
 
-const card = (k,v,s,key) => `<div class="card"><div class="k">${key?tip(key,k):esc(k)}</div>
-  <div class="v">${v ?? '—'}</div><div class="s">${esc(s||'')}</div></div>`;

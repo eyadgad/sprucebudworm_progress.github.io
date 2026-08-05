@@ -65,8 +65,10 @@ assets/js/lib/
   charts.js                    SVG chart primitives (bar, line, scatter, box,
                                histogram, confusion, parallel coordinates)
   table.js                     sortable / paginated DataTable component
+  ui.js                        card, labelled select, and the accessible Modal
+                               (owns focus, key handling and the scroll lock)
   data.js                      cached fetch + loading / error / empty / N-A states
-  metrics.test.js              node tests for the helpers
+  metrics.test.js, ui.test.js  node tests for the helpers and the modal
 assets/js/sections/*.js        one module per dashboard section
 data/*.json                    generated analysis
 data/samples/*.png             generated per-scene pixel layers

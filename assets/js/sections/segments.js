@@ -3,8 +3,8 @@
    read as confidently as a group of 60. */
 
 import { load } from '../lib/data.js';
-import { M, fmtOr, tip, int, esc, mean, std, quantile, bootCI, SPLIT_COLOR } from '../lib/metrics.js';
-import { boxPlot, barChart, legend, scatter } from '../lib/charts.js';
+import { M, fmtOr, int, esc, mean, std, quantile, bootCI } from '../lib/metrics.js';
+import { boxPlot, barChart } from '../lib/charts.js';
 import { DataTable } from '../lib/table.js';
 
 const MIN_N = 5;   // groups below this are shown but flagged as unreliable

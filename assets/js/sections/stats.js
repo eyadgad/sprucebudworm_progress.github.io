@@ -5,8 +5,8 @@
    because it violates the independence assumption most tests rely on. */
 
 import { load } from '../lib/data.js';
-import { M, fmtOr, tip, int, pct, esc, mean, std, quantile, bootCI, wilcoxon, pearson, spearman } from '../lib/metrics.js';
-import { boxPlot, scatter, histogram, legend } from '../lib/charts.js';
+import { fmtOr, tip, esc, mean, std, quantile, bootCI, wilcoxon, pearson, spearman } from '../lib/metrics.js';
+import { scatter, histogram } from '../lib/charts.js';
 
 export async function render(mount) {
   const [sm, ds] = await Promise.all([load('samples'), load('summary')]);

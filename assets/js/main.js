@@ -52,6 +52,13 @@ async function route() {
     ROUTES[name]._live.onQuery(query);
     return;
   }
+  // Let the outgoing section release anything it owns outside its own subtree
+  // (key handlers, the body scroll lock) before its DOM is discarded.
+  if (current && ROUTES[current]?._live?.destroy) {
+    try { ROUTES[current]._live.destroy(); }
+    catch (e) { console.error(`[${current}] destroy failed`, e); }
+    ROUTES[current]._live = null;
+  }
   current = name;
   main.innerHTML = loading(`Loading ${r.title.toLowerCase()}…`);
 

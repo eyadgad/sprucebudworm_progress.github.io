@@ -3,8 +3,9 @@
    / dataset.json, never hard coded. */
 
 import { load } from '../lib/data.js';
-import { M, fmtOr, tip, int, esc, MODEL_NAME, LOSS_NAME, targetName, pct } from '../lib/metrics.js';
+import { fmtOr, tip, int, esc, MODEL_NAME, LOSS_NAME, targetName, pct } from '../lib/metrics.js';
 import { hBarChart, legend, confusion } from '../lib/charts.js';
+import { card } from '../lib/ui.js';
 
 export async function render(mount) {
   // summary.json is a ~1 KB companion to dataset.json: the overview needs the
@@ -147,11 +148,6 @@ export async function render(mount) {
   ]);
 }
 
-const card = (k, v, s, key, hl = false) => `
-  <div class="card${hl ? ' hl' : ''}">
-    <div class="k">${key ? tip(key, k) : esc(k)}</div>
-    <div class="v">${v ?? '—'}</div><div class="s">${esc(s)}</div>
-  </div>`;
 
 const nav = (href, title, sub) => `
   <a class="card" href="${href}" style="text-decoration:none;display:block">

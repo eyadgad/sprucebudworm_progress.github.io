@@ -5,8 +5,9 @@
    prove). */
 
 import { load } from '../lib/data.js';
-import { M, fmtOr, tip, int, pct, esc, mean, quantile, spearman, tsLabel } from '../lib/metrics.js';
-import { scatter, boxPlot, barChart, legend, histogram } from '../lib/charts.js';
+import { fmtOr, int, pct, esc, mean, quantile, spearman, tsLabel } from '../lib/metrics.js';
+import { scatter } from '../lib/charts.js';
+import { card } from '../lib/ui.js';
 import { DataTable } from '../lib/table.js';
 
 export async function render(mount) {
@@ -286,5 +287,3 @@ export async function render(mount) {
   draw();
 }
 
-const card = (k, v, s, key) => `<div class="card"><div class="k">${key ? tip(key, k) : esc(k)}</div>
-  <div class="v">${v ?? '—'}</div><div class="s">${esc(s || '')}</div></div>`;

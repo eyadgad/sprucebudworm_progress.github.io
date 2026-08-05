@@ -1,7 +1,7 @@
 /* Conclusions and recommendations, each tied to the section that supports it. */
 
 import { load } from '../lib/data.js';
-import { fmtOr, int, pct, esc, mean, quantile, MODEL_NAME, LOSS_NAME, targetName } from '../lib/metrics.js';
+import { fmtOr, int, pct, esc, mean, quantile, MODEL_NAME } from '../lib/metrics.js';
 
 export async function render(mount) {
   const [ex, sm, ds] = await Promise.all([load('experiments'), load('samples'), load('summary')]);
