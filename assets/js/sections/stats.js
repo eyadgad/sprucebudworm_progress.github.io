@@ -7,10 +7,10 @@
 import { load } from '../lib/data.js';
 import { fmtOr, tip, esc, mean, std, quantile, bootCI, wilcoxon, pearson, spearman } from '../lib/metrics.js';
 import { scatter, histogram } from '../lib/charts.js';
+import { sceneFilters } from '../lib/ui.js';
 
 export async function render(mount) {
   const [sm, ds] = await Promise.all([load('samples'), load('summary')]);
-  let split = 'test';
 
   mount.innerHTML = `
   <h1>Statistical analysis</h1>
@@ -24,10 +24,7 @@ export async function render(mount) {
     are optimistic. The night-level summaries below are the more trustworthy view.
   </div></div>
 
-  <div class="ctrls">
-    <div class="f"><label for="sp">Split</label><select id="sp">
-      <option value="test">Test (held out)</option><option value="val">Validation</option></select></div>
-  </div>
+  <div id="filters"></div>
 
   <h2>Descriptive statistics</h2>
   <div id="desc"></div>
@@ -58,10 +55,16 @@ export async function render(mount) {
   <h2>Validation versus test</h2>
   <div id="vt"></div>`;
 
+  // year/night match with an explicit split (so the val-vs-test table can apply
+  // the same year/night to the other split)
+  const yn = (s) => (filt.state.year === 'all' || String(s.year) === filt.state.year) &&
+                    (filt.state.night === 'all' || s.night === filt.state.night);
+
   function draw() {
-    const S = sm.samples.filter(s => s.split === split && s.label === 1);
+    const split = filt.state.split;
+    const S = sm.samples.filter(s => s.split === split && s.label === 1 && yn(s));
     const other = split === 'test' ? 'val' : 'test';
-    const O = sm.samples.filter(s => s.split === other && s.label === 1);
+    const O = sm.samples.filter(s => s.split === other && s.label === 1 && yn(s));
 
     /* ---- descriptives ---- */
     const keys = ['dice', 'iou', 'precision', 'recall', 'boundary_iou', 'nsd', 'hd95', 'assd'];
@@ -244,6 +247,6 @@ export async function render(mount) {
         : 'The intervals do not overlap, which would suggest the splits differ systematically. Given the shared nights, investigate before drawing conclusions.'}</p>`;
   }
 
-  mount.querySelector('#sp').addEventListener('change', e => { split = e.target.value; draw(); });
+  const filt = sceneFilters(mount.querySelector('#filters'), {samples: sm.samples, onChange: draw});
   draw();
 }

@@ -6,7 +6,7 @@
 
 import { load } from '../lib/data.js';
 import { M, fmtOr, esc, MODEL_NAME, LOSS_NAME, mean, std } from '../lib/metrics.js';
-import { lineChart, legend, scatter } from '../lib/charts.js';
+import { lineChart, legend } from '../lib/charts.js';
 import { card } from '../lib/ui.js';
 
 const PALETTE = ['#3a6fce','#2f9d8c','#e2a33d','#cf6a5c','#b07aa1','#6a3ea1','#1f7a54','#98a6b6'];
@@ -83,19 +83,7 @@ export async function render(mount) {
       <h3 style="margin-top:0">Reading of the selected run</h3>
       <div id="fitread"></div>
     </div>
-  </div>
-
-  <h2>Stability</h2>
-  <p class="small">Epoch-to-epoch jumps in validation Dice. Large spikes indicate an unstable run;
-  a flat line near zero at the end indicates convergence. This project had a numerical-instability
-  problem earlier (NaN collapse) that was fixed with a gradient-finiteness gate, so this check matters.</p>
-  <figure><div class="viz" id="c-stab"></div>
-    <figcaption id="capstab"></figcaption></figure>
-
-  <h2>Convergence across all runs</h2>
-  <figure><div class="viz" id="c-all"></div>
-    <figcaption>Best epoch against final validation Dice for every run. Runs bunched at the right edge
-    hit the epoch budget rather than converging, which applies to most of this sweep.</figcaption></figure>`;
+  </div>`;
 
   const chips = mount.querySelector('#chips');
   const drawChips = () => {
@@ -186,27 +174,7 @@ export async function render(mount) {
           ? 'Validation Dice ends measurably below its peak while training loss keeps falling: mild over-fitting. The evaluated checkpoint is the peak epoch, so this does not affect the reported score.'
           : 'Validation Dice ends close to its peak and training loss is still falling slowly. There is no strong over-fitting signal; the run is closer to under-trained than over-trained.'
       }</p>`;
-    const d = vd.slice(1).map((v,i)=>v-vd[i]);
-    mount.querySelector('#c-stab').innerHTML = lineChart({
-      series:[{label:'epoch-to-epoch change', c:'var(--accent2)', points:d.map((v,i)=>[i+1,v]), dots:false}],
-      xlo:1, xhi:vd.length-1, ylo:Math.min(...d,-0.02)*1.1, yhi:Math.max(...d,0.02)*1.1,
-      xlabel:'epoch', ylabel:'Δ validation Dice', W:880, H:250, aria:'Epoch to epoch change in validation Dice',
-    });
-    const big = d.filter(v=>Math.abs(v)>0.05).length;
-    mount.querySelector('#capstab').textContent =
-      `${big} epoch${big===1?'':'s'} moved validation Dice by more than 0.05. `+
-      (big<=3 ? 'The run is stable: no NaN collapse or divergence.' : 'Several large jumps: the run was noisy early on.');
   }
-
-  /* ---- all runs ---- */
-  mount.querySelector('#c-all').innerHTML = scatter({
-    points: rows.filter(r=>r.best_epoch!=null&&r.best_val_dice_patch!=null).map(r=>({
-      x:r.best_epoch, y:r.best_val_dice_patch,
-      c:r.selected?'var(--best)':'var(--accent2)', r:r.selected?7:3.4, o:r.selected?1:.6,
-      t:`${MODEL_NAME[r.model]||r.model} ${r.n_elev} elev — best epoch ${r.best_epoch}, val Dice ${r.best_val_dice_patch}`})),
-    xlo:0, xhi:100, ylo:.55, yhi:.73, xlabel:'best epoch', ylabel:'best validation Dice (patch)',
-    W:880, H:330, aria:'Best epoch against best validation Dice for all runs',
-  });
 
   drawChips(); drawMain();
 }

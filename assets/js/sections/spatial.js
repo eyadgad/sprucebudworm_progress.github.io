@@ -4,21 +4,18 @@
 import { load } from '../lib/data.js';
 import { fmtOr, int, pct, esc, mean, quantile, SEG } from '../lib/metrics.js';
 import { barChart, scatter, histogram, legend, lineChart } from '../lib/charts.js';
-import { card } from '../lib/ui.js';
+import { card, sceneFilters } from '../lib/ui.js';
 
 export async function render(mount) {
   const [sm, th] = await Promise.all([load('samples'), load('threshold')]);
-  let split = 'test';
 
   mount.innerHTML = `
   <h1>Spatial analysis</h1>
   <p class="lede">How predicted shapes compare with labelled shapes, and whether errors cluster at
-  particular ranges from the radar.</p>
+  particular ranges from the radar. The filters narrow the scene-level charts; the radial profile is a
+  precomputed per-split aggregate, so it follows the split only.</p>
 
-  <div class="ctrls">
-    <div class="f"><label for="sp">Split</label><select id="sp">
-      <option value="test">Test (held out)</option><option value="val">Validation</option></select></div>
-  </div>
+  <div id="filters"></div>
 
   <h2>Region structure</h2>
   <p class="small">A connected region is a blob of at least 10 touching pixels. Comparing the number of
@@ -58,8 +55,9 @@ export async function render(mount) {
   <div id="cats"></div>`;
 
   function draw() {
-    const S = sm.samples.filter(s => s.split === split && s.label === 1);
-    const R = th.radial[split];
+    const S = sm.samples.filter(s => s.label === 1 && filt.predicate(s));
+    const split = filt.state.split;
+    const R = th.radial[split];   // radial profile is precomputed per split only
 
     /* ---- region structure ---- */
     const withReg = S.filter(s => s.n_gt_regions != null && s.n_pred_regions != null);
@@ -199,7 +197,7 @@ export async function render(mount) {
       example to open it in the sample explorer.</p>`;
   }
 
-  mount.querySelector('#sp').addEventListener('change', e => { split = e.target.value; draw(); });
+  const filt = sceneFilters(mount.querySelector('#filters'), {samples: sm.samples, onChange: draw});
   draw();
 }
 

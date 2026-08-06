@@ -20,7 +20,16 @@ export async function render(mount, query) {
   // these splits still list their metrics but open without imagery.
   const IMG_SPLITS = new Set(sm.image_splits || ['test', 'val']);
   const withImg = new Set(all.filter(s => IMG_SPLITS.has(s.split)).map(s => s.ts));
-  const state = {split: 'test', type: 'pos', sort: 'dice', dir: 1, q: '', view: 'grid', preset: 'all'};
+  const YEARS = [...new Set(all.map(s => s.year))].sort();
+  // 'sel' = the selected model (Attention UNet, s.dice); 'cmp' = the UNet++
+  // comparison (s.dice_cmp). Only Dice exists for the comparison model, so the
+  // toggle re-ranks and re-labels by Dice; full metrics and images stay selected-model.
+  const MODELS = {sel: sm.model_name_sel || 'Attention UNet', cmp: sm.model_name_cmp || 'UNet++ (9 elev)'};
+  const state = {split: 'test', type: 'pos', year: 'all', night: 'all', model: 'sel',
+    sort: 'dice', dir: 1, q: '', view: 'grid', preset: 'all'};
+  // Dice of the currently selected model, used for sorting, presets and display.
+  const dcol = s => state.model === 'cmp' ? s.dice_cmp : s.dice;
+  const bgcol = s => state.model === 'cmp' ? s.bg_fp_rate_cmp : s.bg_fp_rate;
 
   mount.innerHTML = `
   <h1>Sample explorer</h1>
@@ -53,13 +62,36 @@ export async function render(mount, query) {
     w.querySelector('select').addEventListener('change', e => { state[key] = e.target.value; draw(); });
     ctrls.appendChild(w); return w.querySelector('select');
   };
-  mk('Split', 'split', [['test', 'Test (held out)'], ['val', 'Validation'], ['all', 'All']]);
+  const splitSel = mk('Split', 'split', [['test', 'Test (held out)'], ['val', 'Validation'], ['all', 'All']]);
   mk('Scene type', 'type', [['pos', 'With plume'], ['neg', 'Plume free'], ['all', 'All']]);
+  const yearSel = mk('Year', 'year', [['all', 'All years'], ...YEARS.map(y => [y, String(y)])]);
+  // Night list is scoped to the current split + year so it never offers a night
+  // that cannot match. Rebuilt whenever split or year changes.
+  const nightWrap = document.createElement('div'); nightWrap.className = 'f';
+  const nightId = 's_night';
+  const rebuildNights = () => {
+    const ns = [...new Set(all.filter(s => s.label === 1 && s.night &&
+      (state.split === 'all' || s.split === state.split) &&
+      (state.year === 'all' || String(s.year) === state.year)).map(s => s.night))].sort();
+    if (!ns.includes(state.night)) state.night = 'all';
+    nightWrap.innerHTML = `<label for="${nightId}">Night</label><select id="${nightId}">` +
+      `<option value="all">All nights (${ns.length})</option>` +
+      ns.map(n => `<option value="${esc(n)}"${n === state.night ? ' selected' : ''}>${esc(n)}</option>`).join('') +
+      '</select>';
+    nightWrap.querySelector('select').addEventListener('change', e => { state.night = e.target.value; draw(); });
+  };
+  ctrls.appendChild(nightWrap); rebuildNights();   // Night sits right after Year
+  mk('Model', 'model', [['sel', MODELS.sel + ' (selected)'], ['cmp', MODELS.cmp]]);
   mk('Sort by', 'sort', [['dice', 'Dice'], ['iou', 'IoU'], ['precision', 'Precision'], ['recall', 'Recall'],
     ['gt_area', 'Truth area'], ['pred_area', 'Predicted area'], ['boundary_iou', 'Boundary IoU'],
     ['n_pred_regions', 'Predicted regions'], ['ts', 'Time']]);
   mk('Order', 'dir', [['1', 'Worst first'], ['-1', 'Best first']]);
   mk('View', 'view', [['grid', 'Thumbnails'], ['table', 'Table']]);
+  // After a split/year change (mk already updated state + redrew) reset the night
+  // to 'all', rebuild its scoped list, and redraw so the view is never left empty.
+  const onScopeChange = () => { state.night = 'all'; rebuildNights(); draw(); };
+  splitSel.addEventListener('change', onScopeChange);
+  yearSel.addEventListener('change', onScopeChange);
 
   const sw = document.createElement('div'); sw.className = 'f';
   sw.innerHTML = `<label for="s_q">Find a scene</label>
@@ -90,28 +122,32 @@ export async function render(mount, query) {
   function rows() {
     let r = all.filter(s =>
       (state.split === 'all' || s.split === state.split) &&
-      (state.type === 'all' || (state.type === 'pos' ? s.label === 1 : s.label === 0)));
+      (state.type === 'all' || (state.type === 'pos' ? s.label === 1 : s.label === 0)) &&
+      (state.year === 'all' || String(s.year) === state.year) &&
+      (state.night === 'all' || s.night === state.night));
     if (state.q) {
       const q = state.q.toLowerCase();
       r = r.filter(s => String(s.ts).includes(q) || (s.night || '').toLowerCase().includes(q));
     }
     const P = state.preset;
-    if (P === 'fail') r = r.filter(s => s.dice != null && s.dice < 0.3);
-    else if (P === 'zero') r = r.filter(s => s.dice != null && s.dice === 0);
+    if (P === 'fail') r = r.filter(s => dcol(s) != null && dcol(s) < 0.3);
+    else if (P === 'zero') r = r.filter(s => dcol(s) != null && dcol(s) === 0);
     else if (P === 'lowrec') r = r.filter(s => s.recall != null && s.recall < 0.4);
     else if (P === 'lowprec') r = r.filter(s => s.precision != null && s.precision < 0.4);
     else if (P === 'frag') r = r.filter(s => s.n_gt_regions > 0 && s.n_pred_regions > 3 * s.n_gt_regions);
     else if (P === 'best') {
-      r = [...r].filter(s => s.dice != null).sort((a, b) => b.dice - a.dice).slice(0, 20);
+      r = [...r].filter(s => dcol(s) != null).sort((a, b) => dcol(b) - dcol(a)).slice(0, 20);
     } else if (P === 'median') {
-      const d = r.map(s => s.dice).filter(v => v != null);
+      const d = r.map(s => dcol(s)).filter(v => v != null);
       const med = quantile(d, .5);
-      r = [...r].filter(s => s.dice != null).sort((a, b) =>
-        Math.abs(a.dice - med) - Math.abs(b.dice - med)).slice(0, 20);
+      r = [...r].filter(s => dcol(s) != null).sort((a, b) =>
+        Math.abs(dcol(a) - med) - Math.abs(dcol(b) - med)).slice(0, 20);
     }
+    // sorting by "dice" follows the active model; every other key is model-agnostic
     const k = state.sort, dir = +state.dir;
+    const val = (s) => k === 'dice' ? dcol(s) : s[k];
     return [...r].sort((a, b) => {
-      const x = a[k], y = b[k];
+      const x = val(a), y = val(b);
       if (x == null && y == null) return 0;
       if (x == null) return 1;
       if (y == null) return -1;
@@ -142,14 +178,15 @@ export async function render(mount, query) {
             : `<span class="im" style="display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)">no image</span>`}
           <span class="cap"><b>${hhmm(s.ts)}</b> <span class="m">${String(s.ts).slice(0, 8)}</span><br>
           ${s.label === 1
-            ? `<span class="m">Dice ${fmtOr(s.dice, 'dice')} · ${int(s.gt_area)} px</span>`
-            : `<span class="m">no plume · FP ${fmtOr(s.bg_fp_rate, 'bg_fp_rate')}</span>`}</span>
+            ? `<span class="m">Dice ${fmtOr(dcol(s), 'dice')} · ${int(s.gt_area)} px</span>`
+            : `<span class="m">no plume · FP ${fmtOr(bgcol(s), 'bg_fp_rate')}</span>`}</span>
         </button>`;
       }).join('') + `</div>
         <p class="small" style="margin-top:10px">
           <span class="swk" style="background:#fff;vertical-align:-3px"></span> <b>white</b> = predicted plume,
           <span class="swk" style="background:#000;vertical-align:-3px"></span> <b>black</b> = background,
-          at the project threshold ${sm.threshold}. Open a scene for the labelled error view.</p>` +
+          at the project threshold ${sm.threshold}. Open a scene for the labelled error view.
+          ${state.model === 'cmp' ? `<b style="color:var(--warn)">Dice shown is ${esc(MODELS.cmp)}; the thumbnail is still the selected model (only it has stored images).</b>` : ''}</p>` +
         (r.length > 120 ? `<p class="small">Showing the first 120 of ${r.length}. Narrow the filters or switch to the table view to see the rest.</p>` : '');
       body.querySelectorAll('.scell').forEach(b =>
         b.addEventListener('click', () => open(+b.dataset.ts)));
@@ -160,7 +197,7 @@ export async function render(mount, query) {
           {key: 'ts', label: 'Scene', cls: '', fmt: v => `<code>${v}</code>`},
           {key: 'night', label: 'Night', cls: '', fmt: v => esc(v || '—')},
           {key: 'split', label: 'Split', cls: ''},
-          {key: 'dice', label: 'Dice', tip: M.dice.def, fmt: v => fmtOr(v, 'dice')},
+          {key: 'dice', label: 'Dice (Att.UNet)', tip: M.dice.def + ' Selected model.', fmt: v => fmtOr(v, 'dice')},
           {key: 'iou', label: 'IoU', fmt: v => fmtOr(v, 'iou')},
           {key: 'precision', label: 'Prec', fmt: v => fmtOr(v, 'precision')},
           {key: 'recall', label: 'Rec', fmt: v => fmtOr(v, 'recall')},

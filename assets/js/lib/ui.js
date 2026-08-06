@@ -45,6 +45,63 @@ export function splitSelect(parent, value, onChange, {both = false} = {}) {
 }
 
 /**
+ * A Split + Year + Night filter bar shared by the per-model sections, so the
+ * same filters apply to every chart AND table in a section. The Night list is
+ * scoped to the current split/year, so it never lists nights that can't match.
+ *
+ * @param {HTMLElement} parent
+ * @param {object} o {samples, splits?, onChange, extra?}
+ *   extra: optional [{label,id,options,value}] controls appended after the
+ *   filters (e.g. a Metric selector); their values are exposed on state.
+ * @returns {{state, predicate:(row)=>boolean, values:()=>object}}
+ */
+export function sceneFilters(parent, {samples, splits = ['test', 'val'], onChange, extra = []}) {
+  const pos = samples.filter(s => s.label === 1);
+  const yearsAll = [...new Set(pos.map(s => s.year))].sort();
+  const splitLabel = sp => sp === 'both' ? 'Both (pooled)'
+    : sp === 'test' ? 'Test (held out)' : 'Validation';
+  const state = {split: splits[0], year: 'all', night: 'all'};
+  extra.forEach(e => { state[e.id] = e.value ?? (e.options[0] && e.options[0][0]); });
+
+  const bar = document.createElement('div');
+  bar.className = 'ctrls';
+  parent.appendChild(bar);
+
+  const nightsFor = () => [...new Set(pos.filter(s => s.night &&
+    (state.split === 'both' || s.split === state.split) &&
+    (state.year === 'all' || String(s.year) === state.year)).map(s => s.night))].sort();
+
+  function rebuild() {
+    bar.innerHTML = '';
+    select(bar, {label: 'Split', id: 'f-split', value: state.split,
+      options: splits.map(sp => [sp, splitLabel(sp)]),
+      onChange: v => { state.split = v; state.night = 'all'; rebuild(); onChange(); }});
+    select(bar, {label: 'Year', id: 'f-year', value: state.year,
+      options: [['all', 'All years'], ...yearsAll.map(y => [y, String(y)])],
+      onChange: v => { state.year = v; state.night = 'all'; rebuild(); onChange(); }});
+    const nights = nightsFor();
+    select(bar, {label: 'Night', id: 'f-night', value: state.night,
+      options: [['all', `All nights (${nights.length})`], ...nights.map(n => [n, n])],
+      onChange: v => { state.night = v; onChange(); }});
+    extra.forEach(e => select(bar, {label: e.label, id: 'f-' + e.id, value: state[e.id],
+      options: e.options, onChange: v => { state[e.id] = v; onChange(); }}));
+    const rb = document.createElement('button');
+    rb.className = 'ghost'; rb.textContent = 'Reset';
+    rb.addEventListener('click', () => {
+      state.split = splits[0]; state.year = 'all'; state.night = 'all'; rebuild(); onChange();
+    });
+    bar.appendChild(rb);
+  }
+  rebuild();
+
+  const predicate = row =>
+    (state.split === 'both' || row.split === state.split) &&
+    (state.year === 'all' || String(row.year) === state.year) &&
+    (state.night === 'all' || row.night === state.night);
+  return {state, predicate, values: () => ({...state})};
+}
+
+/**
  * Accessible modal dialog.
  *
  * Owns the whole lifecycle so callers cannot leak it: focus is moved in on

@@ -7,22 +7,19 @@
 import { load } from '../lib/data.js';
 import { fmtOr, int, pct, esc, mean, quantile, spearman, tsLabel } from '../lib/metrics.js';
 import { scatter, legend } from '../lib/charts.js';
-import { card } from '../lib/ui.js';
+import { card, sceneFilters } from '../lib/ui.js';
 import { DataTable } from '../lib/table.js';
 
 export async function render(mount) {
   const sm = await load('samples');
-  let split = 'test';
 
   mount.innerHTML = `
   <h1>Error and failure analysis</h1>
   <p class="lede">What the model gets wrong, how often, and what those cases have in common.
-  Measured facts and proposed explanations are labelled separately throughout.</p>
+  Measured facts and proposed explanations are labelled separately throughout. Filters below narrow
+  every chart and table to a split, year or single night.</p>
 
-  <div class="ctrls">
-    <div class="f"><label for="sp">Split</label><select id="sp">
-      <option value="test">Test (held out)</option><option value="val">Validation</option></select></div>
-  </div>
+  <div id="filters"></div>
 
   <div id="cards"></div>
 
@@ -62,8 +59,9 @@ export async function render(mount) {
   <div id="interp"></div>`;
 
   function draw() {
-    const S = sm.samples.filter(s => s.split === split && s.label === 1);
-    const NEG = sm.samples.filter(s => s.split === split && s.label === 0);
+    const S = sm.samples.filter(s => s.label === 1 && filt.predicate(s));
+    const NEG = sm.samples.filter(s => s.label === 0 && filt.predicate(s));
+    const split = filt.state.split;
     const zero = S.filter(s => s.dice === 0);
     const bad = S.filter(s => s.dice < 0.3);
     const lowRec = S.filter(s => s.recall < 0.4);
@@ -300,7 +298,7 @@ export async function render(mount) {
       </div></div>`;
   }
 
-  mount.querySelector('#sp').addEventListener('change', e => { split = e.target.value; draw(); });
+  const filt = sceneFilters(mount.querySelector('#filters'), {samples: sm.samples, onChange: draw});
   draw();
 }
 

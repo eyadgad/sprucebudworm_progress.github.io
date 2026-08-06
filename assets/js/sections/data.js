@@ -2,7 +2,7 @@
    split-integrity problem that shapes how every later number should be read. */
 
 import { load } from '../lib/data.js';
-import { int, pct, esc, SPLIT_COLOR, quantile, mean } from '../lib/metrics.js';
+import { int, pct, SPLIT_COLOR, quantile, mean } from '../lib/metrics.js';
 import { barChart, histogram, boxPlot, legend, BOXPLOT_KEY } from '../lib/charts.js';
 
 const SPLITS = ['train', 'val', 'test'];
@@ -43,11 +43,6 @@ export async function render(mount) {
       about 70 / 20 / 10, so no season is held out entirely.</figcaption></figure>
   </div>
   <div id="l-split"></div>
-
-  <h2>Time of night</h2>
-  <figure><div class="viz" id="c-hour"></div>
-    <figcaption>Scenes by hour of the day (UTC, as stored in the file timestamp). Moth dispersal is
-    nocturnal, so coverage concentrates in the evening and overnight hours.</figcaption></figure>
 
   <h2>Target size and class imbalance</h2>
   <p>Each positive scene contains a plume covering a small fraction of the ${int(ds.grid.h * ds.grid.w)}-pixel
@@ -270,13 +265,6 @@ export async function render(mount) {
     mount.querySelector('#count').innerHTML =
       `Matching <b>${int(f.length)}</b> of ${int(scenes.length)} scenes` +
       (f.length ? '' : ' — no scenes match, widen a filter.');
-
-    const hours = Array.from({length: 24}, (_, h) => f.filter(s => s.hour === h).length);
-    mount.querySelector('#c-hour').innerHTML = barChart({
-      cats: Array.from({length: 24}, (_, h) => String(h).padStart(2, '0')),
-      series: [{label: 'scenes', c: 'var(--accent2)', values: hours}],
-      ylabel: 'scenes', xlabel: 'hour of day (UTC)', W: 880, H: 260, aria: 'Scenes by hour of day',
-    });
 
     const areas = f.filter(s => s.label === 1 && s.area > 0).map(s => s.area);
     const cardsEl = mount.querySelector('#area-cards');

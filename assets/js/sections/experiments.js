@@ -48,13 +48,6 @@ export async function render(mount) {
     selected run's position.</figcaption></figure>
   <div id="l-pr"></div>
 
-  <h2>Score against training cost</h2>
-  <figure><div class="viz" id="c-cost"></div>
-    <figcaption>Test Dice against wall-clock training time. Longer training does not buy a better score:
-    the cheapest and most expensive runs land within the same narrow band. Colour encodes architecture
-    (same key as above); the selected run is the enlarged marker.</figcaption></figure>
-  <div id="l-cost"></div>
-
   <h2>Multi-metric comparison</h2>
   <p class="small">Each line is one run crossing five axes. A run that is genuinely better is high on all
   of them; the selected run is drawn solid. Only runs matching the filters above are shown.</p>
@@ -63,14 +56,10 @@ export async function render(mount) {
     alarms. Axes are oriented so that up is always better, including the inverted false-alarm axis.</figcaption></figure>
 
   <h2>What actually moved the score</h2>
-  <div class="two">
-    <figure><div class="viz" id="c-axis"></div>
-      <figcaption>Mean test Dice grouped by each design choice, over all runs that vary it. Bars show
-      how much each axis matters relative to the others.</figcaption></figure>
-    <figure><div class="viz" id="c-arch"></div>
-      <figcaption>Best test Dice achieved by each architecture. The gap between the best and worst
-      architecture is smaller than the gap created by the label definition.</figcaption></figure>
-  </div>`;
+  <figure><div class="viz" id="c-axis"></div>
+    <figcaption>Mean test Dice grouped by each design choice, over all runs that vary it. The bar length
+    is how much that axis moves the score relative to the others: the label definition matters most,
+    architecture least.</figcaption></figure>`;
 
   /* ---------------- filters ---------------- */
   const ctrls = mount.querySelector('#ctrls');
@@ -195,19 +184,8 @@ export async function render(mount) {
       aria:'Precision versus recall for every run',
       trend:{x0:sel.precision,y0:.40,x1:sel.precision,y1:.90},
     });
-    const archKey = legend(models.map(m=>({c:MODEL_C[m]||'var(--accent2)', label:MODEL_NAME[m]||m})));
-    mount.querySelector('#l-pr').innerHTML = archKey;
-    mount.querySelector('#l-cost').innerHTML = archKey;
-
-    mount.querySelector('#c-cost').innerHTML = scatter({
-      points: f.filter(r=>r.train_seconds&&r.dice!=null).map(r=>({
-        x:r.train_seconds/3600, y:r.dice, c:MODEL_C[r.model]||'var(--accent2)',
-        r:r.selected?7:3.6, o:r.selected?1:.62,
-        t:`${MODEL_NAME[r.model]||r.model} ${r.n_elev} elev — ${(r.train_seconds/3600).toFixed(1)} h, Dice ${r.dice}`})),
-      xlo:0, xhi:Math.max(...rows.map(r=>(r.train_seconds||0)/3600))*1.05,
-      ylo:.48, yhi:.66, xlabel:'training wall-clock time (hours)', ylabel:'test Dice (macro)',
-      W:560, H:340, aria:'Test Dice against training time',
-    });
+    mount.querySelector('#l-pr').innerHTML =
+      legend(models.map(m=>({c:MODEL_C[m]||'var(--accent2)', label:MODEL_NAME[m]||m})));
 
     const dims = [
       {key:'dice', label:'Dice', lo:.48, hi:.65, inv:false},
@@ -244,19 +222,8 @@ export async function render(mount) {
     mount.querySelector('#c-axis').innerHTML = hBarChart({
       items: axes.map(a=>({label:a.label, value:a.spread, c:'var(--accent2)'})),
       lo:0, hi:Math.max(...axes.map(a=>a.spread))*1.15, labelW:150, W:520,
-      fmtV:v=>v.toFixed(3), xlabel:'spread in mean test Dice across that axis',
+      fmtV:v=>v.toFixed(3), xlabel:'spread in mean test Dice across that axis', W:820,
       aria:'Spread of mean test Dice caused by each design axis',
-    });
-
-    const byArch = models.map(m=>{
-      const v = rows.filter(r=>r.model===m&&r.dice!=null).map(r=>r.dice);
-      return {label:MODEL_NAME[m]||m, value:v.length?Math.max(...v):null,
-              c:MODEL_C[m]||'var(--accent2)', hl:m===sel.model};
-    }).sort((a,b)=>(b.value??0)-(a.value??0));
-    mount.querySelector('#c-arch').innerHTML = hBarChart({
-      items:byArch, lo:.55, hi:.65, labelW:150, W:520,
-      xlabel:'best test Dice (macro) achieved by that architecture',
-      aria:'Best test Dice per architecture',
     });
   }
   draw();

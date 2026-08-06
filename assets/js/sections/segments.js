@@ -4,7 +4,7 @@
 
 import { load } from '../lib/data.js';
 import { M, fmtOr, int, esc, mean, std, quantile, bootCI } from '../lib/metrics.js';
-import { boxPlot, barChart, BOXPLOT_KEY } from '../lib/charts.js';
+import { boxPlot, BOXPLOT_KEY } from '../lib/charts.js';
 import { DataTable } from '../lib/table.js';
 
 const MIN_N = 5;   // groups below this are shown but flagged as unreliable
@@ -41,10 +41,6 @@ export async function render(mount) {
   <figure><div class="viz" id="c-year"></div><figcaption id="cap-year"></figcaption></figure>
   <div id="t-year"></div>
 
-  <h2>By time of night</h2>
-  <p class="small">Hour is taken from the scan timestamp (UTC). Moth flights peak after dusk, so early
-  and late hours have fewer scans and noisier estimates.</p>
-  <figure><div class="viz" id="c-hour"></div><figcaption id="cap-hour"></figcaption></figure>
 
   <h2>By plume size</h2>
   <p>This is the strongest pattern in the whole evaluation, and it matches the baseline report's finding:
@@ -105,18 +101,6 @@ export async function render(mount) {
     mount.querySelector('#t-year').innerHTML = groupTable(
       years.map(y => ({key: String(y), rows: gy.get(y)})), metric);
 
-    /* ---- hour ---- */
-    const gh = grp(rows, r => r.hour);
-    const hours = [...gh.keys()].sort((a, b) => a - b);
-    mount.querySelector('#c-hour').innerHTML = barChart({
-      cats: hours.map(h => String(h).padStart(2, '0')),
-      series: [{label, c: 'var(--accent2)', values: hours.map(h => summarize(gh.get(h), metric)?.mean)}],
-      lo: 0, hi: 1, ylabel: `mean ${label}`, xlabel: 'hour of day (UTC)',
-      W: 880, H: 280, aria: `${label} by hour`,
-    });
-    const thin = hours.filter(h => gh.get(h).length < MIN_N).length;
-    mount.querySelector('#cap-hour').textContent =
-      `Mean ${label} by hour (UTC). ${thin} of ${hours.length} hours have fewer than ${MIN_N} scenes and should not be compared.`;
 
     /* ---- size ---- */
     const bands = [
