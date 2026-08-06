@@ -48,9 +48,10 @@ export async function render(mount) {
   <figure><div class="viz" id="c-size"></div><figcaption id="cap-size"></figcaption></figure>
   <div id="t-size"></div>
 
-  <h2>By plume density and fragmentation</h2>
-  <p class="small">Density is the mean reflectivity of the labelled pixels; fragmentation is the number of
-  separate connected regions in the ground truth. Both describe how "clean" a target is.</p>
+  <h2>By fragmentation and distance from the radar</h2>
+  <p class="small">Fragmentation is the number of separate connected regions in the ground truth (the
+  labels are made of many small blobs, so most scenes have dozens). Distance is the mean range of the
+  labelled plume from the radar, where the beam is sampled higher in the atmosphere.</p>
   <div class="two">
     <figure><div class="viz" id="c-frag"></div><figcaption id="cap-frag"></figcaption></figure>
     <figure><div class="viz" id="c-dist"></div><figcaption id="cap-dist"></figcaption></figure>
@@ -129,8 +130,10 @@ export async function render(mount) {
     mount.querySelector('#t-size').innerHTML = groupTable(bandRows, metric);
 
     /* ---- fragmentation ---- */
-    const fr = [['1 region', r => r.n_gt_regions <= 1], ['2 – 3', r => r.n_gt_regions >= 2 && r.n_gt_regions <= 3],
-                ['4 – 8', r => r.n_gt_regions >= 4 && r.n_gt_regions <= 8], ['> 8 regions', r => r.n_gt_regions > 8]];
+    // Ground-truth labels are highly fragmented (median ~63 regions), so bins are
+    // chosen to actually split the data rather than pile it all into one bucket.
+    const fr = [['< 20', r => r.n_gt_regions < 20], ['20 – 50', r => r.n_gt_regions >= 20 && r.n_gt_regions < 50],
+                ['50 – 100', r => r.n_gt_regions >= 50 && r.n_gt_regions < 100], ['≥ 100 regions', r => r.n_gt_regions >= 100]];
     mount.querySelector('#c-frag').innerHTML = boxPlot({
       groups: fr.map(([k, f]) => {
         const s = summarize(rows.filter(f), metric);
