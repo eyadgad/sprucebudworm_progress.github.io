@@ -51,24 +51,20 @@ export async function render(mount) {
   </div></div>
 
   <h2>Curves</h2>
-  <div class="ctrls">
-    <div class="f"><label for="mt">Metric</label>
-      <select id="mt">
-        <option value="val_dice">Validation Dice</option>
-        <option value="train_loss">Training loss</option>
-        <option value="val_iou">Validation IoU</option>
-        <option value="val_precision">Validation precision</option>
-        <option value="val_recall">Validation recall</option>
-        <option value="lr">Learning rate</option>
-      </select></div>
-    <div class="f"><label for="add">Add a run to compare</label>
-      <select id="add"><option value="">Choose a run…</option>
-        ${[...rows].sort((a,b)=>(b.dice??0)-(a.dice??0)).map(r=>
-          `<option value="${esc(r.name)}">${esc(MODEL_NAME[r.model]||r.model)} · ${esc(LOSS_NAME[r.loss]||r.loss)} · ${r.n_elev} elev — Dice ${fmtOr(r.dice,'dice')}</option>`).join('')}
-      </select></div>
-    <button id="clear" class="ghost">Show only the selected run</button>
+  <div class="f" style="margin-bottom:12px">
+    <label>Metric</label>
+    <div class="chips" id="mbtns"></div>
   </div>
-  <div class="chips" id="chips"></div>
+  <div class="f" style="margin-bottom:6px">
+    <label>Compare with another run (best of each architecture; click to toggle)</label>
+    <div class="chips" id="qcmp"></div>
+  </div>
+  <div class="chips" id="moreRuns" style="display:none;margin:2px 0 8px;max-height:132px;overflow-y:auto"></div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+    <span class="small" style="color:var(--muted)">Showing:</span>
+    <div class="chips" id="chips"></div>
+    <button id="clear" class="ghost">Only the selected run</button>
+  </div>
   <figure><div class="viz" id="c-main"></div>
     <figcaption id="cap"></figcaption></figure>
   <div id="leg"></div>
@@ -85,16 +81,65 @@ export async function render(mount) {
     </div>
   </div>`;
 
+  const rlabel = r => `${MODEL_NAME[r.model] || r.model} ${r.n_elev}e`;
+
+  /* ---- metric toggle buttons ---- */
+  const METRICS = [['val_dice', 'Val Dice'], ['train_loss', 'Train loss'], ['val_iou', 'Val IoU'],
+    ['val_precision', 'Precision'], ['val_recall', 'Recall'], ['lr', 'LR']];
+  const mbtns = mount.querySelector('#mbtns');
+  const drawMetricBtns = () => {
+    mbtns.innerHTML = METRICS.map(([k, l]) =>
+      `<button class="chip${k === metric ? ' on' : ''}" data-m="${k}">${l}</button>`).join('');
+    mbtns.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+      metric = b.dataset.m; drawMetricBtns(); drawMain();
+    }));
+  };
+
+  /* ---- run comparison: quick chips (best per architecture) + a 'more' panel ---- */
+  const byArch = {};
+  [...rows].filter(r => r.dice != null && r.name !== sel.name)
+    .forEach(r => { if (!byArch[r.model] || r.dice > byArch[r.model].dice) byArch[r.model] = r; });
+  const quickRuns = Object.values(byArch).sort((a, b) => b.dice - a.dice);
+  const quickNames = new Set(quickRuns.map(r => r.name));
+
+  const toggleRun = (name) => {
+    if (name === sel.name) return;                 // the selected run is the fixed baseline
+    if (active.has(name)) active.delete(name);
+    else active.set(name, PALETTE[active.size % PALETTE.length]);
+    drawQuick(); drawMore(); drawChips(); drawMain();
+  };
+
+  const qcmp = mount.querySelector('#qcmp');
+  function drawQuick() {
+    qcmp.innerHTML = quickRuns.map(r =>
+      `<button class="chip${active.has(r.name) ? ' on' : ''}" data-n="${esc(r.name)}">${active.has(r.name) ? '✓ ' : '+ '}${esc(rlabel(r))} · ${fmtOr(r.dice, 'dice')}</button>`).join('') +
+      `<button class="chip" id="moreBtn">more…</button>`;
+    qcmp.querySelectorAll('.chip[data-n]').forEach(b => b.addEventListener('click', () => toggleRun(b.dataset.n)));
+    qcmp.querySelector('#moreBtn').addEventListener('click', () => {
+      const p = mount.querySelector('#moreRuns');
+      p.style.display = p.style.display === 'none' ? 'flex' : 'none';
+    });
+  }
+  function drawMore() {
+    const panel = mount.querySelector('#moreRuns');
+    const others = [...rows].filter(r => r.dice != null && r.name !== sel.name && !quickNames.has(r.name))
+      .sort((a, b) => b.dice - a.dice);
+    panel.innerHTML = others.map(r =>
+      `<button class="chip${active.has(r.name) ? ' on' : ''}" data-n="${esc(r.name)}" style="font-size:11px">${active.has(r.name) ? '✓ ' : ''}${esc(rlabel(r))} · ${esc(LOSS_NAME[r.loss] || r.loss)} · ${fmtOr(r.dice, 'dice')}</button>`).join('');
+    panel.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => toggleRun(b.dataset.n)));
+  }
+
+  /* ---- "Showing" row: currently plotted runs, removable (selected is fixed) ---- */
   const chips = mount.querySelector('#chips');
   const drawChips = () => {
-    chips.innerHTML = [...active].map(([n,c]) => {
-      const r = rows.find(x=>x.name===n);
-      return `<button class="chip on" data-n="${esc(n)}" style="border-color:${c}">
+    chips.innerHTML = [...active].map(([n, c]) => {
+      const r = rows.find(x => x.name === n);
+      return `<button class="chip on" data-n="${esc(n)}" style="border-color:${c}"${r.selected ? ' title="the selected run — always shown"' : ''}>
         <span class="sw" style="background:${c};margin-right:5px"></span>
-        ${esc(MODEL_NAME[r.model]||r.model)} ${r.n_elev} elev${r.selected?' ★':''} ✕</button>`;
+        ${esc(rlabel(r))}${r.selected ? ' ★' : ' ✕'}</button>`;
     }).join('');
     chips.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
-      if (active.size > 1) { active.delete(b.dataset.n); drawChips(); drawMain(); }
+      if (b.dataset.n !== sel.name) toggleRun(b.dataset.n);
     }));
   };
 
@@ -128,17 +173,10 @@ export async function render(mount) {
       : `${series.length} run${series.length>1?'s':''} shown. The dashed line marks the epoch whose checkpoint was evaluated.`;
   }
 
-  mount.querySelector('#mt').addEventListener('change', e => { metric = e.target.value; drawMain(); });
-  mount.querySelector('#add').addEventListener('change', e => {
-    const n = e.target.value;
-    if (n && !active.has(n)) {
-      active.set(n, PALETTE[active.size % PALETTE.length]);
-      drawChips(); drawMain();
-    }
-    e.target.value = '';
-  });
   mount.querySelector('#clear').addEventListener('click', () => {
-    active.clear(); active.set(sel.name, PALETTE[0]); drawChips(); drawMain();
+    active.clear(); active.set(sel.name, PALETTE[0]);
+    mount.querySelector('#moreRuns').style.display = 'none';
+    drawQuick(); drawMore(); drawChips(); drawMain();
   });
 
   /* ---- over/under-fitting ---- */
@@ -176,6 +214,6 @@ export async function render(mount) {
       }</p>`;
   }
 
-  drawChips(); drawMain();
+  drawMetricBtns(); drawQuick(); drawMore(); drawChips(); drawMain();
 }
 
