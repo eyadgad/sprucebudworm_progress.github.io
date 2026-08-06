@@ -55,9 +55,15 @@ export function legend(items) {
 
 /* ---------------- grouped / stacked bars ---------------- */
 export function barChart({cats, series, lo=0, hi=null, ylabel='', xlabel='', W=860, H=320, stacked=false, valueLabels=false, aria='bar chart', inlineLegend=false}) {
-  // Guard the degenerate case where every value is zero/absent: without it the
-  // scale collapses and every coordinate becomes NaN, silently blanking the chart.
-  const rawMax = Math.max(...series.flatMap(s => s.values.map(v => N(v) ?? 0)), 0) * 1.08;
+  // The y-axis must clear the tallest thing actually drawn. For a stacked chart
+  // that is each category's COLUMN TOTAL, not the largest single segment — using
+  // the segment max lets the tallest stack overshoot the axis and (because the
+  // SVG is overflow:visible) spill up into the heading above it.
+  const peak = stacked
+    ? Math.max(...cats.map((_, ci) => series.reduce((a, s) => a + (N(s.values[ci]) ?? 0), 0)), 0)
+    : Math.max(...series.flatMap(s => s.values.map(v => N(v) ?? 0)), 0);
+  const rawMax = peak * 1.08;
+  // Guard the degenerate all-zero case, which would collapse the scale to NaN.
   const maxV = hi ?? (rawMax > lo ? rawMax : lo + 1);
   // room for the axis title and, when asked, an in-figure key
   const f = frame({W, H, padB: 56 + (xlabel ? 20 : 0) + (inlineLegend ? 22 : 0)});

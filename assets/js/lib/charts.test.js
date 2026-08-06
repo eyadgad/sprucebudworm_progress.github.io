@@ -140,6 +140,19 @@ const edge = [
 ];
 edge.forEach(([n, svg]) => ok(`${n}: no NaN in output`, clean(svg)));
 ok('empty-bar chart still shows an axis line', edge[0][1].includes('<line'));
+
+// stacked bars: the axis must clear the tallest COLUMN TOTAL, not the biggest
+// single segment, or the tallest stack overshoots the plot and spills upward
+ok('stacked bar y-axis clears the tallest column total', (() => {
+  const svg = barChart({cats: ['train', 'val', 'test'],
+    series: [{label: 'with plume', c: '#1', values: [1092, 317, 170]},
+             {label: 'plume free', c: '#2', values: [345, 94, 34]}],
+    stacked: true, ylabel: 'scenes', xlabel: 'data split', W: 420, H: 300});
+  // the drawn rects must all have y >= the top padding (nothing above the plot)
+  const vb = svg.match(/viewBox="0 0 [\d.]+ ([\d.]+)"/)[1];
+  const ys = [...svg.matchAll(/<rect x="[\d.]+" y="([\d.-]+)"/g)].map(m => +m[1]);
+  return Math.min(...ys) >= 0;          // no rect starts above the SVG top edge
+})());
 ok('null bar value is announced, not silently dropped',
    edge[4][1].includes('not available'));
 
