@@ -33,8 +33,7 @@ export async function render(mount) {
     <li><b>Architecture is not the bottleneck.</b> Six architectures land within ~0.04 Dice, and the two
       best models agree scene-by-scene at ρ = 0.97, failing on the same scenes.
       <a href="#/experiments">Experiment comparison</a></li>
-    <li><b>The operating threshold is not critical.</b> Dice is nearly flat between 0.15 and 0.6.
-      <a href="#/threshold">Threshold and calibration</a></li>
+    <li><b>The operating threshold is not critical.</b> Dice is nearly flat between 0.15 and 0.6.</li>
   </ul></div></div>
 
   <h2>Major limitations</h2>
@@ -50,8 +49,7 @@ export async function render(mount) {
       <a href="#/stats">Statistical analysis</a></li>
     <li><b>The mean is not a typical scene.</b> The Dice distribution is left-skewed with ${zero} zero-overlap
       scenes; the median (${fmtOr(quantile(d, .5), 'dice')}) exceeds the mean (${fmtOr(mean(d), 'dice')}).</li>
-    <li><b>Probabilities are not calibrated.</b> They are usable as a ranking, not as likelihoods.
-      <a href="#/threshold">Threshold and calibration</a></li>
+    <li><b>Probabilities are not calibrated.</b> They are usable as a ranking, not as likelihoods.</li>
     <li><b>Labels are single-annotator and unvalidated.</b> No second annotation exists, so label noise
       cannot be separated from model error.</li>
   </ul></div></div>

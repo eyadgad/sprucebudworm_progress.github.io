@@ -26,7 +26,6 @@ const ROUTES = {
   training:    {title: 'Training diagnostics',      mod: () => import('./sections/training.js' + V)},
   aggregate:   {title: 'Aggregate evaluation',      mod: () => import('./sections/aggregate.js' + V)},
   segments:    {title: 'Performance breakdown',     mod: () => import('./sections/segments.js' + V)},
-  threshold:   {title: 'Threshold & calibration',   mod: () => import('./sections/threshold.js' + V)},
   spatial:     {title: 'Spatial analysis',          mod: () => import('./sections/spatial.js' + V)},
   samples:     {title: 'Sample explorer',           mod: () => import('./sections/samples.js' + V)},
   errors:      {title: 'Error & failure analysis',  mod: () => import('./sections/errors.js' + V)},

@@ -84,13 +84,12 @@ data/samples/*.png             generated per-scene pixel layers
 | 04 | `#/training` | Convergence, over/under-fitting, stability |
 | 05 | `#/aggregate` | Validation vs test metrics, confusion matrices, intervals |
 | 06 | `#/segments` | Performance by year, hour, size, fragmentation, night, difficulty |
-| 07 | `#/threshold` | Threshold sweeps, PR curve, probability calibration |
-| 08 | `#/spatial` | Region structure, area agreement, errors by radar range |
-| 09 | `#/samples` | Every scene; open one to inspect layers and move the threshold |
-| 10 | `#/errors` | Failure taxonomy, drivers, model disagreement, clustering |
-| 11 | `#/stats` | Distributions, bootstrap intervals, paired tests, correlations |
-| 12 | `#/conclusions` | Limits, readiness, ranked next experiments |
-| 13 | `#/about` | Metric glossary, provenance, unsupported analyses |
+| 07 | `#/spatial` | Region structure, area agreement, errors by radar range |
+| 08 | `#/samples` | Every scene; open one to inspect layers and move the threshold |
+| 09 | `#/errors` | Failure taxonomy, drivers, model disagreement, clustering |
+| 10 | `#/stats` | Distributions, bootstrap intervals, paired tests, correlations |
+| 11 | `#/conclusions` | Limits, readiness, ranked next experiments |
+| 12 | `#/about` | Metric glossary, provenance, unsupported analyses |
 
 ---
 
