@@ -7,20 +7,32 @@
 
 import { loading, errorState } from './lib/data.js';
 
+/* Cache-busting build id. Static hosting caches JS for ~10 minutes, and this
+   single-page app keeps a section's module in memory for the whole visit, so a
+   fresh deploy can keep running stale section code until a hard refresh.
+   build.txt is fetched with no-store and appended to every section import, so
+   bumping it on deploy forces the new modules to load. If the fetch fails the
+   imports fall back to the plain path (previous behaviour). */
+let V = '';
+try {
+  const r = await fetch(new URL('build.txt', import.meta.url), {cache: 'no-store'});
+  if (r.ok) { const t = (await r.text()).trim(); if (t) V = '?v=' + encodeURIComponent(t); }
+} catch {}
+
 const ROUTES = {
-  overview:    {title: 'Executive overview',        mod: () => import('./sections/overview.js')},
-  data:        {title: 'Data exploration',          mod: () => import('./sections/data.js')},
-  experiments: {title: 'Experiment comparison',     mod: () => import('./sections/experiments.js')},
-  training:    {title: 'Training diagnostics',      mod: () => import('./sections/training.js')},
-  aggregate:   {title: 'Aggregate evaluation',      mod: () => import('./sections/aggregate.js')},
-  segments:    {title: 'Performance breakdown',     mod: () => import('./sections/segments.js')},
-  threshold:   {title: 'Threshold & calibration',   mod: () => import('./sections/threshold.js')},
-  spatial:     {title: 'Spatial analysis',          mod: () => import('./sections/spatial.js')},
-  samples:     {title: 'Sample explorer',           mod: () => import('./sections/samples.js')},
-  errors:      {title: 'Error & failure analysis',  mod: () => import('./sections/errors.js')},
-  stats:       {title: 'Statistical analysis',      mod: () => import('./sections/stats.js')},
-  conclusions: {title: 'Conclusions',               mod: () => import('./sections/conclusions.js')},
-  about:       {title: 'Methods & glossary',        mod: () => import('./sections/about.js')},
+  overview:    {title: 'Executive overview',        mod: () => import('./sections/overview.js' + V)},
+  data:        {title: 'Data exploration',          mod: () => import('./sections/data.js' + V)},
+  experiments: {title: 'Experiment comparison',     mod: () => import('./sections/experiments.js' + V)},
+  training:    {title: 'Training diagnostics',      mod: () => import('./sections/training.js' + V)},
+  aggregate:   {title: 'Aggregate evaluation',      mod: () => import('./sections/aggregate.js' + V)},
+  segments:    {title: 'Performance breakdown',     mod: () => import('./sections/segments.js' + V)},
+  threshold:   {title: 'Threshold & calibration',   mod: () => import('./sections/threshold.js' + V)},
+  spatial:     {title: 'Spatial analysis',          mod: () => import('./sections/spatial.js' + V)},
+  samples:     {title: 'Sample explorer',           mod: () => import('./sections/samples.js' + V)},
+  errors:      {title: 'Error & failure analysis',  mod: () => import('./sections/errors.js' + V)},
+  stats:       {title: 'Statistical analysis',      mod: () => import('./sections/stats.js' + V)},
+  conclusions: {title: 'Conclusions',               mod: () => import('./sections/conclusions.js' + V)},
+  about:       {title: 'Methods & glossary',        mod: () => import('./sections/about.js' + V)},
 };
 
 const main  = document.getElementById('main');
