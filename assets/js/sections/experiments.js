@@ -4,7 +4,7 @@
 import { load } from '../lib/data.js';
 import { M, fmtOr, tip, esc, MODEL_NAME, LOSS_NAME, targetName, mean } from '../lib/metrics.js';
 import { DataTable } from '../lib/table.js';
-import { scatter, parallel, legend, hBarChart } from '../lib/charts.js';
+import { scatter, legend, hBarChart } from '../lib/charts.js';
 
 const MODEL_C = {
   unet:'#98a6b6', attention_unet:'#2f9d8c', nnunet:'#b07aa1',
@@ -47,13 +47,6 @@ export async function render(mount) {
     better on both axes. Colour encodes architecture; the selected run is ringed. Dashed lines mark the
     selected run's position.</figcaption></figure>
   <div id="l-pr"></div>
-
-  <h2>Multi-metric comparison</h2>
-  <p class="small">Each line is one run crossing five axes. A run that is genuinely better is high on all
-  of them; the selected run is drawn solid. Only runs matching the filters above are shown.</p>
-  <figure><div class="viz" id="c-par"></div>
-    <figcaption>Parallel coordinates over region quality, boundary quality, precision, recall and false
-    alarms. Axes are oriented so that up is always better, including the inverted false-alarm axis.</figcaption></figure>
 
   <h2>What actually moved the score</h2>
   <figure><div class="viz" id="c-axis"></div>
@@ -186,22 +179,6 @@ export async function render(mount) {
     });
     mount.querySelector('#l-pr').innerHTML =
       legend(models.map(m=>({c:MODEL_C[m]||'var(--accent2)', label:MODEL_NAME[m]||m})));
-
-    const dims = [
-      {key:'dice', label:'Dice', lo:.48, hi:.65, inv:false},
-      {key:'boundary_iou', label:'Boundary IoU', lo:.24, hi:.45, inv:false},
-      {key:'precision', label:'Precision', lo:.40, hi:.70, inv:false},
-      {key:'recall', label:'Recall', lo:.40, hi:.90, inv:false},
-      {key:'bg_fp_rate', label:'Few false alarms', lo:0, hi:.013, inv:true},
-    ];
-    mount.querySelector('#c-par').innerHTML = parallel({
-      dims: dims.map(d=>({label:d.label, lo:d.inv?d.hi:d.lo, hi:d.inv?d.lo:d.hi})),
-      rows: f.filter(r=>dims.every(d=>r[d.key]!=null)).map(r=>({
-        label:`${MODEL_NAME[r.model]||r.model} ${r.n_elev} elev — Dice ${r.dice}`,
-        c:r.selected?'var(--best)':(MODEL_C[r.model]||'var(--accent2)'),
-        hl:r.selected, values:dims.map(d=>r[d.key]),
-      })), W:880, H:340, aria:'Parallel coordinates across five metrics',
-    });
 
     // effect of each design axis, measured over the runs that vary it
     const axisEffect = (label, keyFn) => {

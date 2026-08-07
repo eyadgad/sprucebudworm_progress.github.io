@@ -44,8 +44,6 @@ export async function render(mount) {
   <div id="fa"></div>
 
   <h2>Do the two models fail on the same scenes?</h2>
-  <figure><div class="viz" id="c-cmp"></div><figcaption id="cap-cmp"></figcaption></figure>
-  <div id="l-cmp"></div>
   <div id="cmptable"></div>
 
   <h2>Do failures cluster in time?</h2>
@@ -198,32 +196,17 @@ export async function render(mount) {
 
     /* ---- model disagreement ---- */
     const both = S.filter(s => s.dice != null && s.dice_cmp != null);
-    mount.querySelector('#c-cmp').innerHTML = scatter({
-      points: both.map(s => ({
-        x: s.dice_cmp, y: s.dice,
-        c: Math.abs(s.dice - s.dice_cmp) > 0.2 ? 'var(--warn)' : 'var(--accent2)', r: 3.4, o: .65,
-        t: `${tsLabel(s.ts)} — Attention UNet ${s.dice}, UNet++ ${s.dice_cmp}`})),
-      xlo: 0, xhi: 1, ylo: 0, yhi: 1, trend: {x0: 0, y0: 0, x1: 1, y1: 1},
-      xlabel: 'Dice — UNet++ (9 elevations)', ylabel: 'Dice — Attention UNet (selected)',
-      W: 880, H: 380, aria: 'Per-scene Dice of the two models',
-    });
-    mount.querySelector('#l-cmp').innerHTML = legend([
-      {c: 'var(--accent2)', label: 'models agree (Dice within 0.2)'},
-      {c: 'var(--warn)', label: 'models disagree (Dice differ by > 0.2)'},
-      {c: 'var(--best)', label: 'dashed line: identical score'},
-    ]);
     const bothZero = both.filter(s => s.dice === 0 && s.dice_cmp === 0).length;
     const disagree = both.filter(s => Math.abs(s.dice - s.dice_cmp) > 0.2).length;
     const rhoM = spearman(both.map(s => s.dice), both.map(s => s.dice_cmp));
-    mount.querySelector('#cap-cmp').innerHTML =
-      `Points on the dashed line are scenes the two models score identically. Rank correlation is
-       <b>${rhoM == null ? '—' : rhoM.toFixed(3)}</b>. Only <b>${disagree}</b> of ${both.length} scenes differ by
-       more than 0.2 Dice, and <b>${bothZero}</b> scenes score zero for <i>both</i> models.`;
     mount.querySelector('#cmptable').innerHTML = `
+      <p class="small">Scored on the same ${both.length} scenes, the selected Attention UNet and the
+      UNet++ comparison agree at rank correlation <b>${rhoM == null ? '—' : rhoM.toFixed(3)}</b>: only
+      <b>${disagree}</b> scenes differ by more than 0.2 Dice, and <b>${bothZero}</b> score zero for both.</p>
       <div class="note"><span class="tag">observation</span><div class="bd">
-        The two architectures fail on largely the <b>same</b> scenes. ${bothZero} scenes defeat both.
-        Because the models share their inputs, labels and split but differ in architecture, this points
-        to the difficulty living in <b>the data</b> rather than in either network.
+        The two architectures fail on largely the <b>same</b> scenes. Because they share their inputs,
+        labels and split but differ in architecture, this points to the difficulty living in
+        <b>the data</b> rather than in either network.
       </div></div>`;
 
     /* ---- temporal clustering ---- */

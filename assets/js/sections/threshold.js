@@ -39,14 +39,6 @@ export async function render(mount) {
   <div id="l-sweep"></div>
   <div id="t-sweep"></div>
 
-  <h2>Dice against the threshold</h2>
-  <figure><div class="viz" id="c-f1"></div>
-    <figcaption>Dice (macro) as the threshold moves, with the selected point marked and the best swept
-    point annotated. The top is almost flat between about 0.15 and 0.6, so the exact threshold matters
-    little. A precision–recall curve is not shown: over the swept range precision and recall barely move
-    (recall stays ~0.82, precision ~0.64), so it collapses to a single point — the flat lines in the
-    sweep above already show that there is no meaningful trade-off to make here.</figcaption></figure>
-
   <h2>Where the probabilities sit</h2>
   <p class="small">Distribution of predicted probability over pixels that are truly plume and pixels that
   are truly background, pooled over all plume-bearing scenes in the split. Note the log count axis:
@@ -134,15 +126,6 @@ export async function render(mount) {
           <td class="n">${fmtOr(c.dice_macro, 'dice')}</td><td class="n">${fmtOr(c.dice_micro, 'dice_micro')}</td>
           <td class="n">${fmtOr(c.iou_micro, 'iou')}</td><td class="n">${fmtOr(c.precision, 'precision')}</td>
           <td class="n">${fmtOr(c.recall, 'recall')}</td></tr>`).join('')}</tbody></table></div>`;
-
-    mount.querySelector('#c-f1').innerHTML = lineChart({
-      series: [{label: 'Dice', c: 'var(--accent2)', points: curve.map(c => [c.t, c.dice_macro]), dots: true, best: T}],
-      xlo: Math.min(...th.swept), xhi: Math.max(...th.swept),
-      ylo: Math.min(...curve.map(c => c.dice_macro)) * 0.95, yhi: Math.max(...curve.map(c => c.dice_macro)) * 1.03,
-      xlabel: 'probability threshold', ylabel: 'Dice (macro)', W: 880, H: 320,
-      marks: bestDice ? [{x: bestDice.t, label: `best ${bestDice.t}`}] : [],
-      aria: 'Dice against threshold',
-    });
 
     /* probability distributions */
     mount.querySelector('#c-hist').innerHTML = histogram({

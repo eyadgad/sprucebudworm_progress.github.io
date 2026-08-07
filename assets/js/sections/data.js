@@ -3,7 +3,7 @@
 
 import { load } from '../lib/data.js';
 import { int, pct, SPLIT_COLOR, quantile, mean } from '../lib/metrics.js';
-import { barChart, histogram, boxPlot, legend, BOXPLOT_KEY } from '../lib/charts.js';
+import { barChart, histogram, boxPlot, legend } from '../lib/charts.js';
 
 const SPLITS = ['train', 'val', 'test'];
 
@@ -61,10 +61,6 @@ export async function render(mount) {
   <p>Labels store reflectivity in dBZ for plume pixels. A threshold turns them into a binary mask.
   Experiment 3 selected <b>dBZ ≥ 0</b>. This is what each choice keeps:</p>
   <div id="thr-table"></div>
-  <figure><div class="viz" id="c-thr"></div>
-    <figcaption>Plume area per scene under each label definition, on a log10 scale. Raising the
-    threshold to 5 dBZ discards most of the signal, which is why the dBZ ≥ 5 runs scored far lower.
-    ${BOXPLOT_KEY}</figcaption></figure>
 
   <h2>Are the splits comparable?</h2>
   <p>If the test split were systematically different from training, the reported score would not be
@@ -165,21 +161,6 @@ export async function render(mount) {
     <p class="small">Computed over all ${int(pos.length)} positive scenes from the cached label masks.
     “Scenes left empty” counts scenes where the threshold removes every positive pixel — those scenes
     become unlearnable under that definition.</p>`;
-
-  const areasFor = k => pos.map(s => s[k] ?? 0).filter(v => v > 0);
-  const box = (label, arr, c) => {
-    const a = arr.map(v => Math.log10(v));
-    return {label, n: arr.length, c,
-      lo: quantile(a, .05), q1: quantile(a, .25), med: quantile(a, .5),
-      q3: quantile(a, .75), hi: quantile(a, .95), mean: mean(a)};
-  };
-  mount.querySelector('#c-thr').innerHTML = boxPlot({
-    groups: [box('any echo', areasFor('area_isfinite'), 'var(--tn)'),
-             box('dBZ ≥ 0', areasFor('area'), 'var(--accent2)'),
-             box('dBZ ≥ 5', areasFor('area_dbz5'), 'var(--fp)')],
-    ylo: 1.5, yhi: 6, ylabel: 'plume area, log10(pixels)', xlabel: 'label definition',
-    W: 560, H: 320, aria: 'Plume area by label definition',
-  });
 
   /* ---------- comparability table ---------- */
   const stat = arr => arr.length ? {

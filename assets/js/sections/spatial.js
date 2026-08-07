@@ -3,7 +3,7 @@
 
 import { load } from '../lib/data.js';
 import { fmtOr, int, pct, esc, mean, quantile, SEG } from '../lib/metrics.js';
-import { barChart, scatter, histogram, legend, lineChart } from '../lib/charts.js';
+import { barChart, scatter, legend } from '../lib/charts.js';
 import { card, sceneFilters } from '../lib/ui.js';
 
 export async function render(mount) {
@@ -22,16 +22,11 @@ export async function render(mount) {
   regions in the prediction with the number in the label shows whether the model fragments one plume
   into many pieces, or merges several into one.</p>
   <div id="regcards"></div>
-  <div class="two">
-    <figure><div class="viz" id="c-reg"></div>
-      <figcaption>Predicted regions against labelled regions, one point per scene. Points on the dashed
-      line have matching structure; points far above it are fragmented predictions.
-      <span style="color:var(--fp)">Red</span> marks failing scenes (Dice &lt; 0.3),
-      <span style="color:var(--accent2)">blue</span> the rest.</figcaption></figure>
-    <figure><div class="viz" id="c-regdist"></div>
-      <figcaption>Distribution of the fragmentation ratio (predicted regions ÷ labelled regions).
-      A ratio of 1 means the prediction has the same number of pieces as the label.</figcaption></figure>
-  </div>
+  <figure><div class="viz" id="c-reg"></div>
+    <figcaption>Predicted regions against labelled regions, one point per scene. Points on the dashed
+    line have matching structure; most fall below it, so the model tends to merge the label's many
+    small blobs into fewer, larger ones. <span style="color:var(--fp)">Red</span> marks failing scenes
+    (Dice &lt; 0.3), <span style="color:var(--accent2)">blue</span> the rest.</figcaption></figure>
   <div id="regtable"></div>
 
   <h2>Predicted area against labelled area</h2>
@@ -44,9 +39,6 @@ export async function render(mount) {
   pixel of every plume-bearing scene in the split.</p>
   <figure><div class="viz" id="c-radial"></div><figcaption id="cap-radial"></figcaption></figure>
   <div id="l-radial"></div>
-  <figure><div class="viz" id="c-radrate"></div>
-    <figcaption>Recall and precision computed inside each range ring. Rings holding very little
-    labelled signal are noisy and are marked in the table below.</figcaption></figure>
   <div id="radtable"></div>
 
   <h2>Shape failure categories</h2>
@@ -79,19 +71,9 @@ export async function render(mount) {
         c: s.dice < 0.3 ? 'var(--fp)' : 'var(--accent2)', r: 3.4, o: .6,
         t: `${s.ts} — ${s.n_gt_regions} labelled, ${s.n_pred_regions} predicted, Dice ${s.dice}`})),
       xlo: 0, xhi: maxR, ylo: 0, yhi: maxR,
-      xlabel: 'labelled regions', ylabel: 'predicted regions', W: 520, H: 330,
+      xlabel: 'labelled regions', ylabel: 'predicted regions', W: 880, H: 340,
       trend: {x0: 0, y0: 0, x1: maxR, y1: maxR},
       aria: 'Predicted against labelled region counts',
-    });
-
-    const lr = ratios.map(r => Math.log2(Math.max(r, 0.05)));
-    const lo = -3, hi = 5, nb = 24, w = (hi - lo) / nb;
-    const counts = new Array(nb).fill(0);
-    lr.forEach(v => { const i = Math.floor((v - lo) / w); if (i >= 0 && i < nb) counts[i]++; });
-    mount.querySelector('#c-regdist').innerHTML = histogram({
-      bins: Array.from({length: nb}, (_, i) => Math.pow(2, lo + i * w)),
-      counts, xlabel: 'predicted ÷ labelled regions', ylabel: 'scenes', W: 520, H: 330,
-      aria: 'Distribution of fragmentation ratio',
     });
 
     /* ---- area agreement ---- */
@@ -137,15 +119,6 @@ export async function render(mount) {
 
     const rec = R.tp.map((tp, i) => (tp + R.fn[i]) ? tp / (tp + R.fn[i]) : null);
     const pre = R.tp.map((tp, i) => (tp + R.fp[i]) ? tp / (tp + R.fp[i]) : null);
-    const mid = cats.map((_, i) => (edges[i] + edges[i + 1]) / 2);
-    mount.querySelector('#c-radrate').innerHTML = lineChart({
-      series: [
-        {label: 'recall', c: SEG.fn.c, points: mid.map((x, i) => [x, rec[i]])},
-        {label: 'precision', c: SEG.fp.c, points: mid.map((x, i) => [x, pre[i]])},
-      ], xlo: 0, xhi: edges.at(-1), ylo: 0, yhi: 1,
-      xlabel: 'distance from radar (km)', ylabel: 'rate within ring', W: 880, H: 300,
-      aria: 'Recall and precision by distance ring',
-    });
     mount.querySelector('#radtable').innerHTML = `
       <div class="tscroll"><table>
         <thead><tr><th>Ring (km)</th><th>Labelled px</th><th>Share of signal</th><th>Recall</th>
