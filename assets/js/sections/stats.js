@@ -50,10 +50,7 @@ export async function render(mount) {
   <figure><div class="viz" id="c-corr"></div><figcaption id="cap-corr"></figcaption></figure>
 
   <h2>Comparison across years</h2>
-  <div id="years"></div>
-
-  <h2>Validation versus test</h2>
-  <div id="vt"></div>`;
+  <div id="years"></div>`;
 
   // year/night match with an explicit split (so the val-vs-test table can apply
   // the same year/night to the other split)
@@ -63,8 +60,6 @@ export async function render(mount) {
   function draw() {
     const split = filt.state.split;
     const S = sm.samples.filter(s => s.split === split && s.label === 1 && yn(s));
-    const other = split === 'test' ? 'val' : 'test';
-    const O = sm.samples.filter(s => s.split === other && s.label === 1 && yn(s));
 
     /* ---- descriptives ---- */
     const keys = ['dice', 'iou', 'precision', 'recall', 'boundary_iou', 'nsd', 'hd95', 'assd'];
@@ -227,24 +222,6 @@ export async function render(mount) {
       <p class="small">Years whose scenes come from fewer than three nights are flagged: their intervals
       are driven by a handful of weather situations, not by ${S.filter(s => s.year === years[0]).length}
       independent observations.</p>`;
-
-    /* ---- val vs test ---- */
-    const dv = O.map(s => s.dice).filter(x => x != null);
-    const ciO = bootCI(dv);
-    mount.querySelector('#vt').innerHTML = `
-      <div class="tscroll"><table>
-        <thead><tr><th>Split</th><th>Scenes</th><th>Mean Dice</th><th>Median</th><th>95% CI</th></tr></thead>
-        <tbody>
-        <tr><td>${split}</td><td class="n">${d.length}</td><td class="n">${fmtOr(mean(d), 'dice')}</td>
-          <td class="n">${fmtOr(quantile(d, .5), 'dice')}</td>
-          <td class="n">${ciScene ? `${ciScene[0].toFixed(3)} – ${ciScene[1].toFixed(3)}` : '—'}</td></tr>
-        <tr><td>${other}</td><td class="n">${dv.length}</td><td class="n">${fmtOr(mean(dv), 'dice')}</td>
-          <td class="n">${fmtOr(quantile(dv, .5), 'dice')}</td>
-          <td class="n">${ciO ? `${ciO[0].toFixed(3)} – ${ciO[1].toFixed(3)}` : '—'}</td></tr>
-      </tbody></table></div>
-      <p class="small">${ciScene && ciO && (ciScene[0] < ciO[1] && ciO[0] < ciScene[1])
-        ? 'The two intervals overlap, so there is no evidence that the model was over-tuned to validation. This is a weak check: it is an unpaired comparison of different scenes, and both splits share nights with training.'
-        : 'The intervals do not overlap, which would suggest the splits differ systematically. Given the shared nights, investigate before drawing conclusions.'}</p>`;
   }
 
   const filt = sceneFilters(mount.querySelector('#filters'), {samples: sm.samples, onChange: draw});

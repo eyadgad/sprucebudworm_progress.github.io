@@ -29,12 +29,8 @@ export async function render(mount) {
         `<option value="${k}">${M[k].label}</option>`).join('')}</select></div>
   </div>
   <div class="note"><span class="tag">reading the box plots</span><div class="bd">
-    ${BOXPLOT_KEY}
-  </div></div>
-  <div class="note"><span class="tag">reading groups</span><div class="bd">
-    Bars and boxes show the group mean or distribution; <b>n</b> is always printed. A group with a high
-    mean and n = 2 tells you almost nothing. Use the confidence intervals in the tables rather than the
-    bar heights when comparing small groups.
+    ${BOXPLOT_KEY} <b>n</b> is always printed; for small groups use the confidence intervals in the tables
+    rather than the box heights.
   </div></div>
 
   <h2>By year</h2>
@@ -43,8 +39,7 @@ export async function render(mount) {
 
 
   <h2>By plume size</h2>
-  <p>This is the strongest pattern in the whole evaluation, and it matches the baseline report's finding:
-  performance rises steeply with the size of the target.</p>
+  <p>The strongest pattern in the evaluation: performance rises steeply with the size of the target.</p>
   <figure><div class="viz" id="c-size"></div><figcaption id="cap-size"></figcaption></figure>
   <div id="t-size"></div>
 

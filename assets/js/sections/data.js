@@ -235,9 +235,6 @@ export async function render(mount) {
       <tr><td>Input channels with missing values</td><td class="n">handled</td>
         <td style="text-align:left">Radar tilts are sparse; missing values are filled before normalisation and a
           <code>valid_mask</code> channel tells the model where a real echo existed.</td></tr>
-      <tr><td>Reflectivity distribution per channel</td><td class="na">not exported</td>
-        <td style="text-align:left">Per-channel pixel histograms are not produced by the current pipeline.
-          Adding them would require a pass over the source netCDF files.</td></tr>
     </tbody></table></div>`;
 
   /* ---------- filtered figures ---------- */
