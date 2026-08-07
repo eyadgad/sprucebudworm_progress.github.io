@@ -34,6 +34,10 @@ export async function render(mount) {
   <div id="cards"></div>
 
   <h2>Metrics across thresholds</h2>
+  <p class="small">The threshold barely moves any metric here. That is the result, not a missing signal:
+  raising it trades a little recall for a little precision and leaves Dice almost unchanged. The reason is
+  the saturated probability distribution shown in the next chart. The vertical axis is zoomed to the data
+  range so the small trends are visible.</p>
   <figure><div class="viz" id="c-sweep"></div>
     <figcaption id="cap-sweep"></figcaption></figure>
   <div id="l-sweep"></div>
@@ -65,8 +69,8 @@ export async function render(mount) {
     An ROC curve plots recall against the false-positive rate. Here the negative class is roughly
     99.5% of all pixels, so even a very poor mask has a false-positive rate near zero and the curve is
     pinned to the top-left corner regardless of quality. It would look excellent and mean nothing.
-    The precision–recall curve above is the informative equivalent for this imbalance, which is why it
-    is shown instead.
+    The precision and recall lines in the sweep above are the informative equivalent for this imbalance,
+    which is why they are shown instead.
   </div></div>`;
 
   function draw() {
@@ -106,16 +110,27 @@ export async function render(mount) {
     // precision/recall in the sweep are pixel pooled (micro), like dice_micro
     const LBL = {dice_macro: 'Dice (macro)', dice_micro: 'Dice (micro)', precision: 'Precision (micro)',
                  recall: 'Recall (micro)', iou_micro: 'IoU (micro)'};
+    const vals = curve.flatMap(c => S.map(k => c[k])).filter(v => v != null);
+    const ylo = vals.length ? Math.max(0, Math.min(...vals) - 0.04) : 0;
+    const yhi = vals.length ? Math.min(1, Math.max(...vals) + 0.04) : 1;
     mount.querySelector('#c-sweep').innerHTML = lineChart({
       series: S.map(k => ({label: LBL[k], c: C[k], points: curve.map(c => [c.t, c[k]]), dots: false})),
-      xlo: Math.min(...th.swept), xhi: Math.max(...th.swept), ylo: 0, yhi: 1,
-      xlabel: 'probability threshold', ylabel: 'metric value', W: 880, H: 360,
+      xlo: Math.min(...th.swept), xhi: Math.max(...th.swept), ylo, yhi,
+      xlabel: 'probability threshold', ylabel: 'metric value (axis zoomed to data)', W: 880, H: 360,
       marks: [{x: T, label: `selected ${T}`}, {x: 0.5, label: 'conventional 0.5', c: 'var(--muted)'}],
       aria: 'Metrics across probability thresholds',
     });
     mount.querySelector('#l-sweep').innerHTML = legend(S.map(k => ({c: C[k], label: LBL[k]})));
-    mount.querySelector('#cap-sweep').textContent =
-      `Every metric recomputed at ${th.swept.length} thresholds over all ${selP?.n ?? '—'} plume-bearing ${split} scenes at full 960×960 resolution.`;
+    const c0 = curve[0], cN = curve[curve.length - 1];
+    const dRange = curve.length ? Math.max(...curve.map(c => c.dice_macro)) - Math.min(...curve.map(c => c.dice_macro)) : 0;
+    mount.querySelector('#cap-sweep').innerHTML = (c0 && cN)
+      ? `Every metric recomputed at ${th.swept.length} thresholds over all ${selP?.n ?? '—'} plume-bearing
+         ${split} scenes at full 960×960 resolution. Across the whole range macro Dice varies by only
+         <b>${dRange.toFixed(3)}</b>. Raising the threshold from ${c0.t} to ${cN.t} moves pixel-pooled recall
+         from ${fmtOr(c0.recall, 'recall')} to ${fmtOr(cN.recall, 'recall')} and precision from
+         ${fmtOr(c0.precision, 'precision')} to ${fmtOr(cN.precision, 'precision')}: a small trade, not an
+         optimum to tune. The axis is zoomed to the data; on a full 0–1 axis every line would look flat.`
+      : `Every metric recomputed at ${th.swept.length} thresholds over the ${split} scenes.`;
 
     mount.querySelector('#t-sweep').innerHTML = `
       <div class="tscroll"><table>
