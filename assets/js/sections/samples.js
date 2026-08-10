@@ -6,7 +6,7 @@
    traffic at all. */
 
 import { load } from '../lib/data.js';
-import { M, fmtOr, int, esc, tsLabel, hhmm, SEG, quantile } from '../lib/metrics.js';
+import { M, fmtOr, int, esc, tsLabel, hhmm, quantile } from '../lib/metrics.js';
 import { DataTable } from '../lib/table.js';
 import { Modal } from '../lib/ui.js';
 
@@ -236,32 +236,31 @@ export async function render(mount, query) {
           </div>
           <div class="viewer">
             <div>
-              <div class="stage" id="stage">
-                ${has ? `<canvas id="cv" width="${PREVIEW}" height="${PREVIEW}"
-                          aria-label="Segmentation overlay for ${tsLabel(ts)}"></canvas>`
+              <div class="stage" id="stage" style="position:relative">
+                ${has ? `<canvas id="cv" width="${PREVIEW}" height="${PREVIEW}" style="display:block"
+                          aria-label="Segmentation overlay for ${tsLabel(ts)}"></canvas>
+                         <div id="leg2" style="position:absolute;top:8px;left:8px;display:flex;flex-direction:column;gap:3px;background:rgba(15,17,21,.66);color:#fff;padding:7px 9px;border-radius:8px;font:500 11px/1.5 var(--sans);pointer-events:none;box-shadow:0 1px 6px rgba(0,0,0,.45)"></div>`
                       : `<div class="state" style="height:100%;border:0;background:var(--panel)">
                            <div class="big">No imagery exported</div>
                            <div class="small">Pixel layers were not exported for the ${esc(s.split)} split. Metrics on the right are still full resolution.</div></div>`}
               </div>
               ${has ? `
               <div class="ctrls" style="margin-top:12px">
-                <div class="f"><label for="lay">Layer</label>
-                  <select id="lay">
-                    <option value="err">Errors (TP / FP / FN)</option>
-                    <option value="prob">Probability heatmap</option>
-                    <option value="th">Reflectivity input</option>
-                    <option value="gt">Ground truth only</option>
-                    <option value="pred">Prediction only</option>
-                  </select></div>
+                <div class="f" style="align-items:flex-start"><label>Layers</label>
+                  <div class="chips" id="lays" style="gap:6px 12px">
+                    <label class="chk"><input type="checkbox" id="l_refl" checked> Reflectivity (base)</label>
+                    <label class="chk"><input type="checkbox" id="l_prob"> Probability</label>
+                    <label class="chk"><input type="checkbox" id="l_gt"> Ground truth</label>
+                    <label class="chk"><input type="checkbox" id="l_pred"> Prediction</label>
+                    <label class="chk"><input type="checkbox" id="l_err" checked> Errors (TP / FP / FN)</label>
+                  </div></div>
                 <div class="f"><label for="thr">Threshold <b id="thv">${s.thr}</b></label>
                   <input type="range" id="thr" min="0.02" max="0.9" step="0.01" value="${s.thr}"></div>
                 <div class="f"><label for="op">Overlay opacity</label>
                   <input type="range" id="op" min="0" max="1" step="0.05" value="0.75"></div>
-                <div class="f"><label for="pat">Accessibility</label>
-                  <label class="chk"><input type="checkbox" id="pat"> Hatch the error types</label></div>
+                <div class="f"><label class="chk"><input type="checkbox" id="pat"> Hatch the error types</label></div>
                 <button id="rst" class="ghost">Reset to ${s.thr}</button>
               </div>
-              <div id="leg2"></div>
               <p class="small" id="live"></p>` : ''}
             </div>
             <div>
@@ -361,9 +360,14 @@ export async function render(mount, query) {
     }
 
     const out = ctx.createImageData(PREVIEW, PREVIEW);
-    const thrEl = modalEl.querySelector('#thr'), opEl = modalEl.querySelector('#op'),
-          layEl = modalEl.querySelector('#lay'), thv = modalEl.querySelector('#thv'),
-          live = modalEl.querySelector('#live'), patEl = modalEl.querySelector('#pat');
+    const q = sel => modalEl.querySelector(sel);
+    const thrEl = q('#thr'), opEl = q('#op'), thv = q('#thv'), live = q('#live'),
+          patEl = q('#pat'), leg2 = q('#leg2');
+    const reflEl = q('#l_refl'), probEl = q('#l_prob'), gtEl = q('#l_gt'),
+          predEl = q('#l_pred'), errEl = q('#l_err');
+    // canvas overlay colours, kept in sync with the legend swatches
+    const C_TP = [106, 62, 161], C_FP = [201, 64, 58], C_FN = [47, 125, 209],
+          C_GT = [106, 62, 161], C_PRED = [47, 125, 209];
 
     const rgb = v => {
       // perceptually ordered heat ramp for probability
@@ -374,38 +378,32 @@ export async function render(mount, query) {
     };
 
     function paint() {
-      const t = +thrEl.value, op = +opEl.value, mode = layEl.value;
+      const t = +thrEl.value, op = +opEl.value;
+      const L = {refl: reflEl.checked, prob: probEl.checked, gt: gtEl.checked, pred: predEl.checked, err: errEl.checked};
       const patterns = patEl.checked;
       const cut = t * 255;
       let tp = 0, fp = 0, fn = 0;
       const d = out.data;
-      // Each class gets its own hatch direction so the three error types stay
-      // distinguishable in greyscale or with colour-vision deficiency:
-      //   TP solid, FP "\" stripes, FN "/" stripes.
+      // Layers are alpha-blended bottom to top over the reflectivity base, so the
+      // base always shows through where an overlay is absent. FP "\" and FN "/"
+      // hatching keeps the two error types distinct without relying on colour.
       for (let i = 0, p = 0, n = 0; i < P.length; i += 4, p += 4, n++) {
         const x = n % PREVIEW, y = (n / PREVIEW) | 0;
         const prob = P[i], gt = G[i] > 127, pred = prob > cut;
         if (gt && pred) tp++; else if (pred) fp++; else if (gt) fn++;
-        const base = TH[i];                       // reflectivity as grey backdrop
-        let r = base, g = base, b = base;
-        if (mode === 'prob') { const c = rgb(prob); r = c[0]; g = c[1]; b = c[2]; }
-        else if (mode === 'gt') { if (gt) { r = 106; g = 62; b = 161; } }
-        else if (mode === 'pred') { if (pred) { r = 47; g = 125; b = 209; } }
-        else if (mode === 'err') {
-          if (gt && pred) { r = 106 + .35 * base; g = 62; b = 161; }
-          else if (pred) { r = 201; g = 64; b = 58; }
-          else if (gt) { r = 47; g = 125; b = 209; }
-        }
-        if (mode !== 'th' && mode !== 'prob') {
-          const on = (mode === 'err' && (gt || pred)) || (mode === 'gt' && gt) || (mode === 'pred' && pred);
-          if (on) {
-            if (patterns && mode === 'err' && !(gt && pred)) {
-              // brighten every 3rd of 7 rows along the class's diagonal
-              const stripe = pred ? ((x + y) % 7 < 3) : ((x - y + PREVIEW * 2) % 7 < 3);
-              if (stripe) { r = Math.min(255, r * 1.55 + 40); g = Math.min(255, g * 1.55 + 40); b = Math.min(255, b * 1.55 + 40); }
-            }
-            r = base * (1 - op) + r * op; g = base * (1 - op) + g * op; b = base * (1 - op) + b * op;
+        const base = TH[i];                       // reflectivity backdrop
+        let r = L.refl ? base : 0, g = L.refl ? base : 0, b = L.refl ? base : 0;
+        const over = c => { r = r * (1 - op) + c[0] * op; g = g * (1 - op) + c[1] * op; b = b * (1 - op) + c[2] * op; };
+        if (L.prob) over(rgb(prob));
+        if (L.gt && gt) over(C_GT);
+        if (L.pred && pred) over(C_PRED);
+        if (L.err && (gt || pred)) {
+          let c = (gt && pred) ? C_TP : (pred ? C_FP : C_FN);
+          if (patterns && !(gt && pred)) {
+            const stripe = pred ? ((x + y) % 7 < 3) : ((x - y + PREVIEW * 2) % 7 < 3);
+            if (stripe) c = [Math.min(255, c[0] * 1.4 + 45), Math.min(255, c[1] * 1.4 + 45), Math.min(255, c[2] * 1.4 + 45)];
           }
+          over(c);
         }
         d[p] = r; d[p + 1] = g; d[p + 2] = b; d[p + 3] = 255;
       }
@@ -413,7 +411,7 @@ export async function render(mount, query) {
       const dice = tp ? 2 * tp / (2 * tp + fp + fn) : 0;
       const prec = (tp + fp) ? tp / (tp + fp) : 0, rec = (tp + fn) ? tp / (tp + fn) : 0;
       thv.textContent = t.toFixed(2);
-      drawLegend(mode, {tp, fp, fn}, patterns);
+      drawLegend(L, {tp, fp, fn}, patterns);
       live.innerHTML = s.label === 1
         ? `On this ${PREVIEW}px preview at threshold ${t.toFixed(2)}:
            Dice <b>${dice.toFixed(3)}</b>, precision ${prec.toFixed(3)}, recall ${rec.toFixed(3)}
@@ -423,64 +421,36 @@ export async function render(mount, query) {
         : `Swarm-free scene. ${int(fp)} preview pixels predicted as swarm at threshold ${t.toFixed(2)}.`;
     }
 
-    /** Legend describing exactly what is on screen for the current layer, with a
-        live pixel count per class so each colour is named and quantified. */
-    function drawLegend(mode, counts, patterns) {
+    /** Compact colour key overlaid in the corner of the image. Only the layers
+        that are currently on are listed, with a live share for the error classes
+        so each colour is both named and quantified. */
+    function drawLegend(L, counts, patterns) {
       const total = PREVIEW * PREVIEW;
-      const swatch = (col, pat) => {
-        const stripes = pat === 'fp' ? 'repeating-linear-gradient(45deg,rgba(255,255,255,.85) 0 2px,transparent 2px 5px)'
-                      : pat === 'fn' ? 'repeating-linear-gradient(-45deg,rgba(255,255,255,.85) 0 2px,transparent 2px 5px)' : '';
-        return `<span class="swk" style="background:${col}${patterns && stripes ? `;background-image:${stripes}` : ''}"></span>`;
+      const sw = (bg, pat) => {
+        const stripes = pat === 'fp' ? ',repeating-linear-gradient(45deg,rgba(255,255,255,.9) 0 2px,transparent 2px 5px)'
+                      : pat === 'fn' ? ',repeating-linear-gradient(-45deg,rgba(255,255,255,.9) 0 2px,transparent 2px 5px)' : '';
+        return `<span style="display:inline-block;width:11px;height:11px;border-radius:2px;flex:none;background:${bg}${patterns ? stripes : ''}"></span>`;
       };
-      const row = (col, name, what, n, pat) => `
-        <div class="lgrow">
-          ${swatch(col, pat)}
-          <span class="lgname">${esc(name)}</span>
-          <span class="lgwhat">${what}</span>
-          <span class="lgn">${n == null ? '' : `${int(n)} px · ${((n / total) * 100).toFixed(n / total < 0.01 ? 2 : 1)}%`}</span>
-        </div>`;
-
-      let rows;
-      if (mode === 'err') {
-        rows = [
-          row(SEG.tp.c, 'TP — correct', 'model and label both say swarm', counts.tp),
-          row(SEG.fp.c, 'FP — false alarm', 'model says swarm, label does not', counts.fp, 'fp'),
-          row(SEG.fn.c, 'FN — missed', 'label says swarm, model missed it', counts.fn, 'fn'),
-          row('#3f3f3f', 'Background', 'neither: shaded by radar reflectivity', null),
-        ];
-      } else if (mode === 'prob') {
-        rows = [`<div class="lgrow"><span class="swk" style="background:linear-gradient(90deg,#000,#f00,#ff0,#fff)"></span>
-          <span class="lgname">Probability</span>
-          <span class="lgwhat">model confidence that a pixel is swarm</span>
-          <span class="lgn">0.0 → 1.0</span></div>
-          <div class="lgscale"><span>0.0 none</span><span>0.25</span><span>0.5</span><span>0.75</span><span>1.0 certain</span></div>`];
-      } else if (mode === 'th') {
-        rows = [`<div class="lgrow"><span class="swk" style="background:linear-gradient(90deg,#000,#fff)"></span>
-          <span class="lgname">Reflectivity</span>
-          <span class="lgwhat">raw radar return, lowest elevation (input channel)</span>
-          <span class="lgn">weak → strong</span></div>`];
-      } else if (mode === 'gt') {
-        rows = [
-          row(SEG.tp.c, 'Ground truth', 'pixels a human annotator marked as swarm', counts.tp + counts.fn),
-          row('#3f3f3f', 'Background', 'everything else', null),
-        ];
-      } else {
-        rows = [
-          row('#2f7dd1', 'Prediction', `pixels the model calls swarm at this threshold`, counts.tp + counts.fp),
-          row('#3f3f3f', 'Background', 'everything else', null),
-        ];
+      const row = (bg, name, n, pat) => `<div style="display:flex;align-items:center;gap:6px;white-space:nowrap">
+        ${sw(bg, pat)}<span>${esc(name)}</span>${n == null ? '' :
+          `<span style="margin-left:auto;padding-left:12px;opacity:.75">${((n / total) * 100).toFixed(n / total < 0.01 ? 2 : 1)}%</span>`}</div>`;
+      const rows = [];
+      if (L.err) {
+        rows.push(row('rgb(106,62,161)', 'TP correct', counts.tp));
+        rows.push(row('rgb(201,64,58)', 'FP false alarm', counts.fp, 'fp'));
+        rows.push(row('rgb(47,125,209)', 'FN missed', counts.fn, 'fn'));
       }
-      modalEl.querySelector('#leg2').innerHTML =
-        `<div class="lgbox">${rows.join('')}</div>` +
-        (mode === 'err' && patterns
-          ? `<p class="small" style="margin:6px 0 0">Hatching distinguishes the two error types without colour:
-             <b>“\\” stripes = false alarm</b>, <b>“/” stripes = missed</b>. Correct overlap is solid.</p>`
-          : '');
+      if (L.pred && !L.err) rows.push(row('rgb(47,125,209)', 'Prediction', counts.tp + counts.fp));
+      if (L.gt && !L.err) rows.push(row('rgb(106,62,161)', 'Ground truth', counts.tp + counts.fn));
+      if (L.prob) rows.push(`<div style="display:flex;align-items:center;gap:6px;white-space:nowrap">${
+        sw('linear-gradient(90deg,#000,#f00,#ff0,#fff)')}<span>Probability 0 → 1</span></div>`);
+      if (!rows.length) rows.push(row('rgb(140,140,140)', 'Reflectivity', null));
+      leg2.innerHTML = rows.join('');
+      leg2.style.display = rows.length ? 'flex' : 'none';
     }
 
-    [thrEl, opEl, layEl, patEl].forEach(el => el.addEventListener('input', paint));
-    layEl.addEventListener('change', paint);
-    patEl.addEventListener('change', paint);
+    const inputs = [thrEl, opEl, patEl, reflEl, probEl, gtEl, predEl, errEl];
+    inputs.forEach(el => { el.addEventListener('input', paint); el.addEventListener('change', paint); });
     modalEl.querySelector('#rst').addEventListener('click', () => { thrEl.value = s.thr; paint(); });
     paint();
   }
