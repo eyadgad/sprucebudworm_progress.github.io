@@ -4,7 +4,7 @@
 
 import { load } from '../lib/data.js';
 import { fmtOr, tip, int, esc, MODEL_NAME, LOSS_NAME, targetName, pct } from '../lib/metrics.js';
-import { hBarChart, legend, confusion } from '../lib/charts.js';
+import { hBarChart } from '../lib/charts.js';
 import { card } from '../lib/ui.js';
 
 export async function render(mount) {
@@ -57,7 +57,6 @@ export async function render(mount) {
     <figcaption>Test Dice for the six best runs. The selected run is outlined. The spread across
     very different architectures is small, which is itself a finding: the data, not the architecture,
     limits the score.</figcaption></figure>
-  <div id="altleg"></div>
 
   <h2>Dataset at a glance</h2>
   <div class="meta">
@@ -117,11 +116,8 @@ export async function render(mount) {
     })),
     lo: 0.60, hi: 0.645, labelW: 210, aria: 'Test Dice for the six best runs',
     xlabel: 'test Dice (macro) — higher is better',
+    legend: [{c: 'var(--best)', label: 'Selected configuration'}, {c: 'var(--accent2)', label: 'Other runs'}],
   });
-  mount.querySelector('#altleg').innerHTML = legend([
-    {c: 'var(--best)', label: 'Selected configuration'},
-    {c: 'var(--accent2)', label: 'Other runs'},
-  ]);
 }
 
 

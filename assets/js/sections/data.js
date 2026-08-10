@@ -3,7 +3,7 @@
 
 import { load } from '../lib/data.js';
 import { int, pct, SPLIT_COLOR, quantile, mean } from '../lib/metrics.js';
-import { barChart, histogram, boxPlot, legend } from '../lib/charts.js';
+import { barChart, histogram, boxPlot } from '../lib/charts.js';
 
 const SPLITS = ['train', 'val', 'test'];
 
@@ -40,7 +40,6 @@ export async function render(mount) {
       <figcaption>Positive scenes per year, stacked by split. Every year appears in every split at
       about 70 / 20 / 10, so no season is held out entirely.</figcaption></figure>
   </div>
-  <div id="l-split"></div>
 
   <h2>Target size and class imbalance</h2>
   <p>Each positive scene contains a swarm covering a small fraction of the ${int(ds.grid.h * ds.grid.w)}-pixel
@@ -118,13 +117,9 @@ export async function render(mount) {
       {label: 'swarm free', c: 'var(--tn)', values: SPLITS.map(s => cnt[s].negatives)},
     ],
     stacked: true, ylabel: 'scenes', xlabel: 'data split', W: 420, H: 300, valueLabels: true,
-    aria: 'Scenes per split by type', inlineLegend: true,
+    aria: 'Scenes per split by type',
+    legend: [{c: 'var(--accent2)', label: 'contains a swarm'}, {c: 'var(--tn)', label: 'swarm-free'}],
   });
-  mount.querySelector('#l-split').innerHTML = legend([
-    {c: 'var(--accent2)', label: 'Scene contains a swarm (positive)'},
-    {c: 'var(--tn)', label: 'Swarm-free scene (negative)'},
-    ...SPLITS.map(s => ({c: SPLIT_COLOR[s], label: `${s} split`})),
-  ]);
 
   const pps = ds.split_summary.positives_per_year_per_split;
   mount.querySelector('#c-year').innerHTML = barChart({
@@ -134,7 +129,8 @@ export async function render(mount) {
       values: years.map(y => pps[y]?.[s] ?? 0),
     })),
     stacked: true, ylabel: 'positive scenes', xlabel: 'season (year)', W: 420, H: 300,
-    valueLabels: true, aria: 'Positive scenes per year stacked by split', inlineLegend: true,
+    valueLabels: true, aria: 'Positive scenes per year stacked by split',
+    legend: SPLITS.map(s => ({c: SPLIT_COLOR[s], label: `${s} split`})),
   });
 
   /* ---------- label-threshold table (whole dataset) ---------- */

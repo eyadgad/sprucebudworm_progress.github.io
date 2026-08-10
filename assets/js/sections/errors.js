@@ -6,7 +6,7 @@
 
 import { load } from '../lib/data.js';
 import { fmtOr, int, pct, esc, mean, quantile, spearman, tsLabel } from '../lib/metrics.js';
-import { scatter, legend } from '../lib/charts.js';
+import { scatter } from '../lib/charts.js';
 import { card, sceneFilters } from '../lib/ui.js';
 import { DataTable } from '../lib/table.js';
 
@@ -29,7 +29,6 @@ export async function render(mount) {
 
   <h2>The dominant driver: target size</h2>
   <figure><div class="viz" id="c-area"></div><figcaption id="cap-area"></figcaption></figure>
-  <div id="l-area"></div>
   <div id="areastats"></div>
 
   <h2>Which failures are recoverable?</h2>
@@ -37,7 +36,6 @@ export async function render(mount) {
   where it produced confident pixels in the wrong place. The maximum probability reached in the scene
   separates the two.</p>
   <figure><div class="viz" id="c-conf"></div><figcaption id="cap-conf"></figcaption></figure>
-  <div id="l-conf"></div>
 
   <h2>False alarms on swarm-free scenes</h2>
   <div id="fa"></div>
@@ -119,12 +117,12 @@ export async function render(mount) {
       xlo: 100, xhi: 1e6, ylo: 0, yhi: 1, logx: true,
       xlabel: 'labelled swarm area (pixels, log scale)', ylabel: 'per-scene Dice',
       W: 880, H: 380, aria: 'Dice against labelled swarm area',
+      legend: [
+        {c: 'var(--ok)', label: 'good scene (Dice ≥ 0.6)'},
+        {c: 'var(--warn)', label: 'weak (0.3 ≤ Dice < 0.6)'},
+        {c: 'var(--fp)', label: 'failure (Dice < 0.3)'},
+      ],
     });
-    mount.querySelector('#l-area').innerHTML = legend([
-      {c: 'var(--ok)', label: 'good scene (Dice ≥ 0.6)'},
-      {c: 'var(--warn)', label: 'weak (0.3 ≤ Dice < 0.6)'},
-      {c: 'var(--fp)', label: 'failure (Dice < 0.3)'},
-    ]);
     const bands = [['< 1k', 0, 1000], ['1k–5k', 1000, 5000], ['5k–20k', 5000, 20000],
                    ['20k–100k', 20000, 100000], ['> 100k', 100000, Infinity]];
     mount.querySelector('#cap-area').innerHTML =
@@ -154,11 +152,11 @@ export async function render(mount) {
       xlo: 0, xhi: 1, ylo: 0, yhi: 1,
       xlabel: 'maximum probability anywhere in the scene', ylabel: 'per-scene Dice',
       W: 880, H: 340, aria: 'Dice against maximum predicted probability',
+      legend: [
+        {c: 'var(--fp)', label: 'zero-overlap scene (Dice = 0)'},
+        {c: 'var(--accent2)', label: 'some overlap (Dice > 0)'},
+      ],
     });
-    mount.querySelector('#l-conf').innerHTML = legend([
-      {c: 'var(--fp)', label: 'zero-overlap scene (Dice = 0)'},
-      {c: 'var(--accent2)', label: 'some overlap (Dice > 0)'},
-    ]);
     const confidentFail = bad.filter(s => s.prob_max > 0.8).length;
     mount.querySelector('#cap-conf').innerHTML =
       `${confidentFail} of the ${bad.length} scenes scoring below 0.3 still reach a probability above 0.8

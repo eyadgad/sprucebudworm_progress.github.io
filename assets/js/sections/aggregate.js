@@ -3,7 +3,7 @@
 
 import { load } from '../lib/data.js';
 import { fmtOr, tip, int, esc, mean, std, quantile, bootCI } from '../lib/metrics.js';
-import { confusion, boxPlot, legend, BOXPLOT_KEY } from '../lib/charts.js';
+import { confusion, boxPlot, BOXPLOT_KEY } from '../lib/charts.js';
 
 export async function render(mount) {
   const sm = await load('samples');
@@ -31,7 +31,6 @@ export async function render(mount) {
   Note the scale: background dominates, which is why accuracy is close to 1 for any model and is a poor
   guide here.</p>
   <div class="two" id="cms"></div>
-  <div id="cmleg"></div>
 
   <h2>Per-scene variability</h2>
   <p>A single average hides how uneven performance is. These distributions come from
@@ -133,12 +132,6 @@ export async function render(mount) {
       ${int(a.TP + a.FP + a.FN + a.TN)} pixels. Precision ${fmtOr(a.prec_micro, 'precision')},
       recall ${fmtOr(a.rec_micro, 'recall')} (pixel pooled).</figcaption></figure>`;
   }).join('');
-  mount.querySelector('#cmleg').innerHTML = legend([
-    {c: 'var(--tp)', label: 'TP — predicted swarm, is swarm'},
-    {c: 'var(--fp)', label: 'FP — predicted swarm, is background'},
-    {c: 'var(--fn)', label: 'FN — missed swarm'},
-    {c: 'var(--tn)', label: 'TN — correctly ignored background'},
-  ]);
 
   /* ---------------- per-scene distributions ---------------- */
   const mkBox = (label, key, sp, c) => {

@@ -53,8 +53,36 @@ export function legend(items) {
     `<span><span class="sw" style="background:${i.c}"></span>${esc(i.label)}</span>`).join('') + `</div>`;
 }
 
+/* In-figure legend: a horizontal key drawn inside the SVG as a reserved band at
+   the top of the chart, so the series labels sit in the plot itself rather than
+   in a separate strip below it. Wraps to more rows when the items are wider than
+   the plot. Returns the SVG fragment and the vertical space it needs, so the
+   caller can reserve room above the data (extra top padding). */
+function inlineTopLegend(items, x0, x1) {
+  if (!items || !items.length) return {g: '', height: 0};
+  const rowH = 15, sw = 11;
+  const wOf = it => sw + 6 + String(it.label).length * 6.1 + 16;
+  const rows = [[]];
+  let used = 0;
+  items.forEach(it => {
+    const w = wOf(it);
+    if (used + w > (x1 - x0) && rows[rows.length - 1].length) { rows.push([]); used = 0; }
+    rows[rows.length - 1].push(it); used += w;
+  });
+  let g = '';
+  rows.forEach((row, ri) => {
+    let lx = x0; const y = 9 + ri * rowH;
+    row.forEach(it => {
+      g += `<rect x="${lx}" y="${y - 9}" width="${sw}" height="${sw}" rx="2" fill="${it.c}"/>`
+         + `<text x="${lx + sw + 6}" y="${y}" class="ax" style="font-family:var(--sans)">${esc(it.label)}</text>`;
+      lx += wOf(it);
+    });
+  });
+  return {g, height: rows.length * rowH + 4};
+}
+
 /* ---------------- grouped / stacked bars ---------------- */
-export function barChart({cats, series, lo=0, hi=null, ylabel='', xlabel='', W=860, H=320, stacked=false, valueLabels=false, aria='bar chart', inlineLegend=false}) {
+export function barChart({cats, series, lo=0, hi=null, ylabel='', xlabel='', W=860, H=320, stacked=false, valueLabels=false, aria='bar chart', inlineLegend=false, legend=null}) {
   // The y-axis must clear the tallest thing actually drawn. For a stacked chart
   // that is each category's COLUMN TOTAL, not the largest single segment — using
   // the segment max lets the tallest stack overshoot the axis and (because the
@@ -66,8 +94,9 @@ export function barChart({cats, series, lo=0, hi=null, ylabel='', xlabel='', W=8
   // Guard the degenerate all-zero case, which would collapse the scale to NaN.
   const maxV = hi ?? (rawMax > lo ? rawMax : lo + 1);
   // room for the axis title and, when asked, an in-figure key
-  const f = frame({W, H, padB: 56 + (xlabel ? 20 : 0) + (inlineLegend ? 22 : 0)});
-  let g = yAxis(f, lo, maxV, ylabel);
+  const lg = inlineTopLegend(legend, 52, W - 16);
+  const f = frame({W, H, padT: 14 + lg.height, padB: 56 + (xlabel ? 20 : 0) + (inlineLegend ? 22 : 0)});
+  let g = lg.g + yAxis(f, lo, maxV, ylabel);
   const gw = (f.x1-f.x0)/cats.length;
   const sy = v => f.y0 - ((v-lo)/(maxV-lo))*(f.y0-f.y1);
   cats.forEach((c, ci) => {
@@ -110,12 +139,13 @@ export function barChart({cats, series, lo=0, hi=null, ylabel='', xlabel='', W=8
 }
 
 /* ---------------- horizontal ranked bars ---------------- */
-export function hBarChart({items, lo, hi, W=860, labelW=250, aria='ranked bars', fmtV=(v)=>v.toFixed(3), xlabel=''}) {
-  const barH=17, gap=7, padT=22;
+export function hBarChart({items, lo, hi, W=860, labelW=250, aria='ranked bars', fmtV=(v)=>v.toFixed(3), xlabel='', legend=null}) {
+  const lg = inlineTopLegend(legend, 8, W - 8);
+  const barH=17, gap=7, padT=22 + lg.height;
   const H = padT + items.length*(barH+gap) + 6 + (xlabel ? 22 : 0);
   const x0=labelW, x1=W-58;
   const sx = v => x0 + clamp((v-lo)/(hi-lo))*(x1-x0);
-  let g = '';
+  let g = lg.g;
   const axisBottom = H - (xlabel ? 22 : 0) - 4;
   ticks(lo, hi, 5).forEach(t => {
     const X = sx(t);
@@ -135,13 +165,14 @@ export function hBarChart({items, lo, hi, W=860, labelW=250, aria='ranked bars',
 }
 
 /* ---------------- multi-series line chart ---------------- */
-export function lineChart({series, xlo, xhi, ylo, yhi, xlabel='', ylabel='', W=560, H=320, aria='line chart', marks=[], xticks=null, logx=false}) {
-  const f = frame({W, H, padB:52});
+export function lineChart({series, xlo, xhi, ylo, yhi, xlabel='', ylabel='', W=560, H=320, aria='line chart', marks=[], xticks=null, logx=false, legend=null}) {
+  const lg = inlineTopLegend(legend, 52, W - 16);
+  const f = frame({W, H, padB:52, padT: 14 + lg.height});
   const tx = v => logx ? Math.log10(Math.max(v,1e-9)) : v;
   const X0 = tx(xlo), X1 = tx(xhi);
   const sx = v => f.x0 + ((tx(v)-X0)/(X1-X0))*(f.x1-f.x0);
   const sy = v => f.y0 - ((v-ylo)/(yhi-ylo))*(f.y0-f.y1);
-  let g = yAxis(f, ylo, yhi, ylabel);
+  let g = lg.g + yAxis(f, ylo, yhi, ylabel);
   (xticks || ticks(xlo, xhi, 6)).forEach(t => {
     const X = sx(t);
     if (X < f.x0-1 || X > f.x1+1) return;
@@ -170,13 +201,14 @@ export function lineChart({series, xlo, xhi, ylo, yhi, xlabel='', ylabel='', W=5
 }
 
 /* ---------------- scatter ---------------- */
-export function scatter({points, xlo, xhi, ylo, yhi, xlabel='', ylabel='', W=560, H=340, aria='scatter plot', logx=false, trend=null, xticks=null}) {
-  const f = frame({W, H, padB:52});
+export function scatter({points, xlo, xhi, ylo, yhi, xlabel='', ylabel='', W=560, H=340, aria='scatter plot', logx=false, trend=null, xticks=null, legend=null}) {
+  const lg = inlineTopLegend(legend, 52, W - 16);
+  const f = frame({W, H, padB:52, padT: 14 + lg.height});
   const tx = v => logx ? Math.log10(Math.max(v,1)) : v;
   const X0=tx(xlo), X1=tx(xhi);
   const sx = v => f.x0 + ((tx(v)-X0)/(X1-X0))*(f.x1-f.x0);
   const sy = v => f.y0 - ((v-ylo)/(yhi-ylo))*(f.y0-f.y1);
-  let g = yAxis(f, ylo, yhi, ylabel);
+  let g = lg.g + yAxis(f, ylo, yhi, ylabel);
   const xt = xticks || (logx
     ? [1,10,100,1e3,1e4,1e5,1e6].filter(v=>v>=xlo&&v<=xhi)
     : ticks(xlo,xhi,6));
@@ -201,14 +233,15 @@ export function scatter({points, xlo, xhi, ylo, yhi, xlabel='', ylabel='', W=560
 }
 
 /* ---------------- histogram ---------------- */
-export function histogram({bins, counts, xlabel='', ylabel='count', W=560, H=280, c='var(--accent2)', logy=false, aria='histogram', series=null}) {
-  const f = frame({W, H, padB:50});
+export function histogram({bins, counts, xlabel='', ylabel='count', W=560, H=280, c='var(--accent2)', logy=false, aria='histogram', series=null, legend=null}) {
+  const lg = inlineTopLegend(legend, 52, W - 16);
+  const f = frame({W, H, padB:50, padT: 14 + lg.height});
   const all = series ? series.flatMap(s=>s.counts) : counts;
   const maxC = Math.max(...all, 1);
   const ty = v => logy ? Math.log10(v+1) : v;
   const hiY = ty(maxC)*1.05;
   const sy = v => f.y0 - (ty(v)/hiY)*(f.y0-f.y1);
-  let g = '';
+  let g = lg.g;
   ticks(0, hiY, 4).forEach(t => {
     const Y = f.y0 - (t/hiY)*(f.y0-f.y1);
     const lbl = logy ? fmtTick(Math.pow(10,t)-1) : fmtTick(t);

@@ -3,7 +3,7 @@
 
 import { load } from '../lib/data.js';
 import { fmtOr, int, pct, esc, mean, quantile, SEG } from '../lib/metrics.js';
-import { barChart, scatter, legend } from '../lib/charts.js';
+import { barChart, scatter } from '../lib/charts.js';
 import { card, sceneFilters } from '../lib/ui.js';
 
 export async function render(mount) {
@@ -38,7 +38,6 @@ export async function render(mount) {
   160 km away is sampled far higher in the atmosphere than one at 30 km. These profiles pool every
   pixel of every swarm-bearing scene in the split.</p>
   <figure><div class="viz" id="c-radial"></div><figcaption id="cap-radial"></figcaption></figure>
-  <div id="l-radial"></div>
   <div id="radtable"></div>
 
   <h2>Shape failure categories</h2>
@@ -105,11 +104,9 @@ export async function render(mount) {
         {label: 'FN', c: SEG.fn.c, values: R.fn},
         {label: 'FP', c: SEG.fp.c, values: R.fp},
       ], stacked: true, ylabel: 'pixels', xlabel: 'distance from the radar (km)',
-      W: 880, H: 320, aria: 'Pixel outcomes by distance ring', inlineLegend: true,
+      W: 880, H: 320, aria: 'Pixel outcomes by distance ring',
+      legend: [{c: SEG.tp.c, label: SEG.tp.label}, {c: SEG.fn.c, label: SEG.fn.label}, {c: SEG.fp.c, label: SEG.fp.label}],
     });
-    mount.querySelector('#l-radial').innerHTML = legend([
-      {c: SEG.tp.c, label: SEG.tp.label}, {c: SEG.fn.c, label: SEG.fn.label}, {c: SEG.fp.c, label: SEG.fp.label},
-    ]);
     const totGt = R.gt.reduce((a, b) => a + b, 0);
     const peak = R.gt.indexOf(Math.max(...R.gt));
     mount.querySelector('#cap-radial').innerHTML =

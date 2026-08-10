@@ -4,7 +4,7 @@
 import { load } from '../lib/data.js';
 import { M, fmtOr, tip, esc, MODEL_NAME, LOSS_NAME, targetName, mean } from '../lib/metrics.js';
 import { DataTable } from '../lib/table.js';
-import { scatter, legend, hBarChart } from '../lib/charts.js';
+import { scatter, hBarChart } from '../lib/charts.js';
 
 const MODEL_C = {
   unet:'#98a6b6', attention_unet:'#2f9d8c', nnunet:'#b07aa1',
@@ -44,7 +44,6 @@ export async function render(mount) {
   <figure><div class="viz" id="c-pr"></div>
     <figcaption>One point per run, coloured by architecture; the selected run is ringed. Upper right is
     better on both axes.</figcaption></figure>
-  <div id="l-pr"></div>
 
   <h2>What actually moved the score</h2>
   <figure><div class="viz" id="c-axis"></div>
@@ -168,9 +167,8 @@ export async function render(mount) {
       xlabel:'precision (test)', ylabel:'recall (test)', W:560, H:340,
       aria:'Precision versus recall for every run',
       trend:{x0:sel.precision,y0:.40,x1:sel.precision,y1:.90},
+      legend: models.map(m=>({c:MODEL_C[m]||'var(--accent2)', label:MODEL_NAME[m]||m})),
     });
-    mount.querySelector('#l-pr').innerHTML =
-      legend(models.map(m=>({c:MODEL_C[m]||'var(--accent2)', label:MODEL_NAME[m]||m})));
 
     // effect of each design axis, measured over the runs that vary it
     const axisEffect = (label, keyFn) => {
