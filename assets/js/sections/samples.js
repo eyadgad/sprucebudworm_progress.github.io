@@ -13,6 +13,20 @@ import { Modal } from '../lib/ui.js';
 const IMG = ts => `data/samples/${ts}`;
 const PREVIEW = 480;   // stored preview resolution; metrics come from full 960
 
+/* Viridis colormap (matplotlib), used to colour the reflectivity base so it
+   matches the report's radar figures (which plot reflectivity with viridis)
+   instead of a plain greyscale ramp. */
+const VIRIDIS = [
+  [68, 1, 84], [72, 40, 120], [62, 74, 137], [49, 104, 142], [38, 130, 142],
+  [31, 158, 137], [53, 183, 121], [110, 206, 88], [181, 222, 43], [223, 227, 41], [253, 231, 37]];
+function viridis(t) {
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const x = t * (VIRIDIS.length - 1), i = Math.floor(x), f = x - i;
+  const a = VIRIDIS[i], b = VIRIDIS[Math.min(i + 1, VIRIDIS.length - 1)];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+const VIRIDIS_CSS = 'linear-gradient(90deg,rgb(68,1,84),rgb(38,130,142),rgb(94,201,98),rgb(253,231,37))';
+
 export async function render(mount, query) {
   const sm = await load('samples');
   const all = sm.samples;
@@ -250,15 +264,13 @@ export async function render(mount, query) {
                   <div class="chips" id="lays" style="gap:6px 12px">
                     <label class="chk"><input type="checkbox" id="l_refl" checked> Reflectivity (base)</label>
                     <label class="chk"><input type="checkbox" id="l_prob"> Probability</label>
-                    <label class="chk"><input type="checkbox" id="l_gt"> Ground truth</label>
-                    <label class="chk"><input type="checkbox" id="l_pred"> Prediction</label>
-                    <label class="chk"><input type="checkbox" id="l_err" checked> Errors (TP / FP / FN)</label>
+                    <label class="chk"><input type="checkbox" id="l_gt" checked> Ground truth</label>
+                    <label class="chk"><input type="checkbox" id="l_pred" checked> Prediction</label>
                   </div></div>
                 <div class="f"><label for="thr">Threshold <b id="thv">${s.thr}</b></label>
                   <input type="range" id="thr" min="0.02" max="0.9" step="0.01" value="${s.thr}"></div>
                 <div class="f"><label for="op">Overlay opacity</label>
                   <input type="range" id="op" min="0" max="1" step="0.05" value="0.75"></div>
-                <div class="f"><label class="chk"><input type="checkbox" id="pat"> Hatch the error types</label></div>
                 <button id="rst" class="ghost">Reset to ${s.thr}</button>
               </div>
               <p class="small" id="live"></p>` : ''}
@@ -361,13 +373,10 @@ export async function render(mount, query) {
 
     const out = ctx.createImageData(PREVIEW, PREVIEW);
     const q = sel => modalEl.querySelector(sel);
-    const thrEl = q('#thr'), opEl = q('#op'), thv = q('#thv'), live = q('#live'),
-          patEl = q('#pat'), leg2 = q('#leg2');
-    const reflEl = q('#l_refl'), probEl = q('#l_prob'), gtEl = q('#l_gt'),
-          predEl = q('#l_pred'), errEl = q('#l_err');
+    const thrEl = q('#thr'), opEl = q('#op'), thv = q('#thv'), live = q('#live'), leg2 = q('#leg2');
+    const reflEl = q('#l_refl'), probEl = q('#l_prob'), gtEl = q('#l_gt'), predEl = q('#l_pred');
     // canvas overlay colours, kept in sync with the legend swatches
-    const C_TP = [106, 62, 161], C_FP = [201, 64, 58], C_FN = [47, 125, 209],
-          C_GT = [106, 62, 161], C_PRED = [47, 125, 209];
+    const C_GT = [106, 62, 161], C_PRED = [47, 125, 209];
 
     const rgb = v => {
       // perceptually ordered heat ramp for probability
@@ -379,39 +388,30 @@ export async function render(mount, query) {
 
     function paint() {
       const t = +thrEl.value, op = +opEl.value;
-      const L = {refl: reflEl.checked, prob: probEl.checked, gt: gtEl.checked, pred: predEl.checked, err: errEl.checked};
-      const patterns = patEl.checked;
+      const L = {refl: reflEl.checked, prob: probEl.checked, gt: gtEl.checked, pred: predEl.checked};
       const cut = t * 255;
       let tp = 0, fp = 0, fn = 0;
       const d = out.data;
-      // Layers are alpha-blended bottom to top over the reflectivity base, so the
-      // base always shows through where an overlay is absent. FP "\" and FN "/"
-      // hatching keeps the two error types distinct without relying on colour.
-      for (let i = 0, p = 0, n = 0; i < P.length; i += 4, p += 4, n++) {
-        const x = n % PREVIEW, y = (n / PREVIEW) | 0;
+      // Layers are alpha-blended bottom to top over the reflectivity base (viridis,
+      // matching the report's radar figures), so the base shows through wherever an
+      // overlay is absent. Where prediction and ground truth overlap you see the
+      // correct hits; prediction-only is a false alarm, ground-truth-only is a miss.
+      for (let i = 0, p = 0; i < P.length; i += 4, p += 4) {
         const prob = P[i], gt = G[i] > 127, pred = prob > cut;
         if (gt && pred) tp++; else if (pred) fp++; else if (gt) fn++;
-        const base = TH[i];                       // reflectivity backdrop
-        let r = L.refl ? base : 0, g = L.refl ? base : 0, b = L.refl ? base : 0;
+        let r = 0, g = 0, b = 0;
+        if (L.refl) { const c = viridis(TH[i] / 255); r = c[0]; g = c[1]; b = c[2]; }
         const over = c => { r = r * (1 - op) + c[0] * op; g = g * (1 - op) + c[1] * op; b = b * (1 - op) + c[2] * op; };
         if (L.prob) over(rgb(prob));
         if (L.gt && gt) over(C_GT);
         if (L.pred && pred) over(C_PRED);
-        if (L.err && (gt || pred)) {
-          let c = (gt && pred) ? C_TP : (pred ? C_FP : C_FN);
-          if (patterns && !(gt && pred)) {
-            const stripe = pred ? ((x + y) % 7 < 3) : ((x - y + PREVIEW * 2) % 7 < 3);
-            if (stripe) c = [Math.min(255, c[0] * 1.4 + 45), Math.min(255, c[1] * 1.4 + 45), Math.min(255, c[2] * 1.4 + 45)];
-          }
-          over(c);
-        }
         d[p] = r; d[p + 1] = g; d[p + 2] = b; d[p + 3] = 255;
       }
       ctx.putImageData(out, 0, 0);
       const dice = tp ? 2 * tp / (2 * tp + fp + fn) : 0;
       const prec = (tp + fp) ? tp / (tp + fp) : 0, rec = (tp + fn) ? tp / (tp + fn) : 0;
       thv.textContent = t.toFixed(2);
-      drawLegend(L, {tp, fp, fn}, patterns);
+      drawLegend(L, {tp, fp, fn});
       live.innerHTML = s.label === 1
         ? `On this ${PREVIEW}px preview at threshold ${t.toFixed(2)}:
            Dice <b>${dice.toFixed(3)}</b>, precision ${prec.toFixed(3)}, recall ${rec.toFixed(3)}
@@ -422,34 +422,24 @@ export async function render(mount, query) {
     }
 
     /** Compact colour key overlaid in the corner of the image. Only the layers
-        that are currently on are listed, with a live share for the error classes
-        so each colour is both named and quantified. */
-    function drawLegend(L, counts, patterns) {
+        that are currently on are listed; prediction and ground truth carry their
+        live share of the frame so each colour is both named and quantified. */
+    function drawLegend(L, counts) {
       const total = PREVIEW * PREVIEW;
-      const sw = (bg, pat) => {
-        const stripes = pat === 'fp' ? ',repeating-linear-gradient(45deg,rgba(255,255,255,.9) 0 2px,transparent 2px 5px)'
-                      : pat === 'fn' ? ',repeating-linear-gradient(-45deg,rgba(255,255,255,.9) 0 2px,transparent 2px 5px)' : '';
-        return `<span style="display:inline-block;width:11px;height:11px;border-radius:2px;flex:none;background:${bg}${patterns ? stripes : ''}"></span>`;
-      };
-      const row = (bg, name, n, pat) => `<div style="display:flex;align-items:center;gap:6px;white-space:nowrap">
-        ${sw(bg, pat)}<span>${esc(name)}</span>${n == null ? '' :
+      const sw = bg => `<span style="display:inline-block;width:13px;height:11px;border-radius:2px;flex:none;background:${bg}"></span>`;
+      const row = (bg, name, n) => `<div style="display:flex;align-items:center;gap:6px;white-space:nowrap">
+        ${sw(bg)}<span>${esc(name)}</span>${n == null ? '' :
           `<span style="margin-left:auto;padding-left:12px;opacity:.75">${((n / total) * 100).toFixed(n / total < 0.01 ? 2 : 1)}%</span>`}</div>`;
       const rows = [];
-      if (L.err) {
-        rows.push(row('rgb(106,62,161)', 'TP correct', counts.tp));
-        rows.push(row('rgb(201,64,58)', 'FP false alarm', counts.fp, 'fp'));
-        rows.push(row('rgb(47,125,209)', 'FN missed', counts.fn, 'fn'));
-      }
-      if (L.pred && !L.err) rows.push(row('rgb(47,125,209)', 'Prediction', counts.tp + counts.fp));
-      if (L.gt && !L.err) rows.push(row('rgb(106,62,161)', 'Ground truth', counts.tp + counts.fn));
-      if (L.prob) rows.push(`<div style="display:flex;align-items:center;gap:6px;white-space:nowrap">${
-        sw('linear-gradient(90deg,#000,#f00,#ff0,#fff)')}<span>Probability 0 → 1</span></div>`);
-      if (!rows.length) rows.push(row('rgb(140,140,140)', 'Reflectivity', null));
+      if (L.pred) rows.push(row('rgb(47,125,209)', 'Prediction', counts.tp + counts.fp));
+      if (L.gt) rows.push(row('rgb(106,62,161)', 'Ground truth', counts.tp + counts.fn));
+      if (L.prob) rows.push(row('linear-gradient(90deg,#000,#f00,#ff0,#fff)', 'Probability 0 → 1', null));
+      if (L.refl) rows.push(row(VIRIDIS_CSS, 'Reflectivity weak → strong', null));
       leg2.innerHTML = rows.join('');
       leg2.style.display = rows.length ? 'flex' : 'none';
     }
 
-    const inputs = [thrEl, opEl, patEl, reflEl, probEl, gtEl, predEl, errEl];
+    const inputs = [thrEl, opEl, reflEl, probEl, gtEl, predEl];
     inputs.forEach(el => { el.addEventListener('input', paint); el.addEventListener('change', paint); });
     modalEl.querySelector('#rst').addEventListener('click', () => { thrEl.value = s.thr; paint(); });
     paint();
