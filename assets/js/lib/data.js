@@ -7,10 +7,24 @@
 const cache = new Map();
 const inflight = new Map();
 
+// Data files are fetched with force-cache for speed, so a plain URL would keep
+// serving a stale JSON after a deploy that changed it. Appending the build id
+// (bumped on every deploy) makes each deploy a fresh URL, so updated data — new
+// models, re-scored metrics — actually reaches returning visitors.
+let _verP = null;
+function version() {
+  if (!_verP) {
+    _verP = fetch(new URL('../build.txt', import.meta.url), {cache: 'no-store'})
+      .then(r => (r.ok ? r.text() : '')).then(t => t.trim()).catch(() => '');
+  }
+  return _verP;
+}
+
 export async function load(name) {
   if (cache.has(name)) return cache.get(name);
   if (inflight.has(name)) return inflight.get(name);
-  const p = fetch(`data/${name}.json`, {cache: 'force-cache'})
+  const p = version()
+    .then(v => fetch(`data/${name}.json${v ? '?v=' + encodeURIComponent(v) : ''}`, {cache: 'force-cache'}))
     .then(r => {
       if (!r.ok) throw new Error(`${name}.json — HTTP ${r.status}`);
       return r.json();

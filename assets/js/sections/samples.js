@@ -35,15 +35,20 @@ export async function render(mount, query) {
   const IMG_SPLITS = new Set(sm.image_splits || ['test', 'val']);
   const withImg = new Set(all.filter(s => IMG_SPLITS.has(s.split)).map(s => s.ts));
   const YEARS = [...new Set(all.map(s => s.year))].sort();
-  // 'sel' = the selected model (Attention UNet, s.dice); 'cmp' = the UNet++
-  // comparison (s.dice_cmp). Only Dice exists for the comparison model, so the
-  // toggle re-ranks and re-labels by Dice; full metrics and images stay selected-model.
-  const MODELS = {sel: sm.model_name_sel || 'Attention UNet', cmp: sm.model_name_cmp || 'UNet++ (9 elev)'};
-  const state = {split: 'test', type: 'pos', year: 'all', night: 'all', model: 'sel',
+  // The best four models, each scored per scene in `s.models[key]` ({dice} for
+  // scenes with a swarm, {bg_fp_rate} for swarm-free scenes). Full per-scene
+  // metrics and the pixel layers exist only for the first (selected) model, so
+  // switching model re-ranks and re-labels by that model's Dice while the imagery
+  // stays the selected model's.
+  const MLIST = sm.models || [{key: 'sel', disp: sm.model_name_sel || 'Attention UNet'}];
+  const MKEY0 = MLIST[0].key;
+  const mname = k => (MLIST.find(m => m.key === k) || {}).disp || k;
+  const state = {split: 'test', type: 'pos', year: 'all', night: 'all', model: MKEY0,
     sort: 'dice', dir: 1, q: '', view: 'grid', preset: 'all'};
-  // Dice of the currently selected model, used for sorting, presets and display.
-  const dcol = s => state.model === 'cmp' ? s.dice_cmp : s.dice;
-  const bgcol = s => state.model === 'cmp' ? s.bg_fp_rate_cmp : s.bg_fp_rate;
+  // per-scene value for the currently chosen model (falls back to the top-level
+  // selected-model fields if the four-model map is absent)
+  const dcol = s => { const m = s.models && s.models[state.model]; return m ? m.dice : s.dice; };
+  const bgcol = s => { const m = s.models && s.models[state.model]; return m ? m.bg_fp_rate : s.bg_fp_rate; };
 
   mount.innerHTML = `
   <h1>Sample explorer</h1>
@@ -95,7 +100,7 @@ export async function render(mount, query) {
     nightWrap.querySelector('select').addEventListener('change', e => { state.night = e.target.value; draw(); });
   };
   ctrls.appendChild(nightWrap); rebuildNights();   // Night sits right after Year
-  mk('Model', 'model', [['sel', MODELS.sel + ' (selected)'], ['cmp', MODELS.cmp]]);
+  mk('Model', 'model', MLIST.map((m, i) => [m.key, m.disp + (i === 0 ? ' (selected)' : '')]));
   mk('Sort by', 'sort', [['dice', 'Dice'], ['iou', 'IoU'], ['precision', 'Precision'], ['recall', 'Recall'],
     ['gt_area', 'Truth area'], ['pred_area', 'Predicted area'], ['boundary_iou', 'Boundary IoU'],
     ['n_pred_regions', 'Predicted regions'], ['ts', 'Time']]);
@@ -200,29 +205,32 @@ export async function render(mount, query) {
           <span class="swk" style="background:#fff;vertical-align:-3px"></span> <b>white</b> = predicted swarm,
           <span class="swk" style="background:#000;vertical-align:-3px"></span> <b>black</b> = background,
           at the project threshold ${sm.threshold}. Open a scene for the labelled error view.
-          ${state.model === 'cmp' ? `<b style="color:var(--warn)">Dice shown is ${esc(MODELS.cmp)}; the thumbnail is still the selected model (only it has stored images).</b>` : ''}</p>` +
+          ${state.model !== MKEY0 ? `<b style="color:var(--warn)">Dice shown is ${esc(mname(state.model))}; the thumbnail is still the selected model (only it has stored images).</b>` : ''}</p>` +
         (r.length > 120 ? `<p class="small">Showing the first 120 of ${r.length}. Narrow the filters or switch to the table view to see the rest.</p>` : '');
       body.querySelectorAll('.scell').forEach(b =>
         b.addEventListener('click', () => open(+b.dataset.ts)));
     } else {
       body.innerHTML = `<div id="tbl"></div>`;
+      // flatten each model's per-scene Dice onto the row so the table can show
+      // and sort a column per model (DataTable reads/sorts by a top-level key)
+      r.forEach(s => MLIST.forEach(m => { s['d_' + m.key] = ((s.models && s.models[m.key]) || {}).dice ?? null; }));
+      const shortM = d => d.replace('Attention UNet', 'AttUNet').replace(' (', ' ').replace(' elev)', 'e').replace(')', '');
       table = new DataTable(body.querySelector('#tbl'), {
         columns: [
           {key: 'ts', label: 'Scene', cls: '', fmt: v => `<code>${v}</code>`},
           {key: 'night', label: 'Night', cls: '', fmt: v => esc(v || '—')},
           {key: 'split', label: 'Split', cls: ''},
-          {key: 'dice', label: 'Dice (Att.UNet)', tip: M.dice.def + ' Selected model.', fmt: v => fmtOr(v, 'dice')},
-          {key: 'iou', label: 'IoU', fmt: v => fmtOr(v, 'iou')},
-          {key: 'precision', label: 'Prec', fmt: v => fmtOr(v, 'precision')},
-          {key: 'recall', label: 'Rec', fmt: v => fmtOr(v, 'recall')},
-          {key: 'boundary_iou', label: 'bIoU', fmt: v => fmtOr(v, 'boundary_iou')},
+          ...MLIST.map((m, i) => ({key: 'd_' + m.key, label: 'Dice ' + shortM(m.disp),
+            tip: i === 0 ? M.dice.def + ' Selected model.' : 'Same scene scored by ' + m.disp + '.',
+            fmt: v => fmtOr(v, 'dice')})),
+          {key: 'iou', label: 'IoU', tip: 'Selected model.', fmt: v => fmtOr(v, 'iou')},
+          {key: 'precision', label: 'Prec', tip: 'Selected model.', fmt: v => fmtOr(v, 'precision')},
+          {key: 'recall', label: 'Rec', tip: 'Selected model.', fmt: v => fmtOr(v, 'recall')},
+          {key: 'boundary_iou', label: 'bIoU', tip: 'Selected model.', fmt: v => fmtOr(v, 'boundary_iou')},
           {key: 'gt_area', label: 'Truth px', fmt: v => int(v)},
           {key: 'pred_area', label: 'Pred px', fmt: v => int(v)},
-          {key: 'n_gt_regions', label: 'GT reg', fmt: v => v ?? '—'},
-          {key: 'n_pred_regions', label: 'Pred reg', fmt: v => v ?? '—'},
-          {key: 'dice_cmp', label: 'Dice (UNet++)', tip: 'Same scene scored by the comparison model.', fmt: v => fmtOr(v, 'dice')},
         ],
-        rows: r, sort: state.sort, dir: +state.dir, pageSize: 20,
+        rows: r, sort: state.sort === 'dice' ? 'd_' + state.model : state.sort, dir: +state.dir, pageSize: 20,
         onRow: s => open(s.ts),
       });
     }
@@ -302,14 +310,15 @@ export async function render(mount, query) {
               </div>
               <h3>Model comparison</h3>
               <div class="kv">
-                <span class="k">Attention UNet</span><span class="v">${s.label ? fmtOr(s.dice, 'dice') : fmtOr(s.bg_fp_rate, 'bg_fp_rate')}</span>
-                <span class="k">UNet++ (9 elev)</span><span class="v">${s.label ? fmtOr(s.dice_cmp, 'dice') : fmtOr(s.bg_fp_rate_cmp, 'bg_fp_rate')}</span>
-                <span class="k">Difference</span><span class="v">${
-                  s.label && s.dice != null && s.dice_cmp != null
-                    ? ((s.dice - s.dice_cmp >= 0 ? '+' : '') + (s.dice - s.dice_cmp).toFixed(3)) : '—'}</span>
+                ${MLIST.map((m, i) => {
+                  const mm = (s.models && s.models[m.key]) || {};
+                  const v = s.label ? fmtOr(mm.dice, 'dice') : fmtOr(mm.bg_fp_rate, 'bg_fp_rate');
+                  return `<span class="k">${esc(m.disp)}${i === 0 ? ' ★' : ''}</span><span class="v">${v}</span>`;
+                }).join('')}
               </div>
-              <p class="small">Only the selected model's pixel layers are stored, so the comparison is
-              numeric rather than visual.</p>
+              <p class="small">All four best models scored on this scene
+              (${s.label ? 'per-scene Dice' : 'false-alarm rate'}). ★ is the selected model; only its pixel
+              layers are stored, so the image is always the selected model's.</p>
               <h3>Same night</h3>
               <div id="night"></div>
             </div>
