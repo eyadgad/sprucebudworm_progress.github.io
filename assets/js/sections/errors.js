@@ -23,7 +23,7 @@ export async function render(mount) {
   <div id="cards"></div>
 
   <h2>Failure taxonomy</h2>
-  <p class="small">Each plume-bearing scene is placed in exactly one bucket by rule. A scene can be poor
+  <p class="small">Each swarm-bearing scene is placed in exactly one bucket by rule. A scene can be poor
   for more than one reason; the first matching rule wins, in the order shown.</p>
   <div id="tax"></div>
 
@@ -39,7 +39,7 @@ export async function render(mount) {
   <figure><div class="viz" id="c-conf"></div><figcaption id="cap-conf"></figcaption></figure>
   <div id="l-conf"></div>
 
-  <h2>False alarms on plume-free scenes</h2>
+  <h2>False alarms on swarm-free scenes</h2>
   <div id="fa"></div>
 
   <h2>Do the two models fail on the same scenes?</h2>
@@ -65,10 +65,10 @@ export async function render(mount) {
     const lowPrec = S.filter(s => s.precision < 0.4);
 
     mount.querySelector('#cards').innerHTML = `<div class="cards">
-      ${card('Scenes evaluated', S.length, `${split} split, with a plume`)}
+      ${card('Scenes evaluated', S.length, `${split} split, with a swarm`)}
       ${card('Zero overlap', `${zero.length}`, `${pct(zero.length / S.length, 1)} of scenes`)}
       ${card('Dice below 0.3', `${bad.length}`, `${pct(bad.length / S.length, 1)} of scenes`)}
-      ${card('Recall below 0.4', `${lowRec.length}`, 'missed most of the plume')}
+      ${card('Recall below 0.4', `${lowRec.length}`, 'missed most of the swarm')}
       ${card('Precision below 0.4', `${lowPrec.length}`, 'mostly false alarm')}
       ${card('Worst Dice', fmtOr(Math.min(...S.map(s => s.dice)), 'dice'), 'single scene')}
     </div>`;
@@ -117,8 +117,8 @@ export async function render(mount) {
         r: 3.6, o: .68,
         t: `${tsLabel(s.ts)} — ${int(s.gt_area)} labelled px, Dice ${s.dice}`})),
       xlo: 100, xhi: 1e6, ylo: 0, yhi: 1, logx: true,
-      xlabel: 'labelled plume area (pixels, log scale)', ylabel: 'per-scene Dice',
-      W: 880, H: 380, aria: 'Dice against labelled plume area',
+      xlabel: 'labelled swarm area (pixels, log scale)', ylabel: 'per-scene Dice',
+      W: 880, H: 380, aria: 'Dice against labelled swarm area',
     });
     mount.querySelector('#l-area').innerHTML = legend([
       {c: 'var(--ok)', label: 'good scene (Dice ≥ 0.6)'},
@@ -172,7 +172,7 @@ export async function render(mount) {
       const worst = [...NEG].sort((a, b) => b.bg_fp_rate - a.bg_fp_rate).slice(0, 8);
       mount.querySelector('#fa').innerHTML = `
         <div class="cards">
-          ${card('Plume-free scenes', NEG.length, `${split} split`)}
+          ${card('Swarm-free scenes', NEG.length, `${split} split`)}
           ${card('Mean FP rate', fmtOr(mean(rates), 'bg_fp_rate'), 'of all pixels', 'bg_fp_rate')}
           ${card('Median FP rate', fmtOr(quantile(rates, .5), 'bg_fp_rate'), 'half score below this')}
           ${card('Worst scene', fmtOr(Math.max(...rates), 'bg_fp_rate'), 'highest false-alarm rate')}
@@ -186,11 +186,11 @@ export async function render(mount) {
             <td class="n">${fmtOr(s.prob_max, 'dice')}</td>
             <td class="n">${fmtOr(s.bg_fp_rate_cmp, 'bg_fp_rate')}</td></tr>`).join('')}
         </tbody></table></div>
-        <p class="small">Even the worst plume-free scene puts under
-        ${pct(Math.max(...rates), 1)} of its pixels into the plume class. False alarms on empty skies are
+        <p class="small">Even the worst swarm-free scene puts under
+        ${pct(Math.max(...rates), 1)} of its pixels into the swarm class. False alarms on empty skies are
         not a significant failure mode for this model.</p>`;
     } else {
-      mount.querySelector('#fa').innerHTML = `<div class="state"><div class="big">No plume-free scenes in this split</div></div>`;
+      mount.querySelector('#fa').innerHTML = `<div class="state"><div class="big">No swarm-free scenes in this split</div></div>`;
     }
 
     /* ---- model disagreement ---- */
@@ -259,14 +259,14 @@ export async function render(mount) {
               while only ${pct(tinyShare, 0)} of all scenes are that small.</li>
           <li>${bothZero} scenes score zero for both architectures.</li>
           <li>${badNights.length} nights fail on every scan.</li>
-          <li>False alarms on plume-free scenes stay below ${pct(NEG.length ? Math.max(...NEG.map(s => s.bg_fp_rate)) : 0, 1)} of pixels.</li>
+          <li>False alarms on swarm-free scenes stay below ${pct(NEG.length ? Math.max(...NEG.map(s => s.bg_fp_rate)) : 0, 1)} of pixels.</li>
         </ul>
       </div></div>
       <div class="note warn"><span class="tag">hypothesis, not established</span><div class="bd">
         The following are <b>consistent with</b> the observations above but are not demonstrated by this
         evaluation. Each would need its own experiment:
         <ul style="margin:6px 0 0;padding-left:18px">
-          <li><b>Label noise on small plumes.</b> Faint returns near the detection limit are the hardest
+          <li><b>Label noise on small swarms.</b> Faint returns near the detection limit are the hardest
               for a human annotator to outline, so part of the small-target penalty may be disagreement
               between annotator and model rather than model error. Testing this needs a second annotation
               of the same scenes.</li>

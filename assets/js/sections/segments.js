@@ -1,4 +1,4 @@
-/* Performance breakdown by year, night, time, plume size, density and difficulty.
+/* Performance breakdown by year, night, time, swarm size, density and difficulty.
    Every group carries its sample count and spread so a group of 3 scenes is not
    read as confidently as a group of 60. */
 
@@ -37,7 +37,7 @@ export async function render(mount) {
   <div id="t-year"></div>
 
 
-  <h2>By plume size</h2>
+  <h2>By swarm size</h2>
   <p>The strongest pattern in the evaluation: performance rises steeply with the size of the target.</p>
   <figure><div class="viz" id="c-size"></div><figcaption id="cap-size"></figcaption></figure>
   <div id="t-size"></div>
@@ -45,7 +45,7 @@ export async function render(mount) {
   <h2>By fragmentation and distance from the radar</h2>
   <p class="small">Fragmentation is the number of separate connected regions in the ground truth (the
   labels are made of many small blobs, so most scenes have dozens). Distance is the mean range of the
-  labelled plume from the radar, where the beam is sampled higher in the atmosphere.</p>
+  labelled swarm from the radar, where the beam is sampled higher in the atmosphere.</p>
   <div class="two">
     <figure><div class="viz" id="c-frag"></div><figcaption id="cap-frag"></figcaption></figure>
     <figure><div class="viz" id="c-dist"></div><figcaption id="cap-dist"></figcaption></figure>
@@ -113,14 +113,14 @@ export async function render(mount) {
         return s ? {label: b.key, n: s.n, c: 'var(--accent2)', lo: s.lo, q1: s.q1, med: s.med, q3: s.q3, hi: s.hi, mean: s.mean}
                  : {label: b.key, n: b.rows.length, q1: null};
       }), ylo: 0, yhi: 1, ylabel: `per-scene ${label}`,
-      xlabel: 'ground-truth plume area (pixels)', W: 880, H: 340,
-      aria: `${label} by plume size`,
+      xlabel: 'ground-truth swarm area (pixels)', W: 880, H: 340,
+      aria: `${label} by swarm size`,
     });
     const smallB = summarize(bandRows[0].rows, metric), bigB = summarize(bandRows.at(-1).rows, metric);
     mount.querySelector('#cap-size').textContent =
       (smallB && bigB)
-        ? `${label} rises from ${smallB.mean.toFixed(3)} on the smallest plumes (n=${smallB.n}) to ${bigB.mean.toFixed(3)} on the largest (n=${bigB.n}).`
-        : `Per-scene ${label} by ground-truth plume area.`;
+        ? `${label} rises from ${smallB.mean.toFixed(3)} on the smallest swarms (n=${smallB.n}) to ${bigB.mean.toFixed(3)} on the largest (n=${bigB.n}).`
+        : `Per-scene ${label} by ground-truth swarm area.`;
     mount.querySelector('#t-size').innerHTML = groupTable(bandRows, metric);
 
     /* ---- fragmentation ---- */
@@ -149,11 +149,11 @@ export async function render(mount) {
         return s ? {label: k, n: s.n, c: 'var(--accent2)', lo: s.lo, q1: s.q1, med: s.med, q3: s.q3, hi: s.hi, mean: s.mean}
                  : {label: k, n: 0, q1: null};
       }), ylo: 0, yhi: 1, ylabel: `per-scene ${label}`,
-      xlabel: 'mean range of the plume from the radar', W: 520, H: 300,
+      xlabel: 'mean range of the swarm from the radar', W: 520, H: 300,
       aria: `${label} by mean distance from the radar`,
     });
     mount.querySelector('#cap-dist').textContent =
-      `Grouped by the mean distance of the labelled plume from the radar. Beam height rises with range, so distant plumes are sampled higher in the atmosphere.`;
+      `Grouped by the mean distance of the labelled swarm from the radar. Beam height rises with range, so distant swarms are sampled higher in the atmosphere.`;
 
     /* ---- nights ---- */
     const gn = grp(rows, r => r.night);

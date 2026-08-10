@@ -53,17 +53,17 @@ console.log('chart primitives');
 /* ---------------- axis labelling ---------------- */
 console.log('\n[axis labels]');
 const bar = barChart({cats: ['train', 'val', 'test'],
-  series: [{label: 'with plume', c: '#1', values: [1092, 317, 170]},
-           {label: 'plume free', c: '#2', values: [345, 94, 34]}],
+  series: [{label: 'with swarm', c: '#1', values: [1092, 317, 170]},
+           {label: 'swarm free', c: '#2', values: [345, 94, 34]}],
   stacked: true, ylabel: 'scenes', xlabel: 'data split', W: 420, H: 300, inlineLegend: true});
 ok('barChart renders the x-axis label', bar.includes('data split'));
 ok('barChart renders the y-axis label', bar.includes('scenes') && hasYLabel(bar));
 ok('barChart inline legend names every series',
-   bar.includes('with plume') && bar.includes('plume free'));
+   bar.includes('with swarm') && bar.includes('swarm free'));
 
 const box = boxPlot({groups: [{label: '5k–20k', n: 54, lo: .2, q1: .4, med: .53, q3: .66, hi: .8, mean: .53, c: '#1'}],
-  ylo: 0, yhi: 1, ylabel: 'per-scene Dice', xlabel: 'plume area', W: 880, H: 340});
-ok('boxPlot renders the x-axis label', box.includes('plume area'));
+  ylo: 0, yhi: 1, ylabel: 'per-scene Dice', xlabel: 'swarm area', W: 880, H: 340});
+ok('boxPlot renders the x-axis label', box.includes('swarm area'));
 ok('boxPlot renders the y-axis label', hasYLabel(box));
 ok('boxPlot prints the group size', box.includes('n=54'));
 ok('a shared box-plot key exists', BOXPLOT_KEY.includes('interquartile') && BOXPLOT_KEY.includes('median'));
@@ -98,7 +98,7 @@ for (const [name, svg] of [
   ['lineChart', lineChart({series: [{label: 'Dice', c: '#1', points: [[0, .5], [1, .6]]}],
     xlo: 0, xhi: 1, ylo: 0, yhi: 1, xlabel: 'threshold', ylabel: 'metric'})],
   ['scatter', scatter({points: [{x: 1, y: .5}], xlo: 0, xhi: 2, ylo: 0, yhi: 1,
-    xlabel: 'plume area', ylabel: 'Dice'})],
+    xlabel: 'swarm area', ylabel: 'Dice'})],
   ['histogram', histogram({bins: [0, .5, 1], counts: [1, 2, 3], xlabel: 'probability', ylabel: 'pixels'})],
 ]) {
   ok(`${name} carries both axis labels`, svg.includes('axlab') && hasYLabel(svg));
@@ -145,8 +145,8 @@ ok('empty-bar chart still shows an axis line', edge[0][1].includes('<line'));
 // single segment, or the tallest stack overshoots the plot and spills upward
 ok('stacked bar y-axis clears the tallest column total', (() => {
   const svg = barChart({cats: ['train', 'val', 'test'],
-    series: [{label: 'with plume', c: '#1', values: [1092, 317, 170]},
-             {label: 'plume free', c: '#2', values: [345, 94, 34]}],
+    series: [{label: 'with swarm', c: '#1', values: [1092, 317, 170]},
+             {label: 'swarm free', c: '#2', values: [345, 94, 34]}],
     stacked: true, ylabel: 'scenes', xlabel: 'data split', W: 420, H: 300});
   // the drawn rects must all have y >= the top padding (nothing above the plot)
   const vb = svg.match(/viewBox="0 0 [\d.]+ ([\d.]+)"/)[1];

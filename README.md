@@ -1,7 +1,7 @@
 # Spruce Budworm Radar Segmentation — Evaluation Dashboard
 
 Interactive evaluation of deep-learning models that segment spruce budworm moth
-dispersal plumes in XAM weather-radar scans.
+dispersal swarms in XAM weather-radar scans.
 
 Live page: <https://eyadgad.github.io/sprucebudworm_progress.github.io/>
 
@@ -140,15 +140,15 @@ PDF report so the two can be compared:
 | Colour | Meaning |
 |---|---|
 | purple | TP — model and label agree |
-| red | FP — predicted plume, no label |
-| blue | FN — labelled plume, missed |
+| red | FP — predicted swarm, no label |
+| blue | FN — labelled swarm, missed |
 | grey | TN / background |
 
 Colour is always paired with a text label or position; it never carries meaning
 on its own.
 
 **Macro vs micro** is stated everywhere. Macro averages per-scene scores (every
-scene counts equally); micro pools all pixels (large plumes dominate). Both are
+scene counts equally); micro pools all pixels (large swarms dominate). Both are
 always shown, and validation and test results are never pooled.
 
 ---

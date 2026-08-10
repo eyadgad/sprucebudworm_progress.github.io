@@ -30,8 +30,8 @@ export async function render(mount) {
 
   <h2>Macro versus micro</h2>
   <div class="note"><span class="tag">important</span><div class="bd">
-    <b>Macro</b> averages a per-scene score over scenes (every scene counts equally, so tiny plumes pull
-    it down); <b>micro</b> pools all pixels first (large plumes dominate). Macro is the headline here and
+    <b>Macro</b> averages a per-scene score over scenes (every scene counts equally, so tiny swarms pull
+    it down); <b>micro</b> pools all pixels first (large swarms dominate). Macro is the headline here and
     micro is always reported alongside it; both are shown everywhere so neither can be cherry-picked.
   </div></div>
 
@@ -40,9 +40,9 @@ export async function render(mount) {
   baseline report so the two can be compared directly. Colour is always paired with a text label or a
   position, never used alone to carry meaning.</p>
   <div class="panel">${legend([
-    {c: SEG.tp.c, label: 'TP — model and label agree this is plume'},
-    {c: SEG.fp.c, label: 'FP — model says plume, label says background'},
-    {c: SEG.fn.c, label: 'FN — label says plume, model missed it'},
+    {c: SEG.tp.c, label: 'TP — model and label agree this is swarm'},
+    {c: SEG.fp.c, label: 'FP — model says swarm, label says background'},
+    {c: SEG.fn.c, label: 'FN — label says swarm, model missed it'},
     {c: SEG.tn.c, label: 'TN / background'},
   ])}
   <div style="margin-top:10px">${legend([

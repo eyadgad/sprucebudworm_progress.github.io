@@ -24,10 +24,10 @@ export async function render(mount) {
       ${fmtOr(sel.dice, 'dice')} macro Dice and ${fmtOr(sel.dice_micro, 'dice_micro')} micro Dice on
       ${T.length} held-out scenes, with no ETA or dual-polarisation channels.
       <a href="#/aggregate">Aggregate evaluation</a></li>
-    <li><b>The model rarely invents plumes.</b> On plume-free scenes it marks
+    <li><b>The model rarely invents swarms.</b> On swarm-free scenes it marks
       ${pct(sel.bg_fp_rate, 2)} of pixels. <a href="#/errors">Error analysis</a></li>
     <li><b>Performance is driven by target size, strongly and monotonically.</b> Spearman ρ ≈ 0.73
-      between labelled area and Dice; mean Dice ${fmtOr(mean(small.map(s => s.dice)), 'dice')} for plumes
+      between labelled area and Dice; mean Dice ${fmtOr(mean(small.map(s => s.dice)), 'dice')} for swarms
       under 5,000 px versus ${fmtOr(mean(large.map(s => s.dice)), 'dice')} above 50,000 px.
       <a href="#/segments">Performance breakdown</a></li>
     <li><b>Architecture is not the bottleneck.</b> Six architectures land within ~0.04 Dice, and the two
@@ -58,18 +58,18 @@ export async function render(mount) {
   <div class="two">
     <div class="panel"><h3 style="margin-top:0;color:var(--ok)">Reasonable to rely on</h3>
       <ul class="small" style="padding-left:18px;line-height:1.75">
-        <li>Plumes larger than about 20,000 px (5,000 km²): mean Dice
+        <li>Swarms larger than about 20,000 px (5,000 km²): mean Dice
           ${fmtOr(mean(T.filter(s => s.gt_area >= 20000).map(s => s.dice)), 'dice')}.</li>
         <li>Deciding <i>whether</i> a scan contains a dispersal event.</li>
-        <li>Estimating the coarse extent and location of a large plume.</li>
+        <li>Estimating the coarse extent and location of a large swarm.</li>
         <li>Nights and seasons resembling 2013–2019 at this radar.</li>
       </ul></div>
     <div class="panel"><h3 style="margin-top:0;color:var(--bad)">Do not rely on</h3>
       <ul class="small" style="padding-left:18px;line-height:1.75">
-        <li>Small or faint plumes under ~5,000 px: mean Dice
+        <li>Small or faint swarms under ~5,000 px: mean Dice
           ${fmtOr(mean(small.map(s => s.dice)), 'dice')}, with ${small.filter(s => s.dice === 0).length}
           complete misses.</li>
-        <li>Exact plume boundaries or area totals: the model over-predicts area.</li>
+        <li>Exact swarm boundaries or area totals: the model over-predicts area.</li>
         <li>Pixel probabilities as calibrated confidence.</li>
         <li>A different radar, or nights unlike anything in training — untested.</li>
         <li>Any use where the quoted accuracy must hold on genuinely unseen nights.</li>
@@ -85,7 +85,7 @@ export async function render(mount) {
       ['Held-out estimate', 'ready', 'Train and test Dice match to within 0.013, so the reported score reflects genuine performance rather than fitted examples.'],
       ['Night-level generalisation', 'untested', 'A night-disjoint split would measure performance on a wholly unseen night.'],
       ['Calibrated probabilities', 'not ready', 'Reliability diagram shows over-confidence; needs temperature scaling or similar.'],
-      ['Small-target performance', 'not ready', 'Mean Dice below 0.4 for plumes under 5,000 px.'],
+      ['Small-target performance', 'not ready', 'Mean Dice below 0.4 for swarms under 5,000 px.'],
       ['Robustness across radars', 'untested', 'Only XAM data exists in this project.'],
       ['Inference cost', 'ready', 'Sliding-window inference over 204 scenes runs in ~2 minutes on one RTX 4080 SUPER.'],
       ['Operational monitoring', 'not started', 'No drift detection or input validation is defined.'],
@@ -108,12 +108,12 @@ export async function render(mount) {
        'Train and test scores are equal, so the model is under-fitted and six architectures plateau at the same place. The ceiling is in the labels, not the network.',
        'Annotation time; no GPU',
        'Whether ~0.63 is the real limit of the task as currently labelled.'],
-      ['2', 'Second annotation of 40–60 scenes, weighted to small plumes',
+      ['2', 'Second annotation of 40–60 scenes, weighted to small swarms',
        'Separates label noise from model error, which currently cannot be told apart.',
        'Annotator time, no GPU',
        'Whether the small-target penalty is a model limit or a labelling limit; sets a realistic ceiling.'],
       ['3', 'Size-stratified loss or sampling',
-       'Small plumes dominate the failures and are under-weighted by area-based losses.',
+       'Small swarms dominate the failures and are under-weighted by area-based losses.',
        '~12 GPU-h',
        'Whether small-target Dice can be raised without losing large-target performance.'],
       ['4', 'Probability calibration (temperature scaling on validation)',
@@ -121,7 +121,7 @@ export async function render(mount) {
        'Minutes, no retraining',
        'Whether calibrated confidence is achievable post hoc.'],
       ['5', 'Temporal context from consecutive scans',
-       'Plumes evolve smoothly; a single frame discards that. The only remaining source of new signal.',
+       'Swarms evolve smoothly; a single frame discards that. The only remaining source of new signal.',
        '~20 GPU-h plus data-pipeline work',
        'Whether the ~0.63 ceiling is a single-frame limit.'],
       ['6', 'Per-scene threshold study',

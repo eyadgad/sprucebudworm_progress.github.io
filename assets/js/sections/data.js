@@ -33,8 +33,8 @@ export async function render(mount) {
   <h2>Split and season coverage</h2>
   <div class="two">
     <figure><div class="viz" id="c-split"></div>
-      <figcaption>Scenes per split, separating those that contain a plume from plume-free scenes.
-      Plume-free scenes are included at roughly 30% of positives so the model learns not to fire on
+      <figcaption>Scenes per split, separating those that contain a swarm from swarm-free scenes.
+      Swarm-free scenes are included at roughly 30% of positives so the model learns not to fire on
       empty skies.</figcaption></figure>
     <figure><div class="viz" id="c-year"></div>
       <figcaption>Positive scenes per year, stacked by split. Every year appears in every split at
@@ -43,20 +43,20 @@ export async function render(mount) {
   <div id="l-split"></div>
 
   <h2>Target size and class imbalance</h2>
-  <p>Each positive scene contains a plume covering a small fraction of the ${int(ds.grid.h * ds.grid.w)}-pixel
+  <p>Each positive scene contains a swarm covering a small fraction of the ${int(ds.grid.h * ds.grid.w)}-pixel
   grid. This imbalance is the dominant difficulty of the task and drives the choice of loss function.</p>
   <div class="cards" id="area-cards"></div>
   <div class="two">
     <figure><div class="viz" id="c-area"></div>
-      <figcaption>Distribution of plume area per positive scene (log scale). The spread covers more than
+      <figcaption>Distribution of swarm area per positive scene (log scale). The spread covers more than
       three orders of magnitude, so a single average Dice hides very different regimes.</figcaption></figure>
     <figure><div class="viz" id="c-areasplit"></div>
-      <figcaption>Plume area by split. Overlapping boxes indicate the splits are comparable in target
+      <figcaption>Swarm area by split. Overlapping boxes indicate the splits are comparable in target
       size; a shifted box would mean the test set is systematically easier or harder.</figcaption></figure>
   </div>
 
   <h2>Effect of the label threshold</h2>
-  <p>Labels store reflectivity in dBZ for plume pixels. A threshold turns them into a binary mask.
+  <p>Labels store reflectivity in dBZ for swarm pixels. A threshold turns them into a binary mask.
   Experiment 3 selected <b>dBZ ≥ 0</b>. This is what each choice keeps:</p>
   <div id="thr-table"></div>
 
@@ -87,8 +87,8 @@ export async function render(mount) {
   };
   mk('Split', 'split', [['all', 'All splits'], ...SPLITS.map(s => [s, s])]);
   mk('Year', 'year', [['all', 'All years'], ...years.map(y => [y, y])]);
-  mk('Scene type', 'type', [['all', 'All scenes'], ['pos', 'With plume'], ['neg', 'Plume free']]);
-  mk('Plume size', 'size', [['all', 'Any size'], ['tiny', 'Under 1k px'], ['small', '1k – 10k px'],
+  mk('Scene type', 'type', [['all', 'All scenes'], ['pos', 'With swarm'], ['neg', 'Swarm free']]);
+  mk('Swarm size', 'size', [['all', 'Any size'], ['tiny', 'Under 1k px'], ['small', '1k – 10k px'],
     ['mid', '10k – 50k px'], ['big', 'Over 50k px']]);
   const reset = document.createElement('button');
   reset.textContent = 'Reset filters';
@@ -114,15 +114,15 @@ export async function render(mount) {
   mount.querySelector('#c-split').innerHTML = barChart({
     cats: SPLITS,
     series: [
-      {label: 'with plume', c: 'var(--accent2)', values: SPLITS.map(s => cnt[s].positives)},
-      {label: 'plume free', c: 'var(--tn)', values: SPLITS.map(s => cnt[s].negatives)},
+      {label: 'with swarm', c: 'var(--accent2)', values: SPLITS.map(s => cnt[s].positives)},
+      {label: 'swarm free', c: 'var(--tn)', values: SPLITS.map(s => cnt[s].negatives)},
     ],
     stacked: true, ylabel: 'scenes', xlabel: 'data split', W: 420, H: 300, valueLabels: true,
     aria: 'Scenes per split by type', inlineLegend: true,
   });
   mount.querySelector('#l-split').innerHTML = legend([
-    {c: 'var(--accent2)', label: 'Scene contains a plume (positive)'},
-    {c: 'var(--tn)', label: 'Plume-free scene (negative)'},
+    {c: 'var(--accent2)', label: 'Scene contains a swarm (positive)'},
+    {c: 'var(--tn)', label: 'Swarm-free scene (negative)'},
     ...SPLITS.map(s => ({c: SPLIT_COLOR[s], label: `${s} split`})),
   ]);
 
@@ -167,7 +167,7 @@ export async function render(mount) {
   mount.querySelector('#cmp-table').innerHTML = `
     <div class="tscroll"><table>
       <thead><tr><th>Split</th><th>Positive scenes</th><th>Nights</th><th>Years</th>
-      <th>Median plume area</th><th>IQR of plume area</th><th>Median positive share</th></tr></thead><tbody>
+      <th>Median swarm area</th><th>IQR of swarm area</th><th>Median positive share</th></tr></thead><tbody>
       ${SPLITS.map(sp => {
         const rows = scenes.filter(s => s.split === sp && s.label === 1);
         const a = stat(rows.map(s => s.area).filter(v => v != null));
@@ -180,7 +180,7 @@ export async function render(mount) {
           <td class="n">${a ? pct(a.med / (ds.grid.h * ds.grid.w), 3) : '—'}</td></tr>`;
       }).join('')}
     </tbody></table></div>
-    <p class="small">The three splits have similar median plume areas and interquartile ranges, so the
+    <p class="small">The three splits have similar median swarm areas and interquartile ranges, so the
     test set is not obviously easier or harder in target size. The night overlap noted above is a
     separate and more serious issue.</p>`;
 
@@ -205,14 +205,14 @@ export async function render(mount) {
       <p class="small">Scores are the same to within
       ${Math.abs(mem.train_mean_dice - mem.test_mean_dice).toFixed(4)} Dice
       (area-matched gap ${g >= 0 ? '+' : ''}${g.toFixed(4)}, Mann-Whitney p = ${mem.mannwhitney_p.toFixed(2)}).
-      Per-scene performance is driven by <b>plume size</b> (Spearman ρ = ${mem.area_partial_spearman.toFixed(3)}),
+      Per-scene performance is driven by <b>swarm size</b> (Spearman ρ = ${mem.area_partial_spearman.toFixed(3)}),
       not by how much related data the model saw in training.</p>
 
       <div class="note"><span class="tag">what this means</span><div class="bd">
         The model performs <b>no better on data it was fitted on</b> than on data it has never seen, so
         it is <b>under-fitted rather than over-fitted</b> — it has not exhausted what it could learn
         from the training set. Six architectures reaching the same ~0.63 plateau points the same way:
-        the limit is <b>label noise and genuinely ambiguous plume edges</b>, not model capacity.
+        the limit is <b>label noise and genuinely ambiguous swarm edges</b>, not model capacity.
         The highest-value work is therefore on the labels, not on a bigger network.
       </div></div>`;
   }
@@ -245,16 +245,16 @@ export async function render(mount) {
     const areas = f.filter(s => s.label === 1 && s.area > 0).map(s => s.area);
     const cardsEl = mount.querySelector('#area-cards');
     if (!areas.length) {
-      cardsEl.innerHTML = `<div class="card"><div class="k">Plume area</div><div class="v">—</div>
+      cardsEl.innerHTML = `<div class="card"><div class="k">Swarm area</div><div class="v">—</div>
         <div class="s">no positive scenes in this filter</div></div>`;
       mount.querySelector('#c-area').innerHTML =
         `<div class="state"><div class="big">No positive scenes selected</div>
-         <div class="small">Set “Scene type” to “With plume” or widen the filters.</div></div>`;
+         <div class="small">Set “Scene type” to “With swarm” or widen the filters.</div></div>`;
     } else {
       const px = ds.grid.h * ds.grid.w;
       cardsEl.innerHTML = [
         ['Positive scenes', int(areas.length), 'in current filter'],
-        ['Median plume', int(quantile(areas, .5)) + ' px', pct(quantile(areas, .5) / px, 3) + ' of the grid'],
+        ['Median swarm', int(quantile(areas, .5)) + ' px', pct(quantile(areas, .5) / px, 3) + ' of the grid'],
         ['Smallest', int(Math.min(...areas)) + ' px', 'hardest cases'],
         ['Largest', int(Math.max(...areas)) + ' px', 'easiest cases'],
         ['Range', `${(Math.log10(Math.max(...areas) / Math.min(...areas))).toFixed(1)} decades`, 'spread of target size'],
@@ -267,8 +267,8 @@ export async function render(mount) {
       lg.forEach(v => counts[Math.min(nb - 1, Math.max(0, Math.floor((v - lo) / w)))]++);
       mount.querySelector('#c-area').innerHTML = histogram({
         bins: Array.from({length: nb}, (_, i) => lo + i * w),
-        counts, xlabel: 'plume area, log10(pixels)', ylabel: 'scenes', W: 520, H: 300,
-        aria: 'Distribution of plume area',
+        counts, xlabel: 'swarm area, log10(pixels)', ylabel: 'scenes', W: 520, H: 300,
+        aria: 'Distribution of swarm area',
       });
     }
 
@@ -281,8 +281,8 @@ export async function render(mount) {
       } : {label: sp, n: 0, q1: null, c: SPLIT_COLOR[sp]};
     });
     mount.querySelector('#c-areasplit').innerHTML = boxPlot({
-      groups, ylo: 1.5, yhi: 6, ylabel: 'plume area, log10(pixels)', xlabel: 'data split',
-      W: 520, H: 300, aria: 'Plume area by split',
+      groups, ylo: 1.5, yhi: 6, ylabel: 'swarm area, log10(pixels)', xlabel: 'data split',
+      W: 520, H: 300, aria: 'Swarm area by split',
     });
   }
   draw();

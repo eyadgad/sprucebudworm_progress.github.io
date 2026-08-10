@@ -289,12 +289,12 @@ export function confusion({tp, fp, fn, tn, W=430, title=''}) {
   const H = 210;
   let g = `<text x="14" y="14" class="ax">predicted →</text>`;
   g += `<text transform="translate(12,${H/2}) rotate(-90)" text-anchor="middle" class="ax">truth →</text>`;
-  g += `<text x="96" y="34" text-anchor="middle" class="ax">plume</text>`;
+  g += `<text x="96" y="34" text-anchor="middle" class="ax">swarm</text>`;
   g += `<text x="255" y="34" text-anchor="middle" class="ax">background</text>`;
-  g += `<text x="22" y="82" class="ax">plume</text>`;
+  g += `<text x="22" y="82" class="ax">swarm</text>`;
   g += `<text x="22" y="162" class="ax">bg</text>`;
-  g += cell(56, 44, tp, 'TP', 'var(--tp)', 'correctly predicted plume pixels');
-  g += cell(214, 44, fn, 'FN', 'var(--fn)', 'missed plume pixels');
+  g += cell(56, 44, tp, 'TP', 'var(--tp)', 'correctly predicted swarm pixels');
+  g += cell(214, 44, fn, 'FN', 'var(--fn)', 'missed swarm pixels');
   g += cell(56, 126, fp, 'FP', 'var(--fp)', 'false alarms');
   g += cell(214, 126, tn, 'TN', 'var(--tn)', 'correctly ignored background');
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title||'confusion matrix')}: TP ${tp}, FP ${fp}, FN ${fn}, TN ${tn}">${g}</svg>`;

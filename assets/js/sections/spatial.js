@@ -19,7 +19,7 @@ export async function render(mount) {
 
   <h2>Region structure</h2>
   <p class="small">A connected region is a blob of at least 10 touching pixels. Comparing the number of
-  regions in the prediction with the number in the label shows whether the model fragments one plume
+  regions in the prediction with the number in the label shows whether the model fragments one swarm
   into many pieces, or merges several into one.</p>
   <div id="regcards"></div>
   <figure><div class="viz" id="c-reg"></div>
@@ -34,9 +34,9 @@ export async function render(mount) {
     <figcaption id="cap-area"></figcaption></figure>
 
   <h2>Errors by distance from the radar</h2>
-  <p class="small">The radar sits at the centre of the grid. The beam climbs with range, so a plume
+  <p class="small">The radar sits at the centre of the grid. The beam climbs with range, so a swarm
   160 km away is sampled far higher in the atmosphere than one at 30 km. These profiles pool every
-  pixel of every plume-bearing scene in the split.</p>
+  pixel of every swarm-bearing scene in the split.</p>
   <figure><div class="viz" id="c-radial"></div><figcaption id="cap-radial"></figcaption></figure>
   <div id="l-radial"></div>
   <div id="radtable"></div>
@@ -113,7 +113,7 @@ export async function render(mount) {
     const totGt = R.gt.reduce((a, b) => a + b, 0);
     const peak = R.gt.indexOf(Math.max(...R.gt));
     mount.querySelector('#cap-radial').innerHTML =
-      `Pixel outcomes pooled over every plume-bearing ${split} scene, by distance ring from the radar.
+      `Pixel outcomes pooled over every swarm-bearing ${split} scene, by distance ring from the radar.
        Most labelled signal sits in the ${cats[peak]} km ring
        (${pct(R.gt[peak] / totGt, 0)} of all labelled pixels).`;
 

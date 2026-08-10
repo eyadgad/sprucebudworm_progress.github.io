@@ -19,15 +19,15 @@ export async function render(mount) {
   are reported separately, never averaged together.</p>
 
   <div class="note"><span class="tag">macro vs micro</span><div class="bd">
-    <b>Macro</b> averages per-scene scores (every scene counts equally, small plumes drag it down);
-    <b>micro</b> pools all pixels (large plumes dominate). Plume-free scenes are excluded here and
+    <b>Macro</b> averages per-scene scores (every scene counts equally, small swarms drag it down);
+    <b>micro</b> pools all pixels (large swarms dominate). Swarm-free scenes are excluded here and
     reported separately as a false-alarm rate.
   </div></div>
 
   <div id="tables"></div>
 
   <h2>Confusion matrices</h2>
-  <p class="small">Pixel counts pooled over all plume-bearing scenes in each split, at threshold ${thr}.
+  <p class="small">Pixel counts pooled over all swarm-bearing scenes in each split, at threshold ${thr}.
   Note the scale: background dominates, which is why accuracy is close to 1 for any model and is a poor
   guide here.</p>
   <div class="two" id="cms"></div>
@@ -68,7 +68,7 @@ export async function render(mount) {
   const A = {val: agg(pos('val')), test: agg(pos('test'))};
 
   const rowsSpec = [
-    ['Scenes with a plume', s => int(s.n), null],
+    ['Scenes with a swarm', s => int(s.n), null],
     ['Dice (macro)', s => fmtOr(s.dice, 'dice'), 'dice'],
     ['Dice (micro)', s => fmtOr(s.dice_micro, 'dice_micro'), 'dice_micro'],
     ['IoU (macro)', s => fmtOr(s.iou, 'iou'), 'iou'],
@@ -129,14 +129,14 @@ export async function render(mount) {
     if (!a) return `<div class="state"><div class="big">No ${sp} scenes</div></div>`;
     return `<figure><div class="viz">${confusion({tp: a.TP, fp: a.FP, fn: a.FN, tn: a.TN,
       title: `${sp} confusion matrix`})}</div>
-      <figcaption><b>${sp === 'val' ? 'Validation' : 'Test'}</b> — ${int(a.n)} plume-bearing scenes,
+      <figcaption><b>${sp === 'val' ? 'Validation' : 'Test'}</b> — ${int(a.n)} swarm-bearing scenes,
       ${int(a.TP + a.FP + a.FN + a.TN)} pixels. Precision ${fmtOr(a.prec_micro, 'precision')},
       recall ${fmtOr(a.rec_micro, 'recall')} (pixel pooled).</figcaption></figure>`;
   }).join('');
   mount.querySelector('#cmleg').innerHTML = legend([
-    {c: 'var(--tp)', label: 'TP — predicted plume, is plume'},
-    {c: 'var(--fp)', label: 'FP — predicted plume, is background'},
-    {c: 'var(--fn)', label: 'FN — missed plume'},
+    {c: 'var(--tp)', label: 'TP — predicted swarm, is swarm'},
+    {c: 'var(--fp)', label: 'FP — predicted swarm, is background'},
+    {c: 'var(--fn)', label: 'FN — missed swarm'},
     {c: 'var(--tn)', label: 'TN — correctly ignored background'},
   ]);
 

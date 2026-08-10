@@ -187,7 +187,7 @@ export async function render(mount) {
             <td>${lab}</td></tr>`;
         }).join('')}</tbody></table></div>
       <p class="small">Correlation is not causation, and these features are themselves related
-      (large plumes tend to have more regions). No multivariate model is fitted here, so these are
+      (large swarms tend to have more regions). No multivariate model is fitted here, so these are
       marginal associations only.</p>`;
 
     const top = corrs[0];

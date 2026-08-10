@@ -40,7 +40,7 @@ export async function render(mount, query) {
     Pixel layers are stored for <b>${withImg.size} scenes</b> across the
     ${[...IMG_SPLITS].join(' and ')} split${IMG_SPLITS.size > 1 ? 's' : ''}.
     Previews are ${PREVIEW}×${PREVIEW}, downsampled from 960×960 by taking the maximum of each
-    2×2 block so thin plumes stay visible. That thickens both masks, so the
+    2×2 block so thin swarms stay visible. That thickens both masks, so the
     <b>interactive readout is systematically optimistic</b>, typically by a few hundredths of Dice.
     Use it to judge <i>shape and where the errors are</i>, not to quote a score. Every number in the
     side panel and in all other sections is computed at full 960×960 resolution.
@@ -63,7 +63,7 @@ export async function render(mount, query) {
     ctrls.appendChild(w); return w.querySelector('select');
   };
   const splitSel = mk('Split', 'split', [['test', 'Test (held out)'], ['val', 'Validation'], ['all', 'All']]);
-  mk('Scene type', 'type', [['pos', 'With plume'], ['neg', 'Plume free'], ['all', 'All']]);
+  mk('Scene type', 'type', [['pos', 'With swarm'], ['neg', 'Swarm free'], ['all', 'All']]);
   const yearSel = mk('Year', 'year', [['all', 'All years'], ...YEARS.map(y => [y, String(y)])]);
   // Night list is scoped to the current split + year so it never offers a night
   // that cannot match. Rebuilt whenever split or year changes.
@@ -179,11 +179,11 @@ export async function render(mount, query) {
           <span class="cap"><b>${hhmm(s.ts)}</b> <span class="m">${String(s.ts).slice(0, 8)}</span><br>
           ${s.label === 1
             ? `<span class="m">Dice ${fmtOr(dcol(s), 'dice')} · ${int(s.gt_area)} px</span>`
-            : `<span class="m">no plume · FP ${fmtOr(bgcol(s), 'bg_fp_rate')}</span>`}</span>
+            : `<span class="m">no swarm · FP ${fmtOr(bgcol(s), 'bg_fp_rate')}</span>`}</span>
         </button>`;
       }).join('') + `</div>
         <p class="small" style="margin-top:10px">
-          <span class="swk" style="background:#fff;vertical-align:-3px"></span> <b>white</b> = predicted plume,
+          <span class="swk" style="background:#fff;vertical-align:-3px"></span> <b>white</b> = predicted swarm,
           <span class="swk" style="background:#000;vertical-align:-3px"></span> <b>black</b> = background,
           at the project threshold ${sm.threshold}. Open a scene for the labelled error view.
           ${state.model === 'cmp' ? `<b style="color:var(--warn)">Dice shown is ${esc(MODELS.cmp)}; the thumbnail is still the selected model (only it has stored images).</b>` : ''}</p>` +
@@ -270,7 +270,7 @@ export async function render(mount, query) {
                 <span class="k">Timestamp</span><span class="v">${ts}</span>
                 <span class="k">Night</span><span class="v">${esc(s.night || '—')}</span>
                 <span class="k">Split</span><span class="v">${esc(s.split)}</span>
-                <span class="k">Type</span><span class="v">${s.label ? 'has plume' : 'plume free'}</span>
+                <span class="k">Type</span><span class="v">${s.label ? 'has swarm' : 'swarm free'}</span>
                 <span class="k">Hour (UTC)</span><span class="v">${String(s.hour).padStart(2, '0')}:00</span>
               </div>
               <h3>Metrics at threshold ${s.thr}</h3>
@@ -420,7 +420,7 @@ export async function render(mount, query) {
            (TP ${int(tp)}, FP ${int(fp)}, FN ${int(fn)} preview pixels).
            <span style="color:var(--muted)">The authoritative full-resolution Dice at the project
            threshold ${s.thr} is ${fmtOr(s.dice, 'dice')}.</span>`
-        : `Plume-free scene. ${int(fp)} preview pixels predicted as plume at threshold ${t.toFixed(2)}.`;
+        : `Swarm-free scene. ${int(fp)} preview pixels predicted as swarm at threshold ${t.toFixed(2)}.`;
     }
 
     /** Legend describing exactly what is on screen for the current layer, with a
@@ -443,15 +443,15 @@ export async function render(mount, query) {
       let rows;
       if (mode === 'err') {
         rows = [
-          row(SEG.tp.c, 'TP — correct', 'model and label both say plume', counts.tp),
-          row(SEG.fp.c, 'FP — false alarm', 'model says plume, label does not', counts.fp, 'fp'),
-          row(SEG.fn.c, 'FN — missed', 'label says plume, model missed it', counts.fn, 'fn'),
+          row(SEG.tp.c, 'TP — correct', 'model and label both say swarm', counts.tp),
+          row(SEG.fp.c, 'FP — false alarm', 'model says swarm, label does not', counts.fp, 'fp'),
+          row(SEG.fn.c, 'FN — missed', 'label says swarm, model missed it', counts.fn, 'fn'),
           row('#3f3f3f', 'Background', 'neither: shaded by radar reflectivity', null),
         ];
       } else if (mode === 'prob') {
         rows = [`<div class="lgrow"><span class="swk" style="background:linear-gradient(90deg,#000,#f00,#ff0,#fff)"></span>
           <span class="lgname">Probability</span>
-          <span class="lgwhat">model confidence that a pixel is plume</span>
+          <span class="lgwhat">model confidence that a pixel is swarm</span>
           <span class="lgn">0.0 → 1.0</span></div>
           <div class="lgscale"><span>0.0 none</span><span>0.25</span><span>0.5</span><span>0.75</span><span>1.0 certain</span></div>`];
       } else if (mode === 'th') {
@@ -461,12 +461,12 @@ export async function render(mount, query) {
           <span class="lgn">weak → strong</span></div>`];
       } else if (mode === 'gt') {
         rows = [
-          row(SEG.tp.c, 'Ground truth', 'pixels a human annotator marked as plume', counts.tp + counts.fn),
+          row(SEG.tp.c, 'Ground truth', 'pixels a human annotator marked as swarm', counts.tp + counts.fn),
           row('#3f3f3f', 'Background', 'everything else', null),
         ];
       } else {
         rows = [
-          row('#2f7dd1', 'Prediction', `pixels the model calls plume at this threshold`, counts.tp + counts.fp),
+          row('#2f7dd1', 'Prediction', `pixels the model calls swarm at this threshold`, counts.tp + counts.fp),
           row('#3f3f3f', 'Background', 'everything else', null),
         ];
       }
