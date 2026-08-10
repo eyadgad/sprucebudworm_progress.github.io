@@ -16,9 +16,8 @@ export async function render(mount) {
 
   mount.innerHTML = `
   <h1>Performance breakdown</h1>
-  <p class="lede">Where the selected model does well and where it struggles, grouped by the metadata
-  that exists for every scene. Small groups are flagged: with fewer than ${MIN_N} scenes a mean is not
-  a reliable estimate.</p>
+  <p class="lede">Where the selected model does well and where it struggles, grouped by scene metadata.
+  Groups smaller than ${MIN_N} scenes are flagged as unreliable.</p>
 
   <div class="ctrls">
     <div class="f"><label for="sp">Split</label><select id="sp">

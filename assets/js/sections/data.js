@@ -18,14 +18,12 @@ export async function render(mount) {
   mount.innerHTML = `
   <h1>Data exploration</h1>
   <p class="lede">${int(scenes.length)} radar scenes from ${years[0]} to ${years.at(-1)}, each a
-  ${ds.grid.h} × ${ds.grid.w} grid at ${ds.grid.pixel_m} m resolution. This section covers how they are
-  distributed, how large the targets are, and how the splits differ.</p>
+  ${ds.grid.h} × ${ds.grid.w} grid at ${ds.grid.pixel_m} m resolution.</p>
 
   <div class="note"><span class="tag">how the split works</span><div class="bd">
-    Scenes are assigned to train / validation / test <b>stratified by year</b>, so every season appears
-    in every split at about 70 / 20 / 10. Because assignment is per scene rather than per night,
-    <b>${lk.nights_all_three} of ${lk.n_nights}</b> nights contribute scans to all three splits.
-    The generalisation check further down measures what that means in practice.
+    Scenes are split train / validation / test <b>stratified by year</b> (~70 / 20 / 10). Because
+    assignment is per scene, not per night, <b>${lk.nights_all_three} of ${lk.n_nights}</b> nights
+    contribute to all three splits; the generalisation check below tests what that means.
   </div></div>
 
   <h2>Filters</h2>

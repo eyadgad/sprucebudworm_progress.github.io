@@ -15,7 +15,7 @@ export async function render(mount) {
   mount.innerHTML = `
   <h1>Statistical analysis</h1>
   <p class="lede">Distributions, intervals and paired comparisons behind the headline numbers, with the
-  sample size for every statistic and an explicit statement of what the tests cannot support.</p>
+  sample size for every statistic.</p>
 
   <div class="note warn"><span class="tag">assumption violated</span><div class="bd">
     Most standard tests assume independent observations. These scenes are <b>not independent</b>:

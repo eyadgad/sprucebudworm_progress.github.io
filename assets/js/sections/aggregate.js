@@ -6,8 +6,7 @@ import { fmtOr, tip, int, esc, mean, std, quantile, bootCI } from '../lib/metric
 import { confusion, boxPlot, legend, BOXPLOT_KEY } from '../lib/charts.js';
 
 export async function render(mount) {
-  const [sm, ex] = await Promise.all([load('samples'), load('experiments')]);
-  const sel = ex.experiments.find(r => r.selected);
+  const sm = await load('samples');
   const S = sm.samples;
   const thr = sm.threshold;
 
@@ -16,15 +15,13 @@ export async function render(mount) {
 
   mount.innerHTML = `
   <h1>Aggregate evaluation</h1>
-  <p class="lede">Full-scene performance of the selected model at its calibrated threshold of ${thr}.
-  Validation and test are reported separately throughout; they are never averaged together.</p>
+  <p class="lede">Full-scene performance of the selected model at threshold ${thr}. Validation and test
+  are reported separately, never averaged together.</p>
 
-  <div class="note"><span class="tag">how to read this</span><div class="bd">
-    <b>Macro</b> metrics average per-scene scores, so every scene counts equally and small plumes drag
-    the number down. <b>Micro</b> metrics pool all pixels, so large plumes dominate. Both are legitimate
-    and they answer different questions. Metrics over plume-bearing scenes exclude the
-    ${int(neg('test').length + neg('val').length)} plume-free scenes, which are summarised separately
-    as a false-alarm rate.
+  <div class="note"><span class="tag">macro vs micro</span><div class="bd">
+    <b>Macro</b> averages per-scene scores (every scene counts equally, small plumes drag it down);
+    <b>micro</b> pools all pixels (large plumes dominate). Plume-free scenes are excluded here and
+    reported separately as a false-alarm rate.
   </div></div>
 
   <div id="tables"></div>
@@ -44,14 +41,10 @@ export async function render(mount) {
     ${BOXPLOT_KEY}</figcaption></figure>
 
   <h2>Uncertainty on the headline number</h2>
-  <p class="small">Bootstrap percentile intervals over scenes (2000 resamples, fixed seed so the numbers
-  reproduce). These capture scene-to-scene variability only: they do <b>not</b> capture the night-overlap
-  bias described in <a href="#/data">data exploration</a>, which is a systematic effect that no
-  resampling of these scenes can reveal.</p>
-  <div id="ci"></div>
-
-  <h2>Agreement with the training-time evaluation</h2>
-  <div id="cross"></div>`;
+  <p class="small">Bootstrap percentile intervals over scenes (2000 resamples, fixed seed). These capture
+  scene-to-scene variability only, not the night-overlap bias noted in
+  <a href="#/data">data exploration</a>.</p>
+  <div id="ci"></div>`;
 
   /* ---------------- metric tables ---------------- */
   const agg = rows => {
@@ -180,31 +173,4 @@ export async function render(mount) {
           <td class="n">${ci ? `${ci[0].toFixed(3)} – ${ci[1].toFixed(3)}` : '—'}</td></tr>`;
       })).join('')}
     </tbody></table></div>`;
-
-  /* ---------------- cross-check against training-time numbers ---------------- */
-  const dTest = A.test ? A.test.dice : null;
-  const diff = (dTest != null && sel.dice != null) ? dTest - sel.dice : null;
-  mount.querySelector('#cross').innerHTML = `
-    <div class="tscroll"><table>
-      <thead><tr><th>Quantity</th><th>Training pipeline</th><th>This dashboard</th><th>Difference</th></tr></thead>
-      <tbody>
-      ${[['Test Dice (macro)', sel.dice, A.test?.dice, 'dice'],
-         ['Test Dice (micro)', sel.dice_micro, A.test?.dice_micro, 'dice_micro'],
-         ['Test IoU (macro)', sel.iou, A.test?.iou, 'iou'],
-         ['Test precision', sel.precision, A.test?.precision, 'precision'],
-         ['Test recall', sel.recall, A.test?.recall, 'recall'],
-         ['Test boundary IoU', sel.boundary_iou, A.test?.boundary_iou, 'boundary_iou'],
-        ].map(([l, a, b, k]) => {
-          const d = (a != null && b != null) ? b - a : null;
-          const ok = d != null && Math.abs(d) < 5e-3;
-          return `<tr><td>${esc(l)}</td><td class="n">${fmtOr(a, k)}</td><td class="n">${fmtOr(b, k)}</td>
-            <td class="n" style="color:${ok ? 'var(--ok)' : (d == null ? 'var(--muted)' : 'var(--warn)')}">${
-              d == null ? '—' : (d > 0 ? '+' : '') + d.toFixed(4)}</td></tr>`;
-        }).join('')}
-    </tbody></table></div>
-    <p class="small">The left column is what <code>outputs/experiments/${esc(sm.selected)}_result.json</code>
-    recorded at the end of training. The right column is recomputed here from a fresh forward pass.
-    ${diff != null && Math.abs(diff) < 5e-3
-      ? 'They agree to within 0.005, which confirms the dashboard is reading the same model and the same split.'
-      : 'A difference larger than 0.005 would indicate a mismatch in threshold, split or checkpoint and should be investigated.'}</p>`;
 }

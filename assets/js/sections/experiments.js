@@ -23,9 +23,8 @@ export async function render(mount) {
 
   mount.innerHTML = `
   <h1>Experiment comparison</h1>
-  <p class="lede">${rows.length} completed training runs spanning ${models.length} architectures,
-  ${losses.length} loss functions, three label definitions, four channel sets and ten elevation counts.
-  Every row is a real run with its own checkpoint and logs.</p>
+  <p class="lede">${rows.length} completed training runs across ${models.length} architectures,
+  ${losses.length} loss functions, three label definitions, four channel sets and ten elevation counts.</p>
 
   <div class="note sel"><span class="tag">selected</span><div class="bd">
     <b>${MODEL_NAME[sel.model]} · ${LOSS_NAME[sel.loss]} · ${sel.n_elev} elevations · ${targetName(sel.target_mode, sel.dbz_threshold)}</b>
@@ -43,16 +42,14 @@ export async function render(mount) {
 
   <h2>Precision and recall trade-off</h2>
   <figure><div class="viz" id="c-pr"></div>
-    <figcaption>Each point is one run at its own calibrated threshold. Runs towards the upper right are
-    better on both axes. Colour encodes architecture; the selected run is ringed. Dashed lines mark the
-    selected run's position.</figcaption></figure>
+    <figcaption>One point per run, coloured by architecture; the selected run is ringed. Upper right is
+    better on both axes.</figcaption></figure>
   <div id="l-pr"></div>
 
   <h2>What actually moved the score</h2>
   <figure><div class="viz" id="c-axis"></div>
-    <figcaption>Mean test Dice grouped by each design choice, over all runs that vary it. The bar length
-    is how much that axis moves the score relative to the others: the label definition matters most,
-    architecture least.</figcaption></figure>`;
+    <figcaption>Spread in mean test Dice across the levels of each design choice: the label definition
+    matters most, architecture least.</figcaption></figure>`;
 
   /* ---------------- filters ---------------- */
   const ctrls = mount.querySelector('#ctrls');
@@ -140,16 +137,11 @@ export async function render(mount) {
         (${near.slice(0,3).map(r=>`${esc(MODEL_NAME[r.model]||r.model)} ${r.n_elev} elev`).join(', ')}). Dice alone therefore
         does not separate the leaders.</p>` : ''}
       <div class="note bad"><span class="tag">selection is weakly supported</span><div class="bd">
-        The evidence for this specific run is <b>thinner than a single sorted column suggests</b>.
-        It wins on test Dice by ${near.length ? (sel.dice - near[0].dice).toFixed(4) : 'a small margin'},
-        while a sibling run (Attention UNet at 7 elevations) has better boundary placement, and
-        another (6 elevations) has the better validation score that selection was supposed to be based on.
-        With ${rows.length} runs against a ${sel.n_pos_scenes}-scene test set, choosing the maximum test
-        Dice risks fitting the test set. The scene-to-scene spread in
-        <a href="#/stats">statistical analysis</a> is far wider than the gaps between these top runs.
-        <br><b>Fair statement of the result:</b> this configuration is <b>among the best few</b>, and the
-        family (Attention UNet / UNet++, dBZ ≥ 0, Focal Tversky, 7–9 elevations) is what the evidence
-        actually supports — not this one run over its siblings.
+        Selecting by maximum test Dice over ${rows.length} runs risks fitting the ${sel.n_pos_scenes}-scene
+        test set: sibling runs lead on boundary placement and on validation Dice, and the gaps between the
+        top runs are far smaller than the scene-to-scene spread. The fair statement is that this run is
+        <b>among the best few</b>; the family (Attention UNet / UNet++, dBZ ≥ 0, Focal Tversky, 7–9
+        elevations) is what the evidence supports, not this one run over its siblings.
       </div></div>`;
   }
 

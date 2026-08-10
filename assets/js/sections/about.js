@@ -30,11 +30,9 @@ export async function render(mount) {
 
   <h2>Macro versus micro</h2>
   <div class="note"><span class="tag">important</span><div class="bd">
-    <b>Macro</b> averages a per-scene score over scenes: every scene counts equally, so scenes with tiny
-    plumes pull the average down. <b>Micro</b> pools all pixels first: scenes with large plumes dominate.
-    Macro is the headline here because it matches the baseline report and treats each observation
-    equally; micro is always reported alongside it. Mixing the two, or quoting whichever is higher,
-    would be misleading, so both are shown everywhere.
+    <b>Macro</b> averages a per-scene score over scenes (every scene counts equally, so tiny plumes pull
+    it down); <b>micro</b> pools all pixels first (large plumes dominate). Macro is the headline here and
+    micro is always reported alongside it; both are shown everywhere so neither can be cherry-picked.
   </div></div>
 
   <h2>Colour conventions</h2>
@@ -63,8 +61,6 @@ export async function render(mount) {
     <li><b>Display.</b> The site loads only the JSON a section needs and computes summaries in the
       browser from the per-scene records, so any table can be re-derived from
       <code>data/samples.json</code>.</li>
-    <li><b>Cross-check.</b> <a href="#/aggregate">Aggregate evaluation</a> compares the recomputed
-      metrics against the values stored at training time. They currently agree to four decimal places.</li>
   </ol>
 
   <h2>Data files</h2>

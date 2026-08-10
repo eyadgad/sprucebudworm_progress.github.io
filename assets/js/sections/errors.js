@@ -15,9 +15,8 @@ export async function render(mount) {
 
   mount.innerHTML = `
   <h1>Error and failure analysis</h1>
-  <p class="lede">What the model gets wrong, how often, and what those cases have in common.
-  Measured facts and proposed explanations are labelled separately throughout. Filters below narrow
-  every chart and table to a split, year or single night.</p>
+  <p class="lede">What the model gets wrong, how often, and what those cases have in common. Measured
+  facts and proposed explanations are labelled separately.</p>
 
   <div id="filters"></div>
 

@@ -12,8 +12,8 @@ export async function render(mount) {
   mount.innerHTML = `
   <h1>Spatial analysis</h1>
   <p class="lede">How predicted shapes compare with labelled shapes, and whether errors cluster at
-  particular ranges from the radar. The filters narrow the scene-level charts; the radial profile is a
-  precomputed per-split aggregate, so it follows the split only.</p>
+  particular ranges from the radar. The radial profile follows the split only; the other charts also
+  respect the year and night filters.</p>
 
   <div id="filters"></div>
 

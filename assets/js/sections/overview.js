@@ -14,13 +14,11 @@ export async function render(mount) {
   const rows = ex.experiments;
   const sel = rows.find(r => r.selected);
   const byDice = [...rows].filter(r => r.dice !== null).sort((a, b) => b.dice - a.dice);
-  const rank = byDice.findIndex(r => r.name === sel.name) + 1;
   const runners = byDice.slice(0, 6);
 
   const cnt = ds.split_summary.counts;
   const totalPos = cnt.train.positives + cnt.val.positives + cnt.test.positives;
   const totalNeg = cnt.train.negatives + cnt.val.negatives + cnt.test.negatives;
-  const gpuH = rows.reduce((s, r) => s + (r.train_seconds || 0), 0) / 3600;
   const lk = ds.leakage;
 
   // test-set pixel confusion for the selected run, from its stored full-scene
@@ -53,29 +51,6 @@ export async function render(mount) {
   <b>${int(sel.n_neg_scenes)}</b> plume-free test scenes:
   ${tip('bg_fp_rate','background false-positive rate')} = <b>${fmtOr(sel.bg_fp_rate,'bg_fp_rate')}</b>
   (${pct(sel.bg_fp_rate, 2)} of pixels).</p>
-
-  <h2>What this means in plain terms</h2>
-  <div class="two">
-    <div class="panel">
-      <h3 style="margin-top:0">Reading the score</h3>
-      <p>A Dice of <b>${fmtOr(sel.dice,'dice')}</b> means that when the model outlines a plume, its outline and
-      the human-drawn outline overlap by roughly ${(sel.dice*100).toFixed(0)}%. The model finds
-      <b>${pct(sel.recall,0)}</b> of the true plume pixels, and <b>${pct(sel.precision,0)}</b> of what it marks
-      is really plume.</p>
-      <p>The model is therefore <b>better at finding plumes than at drawing their exact edges</b>. It leans
-      towards over-calling: recall is higher than precision at the selected threshold.</p>
-    </div>
-    <div class="panel">
-      <h3 style="margin-top:0">How it was chosen</h3>
-      <p>${rows.length} training runs were compared across architecture, input channels, label definition,
-      loss function and elevation count (${gpuH.toFixed(0)} GPU-hours in total). Models were ranked on
-      <b>validation</b> score; the test set was read only to report the final number.</p>
-      <p>This configuration ranks <b>#${rank} of ${byDice.length}</b> on test Dice. It does not lead on every
-      metric: sibling runs at 7 and 6 elevations have slightly better boundary placement and validation
-      score. The honest summary is that a <b>family</b> of similar runs is tied at the top, and this one
-      leads the tie-break metric. See <a href="#/experiments">experiment comparison</a>.</p>
-    </div>
-  </div>
 
   <h2>Strongest alternatives</h2>
   <figure><div class="viz" id="alt"></div>
