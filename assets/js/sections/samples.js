@@ -43,12 +43,12 @@ export async function render(mount, query) {
   const MLIST = sm.models || [{key: 'sel', disp: sm.model_name_sel || 'Attention UNet'}];
   const MKEY0 = MLIST[0].key;
   const mname = k => (MLIST.find(m => m.key === k) || {}).disp || k;
-  const state = {split: 'test', type: 'pos', year: 'all', night: 'all', model: MKEY0,
+  const state = {split: 'test', type: 'pos', year: 'all', night: 'all',
     sort: 'dice', dir: 1, q: '', view: 'grid', preset: 'all'};
-  // per-scene value for the currently chosen model (falls back to the top-level
-  // selected-model fields if the four-model map is absent)
-  const dcol = s => { const m = s.models && s.models[state.model]; return m ? m.dice : s.dice; };
-  const bgcol = s => { const m = s.models && s.models[state.model]; return m ? m.bg_fp_rate : s.bg_fp_rate; };
+  // The list shows the selected model; model choice for a single scene lives in
+  // the viewer, not in these filters.
+  const dcol = s => { const m = s.models && s.models[MKEY0]; return m ? m.dice : s.dice; };
+  const bgcol = s => { const m = s.models && s.models[MKEY0]; return m ? m.bg_fp_rate : s.bg_fp_rate; };
 
   mount.innerHTML = `
   <h1>Sample explorer</h1>
@@ -100,7 +100,6 @@ export async function render(mount, query) {
     nightWrap.querySelector('select').addEventListener('change', e => { state.night = e.target.value; draw(); });
   };
   ctrls.appendChild(nightWrap); rebuildNights();   // Night sits right after Year
-  mk('Model', 'model', MLIST.map((m, i) => [m.key, m.disp + (i === 0 ? ' (selected)' : '')]));
   mk('Sort by', 'sort', [['dice', 'Dice'], ['iou', 'IoU'], ['precision', 'Precision'], ['recall', 'Recall'],
     ['gt_area', 'Truth area'], ['pred_area', 'Predicted area'], ['boundary_iou', 'Boundary IoU'],
     ['n_pred_regions', 'Predicted regions'], ['ts', 'Time']]);
@@ -136,6 +135,35 @@ export async function render(mount, query) {
     presetsEl.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === b));
     draw();
   }));
+
+  /* ---------------- image helpers (shared by thumbnails and the viewer) ------- */
+  const loadImg = src => new Promise((res, rej) => {
+    const i = new Image(); i.decoding = 'async';
+    i.onload = () => res(i); i.onerror = () => rej(new Error('missing ' + src)); i.src = src;
+  });
+  // one reusable offscreen per resolution; each read is synchronous so sharing is safe
+  const _big = document.createElement('canvas'); _big.width = _big.height = PREVIEW;
+  const _bigx = _big.getContext('2d', {willReadFrequently: true});
+  const px = im => { _bigx.clearRect(0, 0, PREVIEW, PREVIEW); _bigx.drawImage(im, 0, 0, PREVIEW, PREVIEW); return _bigx.getImageData(0, 0, PREVIEW, PREVIEW).data; };
+  const T = 120;
+  const _thb = document.createElement('canvas'); _thb.width = _thb.height = T;
+  const _thbx = _thb.getContext('2d', {willReadFrequently: true});
+  // Thumbnail: viridis reflectivity with the model's prediction tinted over it,
+  // so the grid shows the radar returns in colour rather than a white/black mask.
+  function renderThumb(canvas, ts) {
+    const c2 = canvas.getContext('2d');
+    Promise.all([loadImg(`${IMG(ts)}_th.png`), loadImg(`${IMG(ts)}_thumb.png`)]).then(([th, pr]) => {
+      _thbx.clearRect(0, 0, T, T); _thbx.drawImage(th, 0, 0, T, T); const R = _thbx.getImageData(0, 0, T, T).data;
+      _thbx.clearRect(0, 0, T, T); _thbx.drawImage(pr, 0, 0, T, T); const PR = _thbx.getImageData(0, 0, T, T).data;
+      const o = c2.createImageData(T, T), d = o.data;
+      for (let i = 0; i < R.length; i += 4) {
+        const c = viridis(R[i] / 255); let r = c[0], g = c[1], b = c[2];
+        if (PR[i] > 127) { r = r * 0.25 + 47 * 0.75; g = g * 0.25 + 125 * 0.75; b = b * 0.25 + 209 * 0.75; }
+        d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255;
+      }
+      c2.putImageData(o, 0, 0);
+    }).catch(() => {});
+  }
 
   /* ---------------- filtering ---------------- */
   function rows() {
@@ -192,8 +220,8 @@ export async function render(mount, query) {
       body.innerHTML = `<div class="sgrid">` + r.slice(0, 120).map(s => {
         const has = withImg.has(s.ts);
         return `<button class="scell" data-ts="${s.ts}">
-          ${has ? `<img class="im" loading="lazy" decoding="async" width="120" height="120"
-             src="${IMG(s.ts)}_thumb.png" alt="Predicted mask for scene ${tsLabel(s.ts)}">`
+          ${has ? `<canvas class="im" width="120" height="120" data-ts="${s.ts}" style="display:block"
+             aria-label="Reflectivity with prediction for scene ${tsLabel(s.ts)}"></canvas>`
             : `<span class="im" style="display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)">no image</span>`}
           <span class="cap"><b>${hhmm(s.ts)}</b> <span class="m">${String(s.ts).slice(0, 8)}</span><br>
           ${s.label === 1
@@ -202,13 +230,14 @@ export async function render(mount, query) {
         </button>`;
       }).join('') + `</div>
         <p class="small" style="margin-top:10px">
-          <span class="swk" style="background:#fff;vertical-align:-3px"></span> <b>white</b> = predicted swarm,
-          <span class="swk" style="background:#000;vertical-align:-3px"></span> <b>black</b> = background,
-          at the project threshold ${sm.threshold}. Open a scene for the labelled error view.
-          ${state.model !== MKEY0 ? `<b style="color:var(--warn)">Dice shown is ${esc(mname(state.model))}; the thumbnail is still the selected model (only it has stored images).</b>` : ''}</p>` +
+          Thumbnails show <span class="swk" style="vertical-align:-2px;background:${VIRIDIS_CSS}"></span>
+          <b>reflectivity</b> (weak → strong) with the model's
+          <span class="swk" style="vertical-align:-2px;background:rgb(47,125,209)"></span> <b>prediction</b>
+          at threshold ${sm.threshold}. Open a scene for the labelled error view and the layer controls.</p>` +
         (r.length > 120 ? `<p class="small">Showing the first 120 of ${r.length}. Narrow the filters or switch to the table view to see the rest.</p>` : '');
       body.querySelectorAll('.scell').forEach(b =>
         b.addEventListener('click', () => open(+b.dataset.ts)));
+      body.querySelectorAll('canvas.im[data-ts]').forEach(c => renderThumb(c, +c.dataset.ts));
     } else {
       body.innerHTML = `<div id="tbl"></div>`;
       // flatten each model's per-scene Dice onto the row so the table can show
@@ -230,234 +259,227 @@ export async function render(mount, query) {
           {key: 'gt_area', label: 'Truth px', fmt: v => int(v)},
           {key: 'pred_area', label: 'Pred px', fmt: v => int(v)},
         ],
-        rows: r, sort: state.sort === 'dice' ? 'd_' + state.model : state.sort, dir: +state.dir, pageSize: 20,
+        rows: r, sort: state.sort === 'dice' ? 'd_' + MKEY0 : state.sort, dir: +state.dir, pageSize: 20,
         onRow: s => open(s.ts),
       });
     }
   }
 
-  /* ---------------- viewer ---------------- */
+  /* ---------------- viewer ----------------
+     The modal shell (title, arrows, top controls, panels) is built once per open.
+     Same-night chips and the prev/next arrows then call loadScene(), which swaps
+     the scene image and analysis in place — the window is not rebuilt, so the
+     layer/threshold/model controls keep their state. */
   const modalEl = mount.querySelector('#modal');
   const modal = new Modal(modalEl);
-  const close = () => modal.close();
+  const q = sel => modalEl.querySelector(sel);
+  const C_GT = [106, 62, 161], C_PRED = [47, 125, 209];
+  const rgbHeat = v => {
+    const t = v / 255;
+    return [Math.round(255 * Math.min(1, t * 1.6)),
+            Math.round(255 * Math.max(0, Math.min(1, t * 1.6 - 0.5))),
+            Math.round(255 * Math.max(0, t * 1.2 - 0.75))];
+  };
 
-  async function open(ts) {
-    const s = all.find(x => x.ts === ts);
-    if (!s) return;
-    const list = rows();
-    const idx = list.findIndex(x => x.ts === ts);
-    const has = withImg.has(ts);
-    const html = `
-      <div class="modal" role="dialog" aria-modal="true" aria-label="Scene ${tsLabel(ts)}">
-        <div class="box">
-          <div class="hd">
-            <h2 style="flex:1">${tsLabel(ts)}</h2>
-            <button id="prev" ${idx <= 0 ? 'disabled' : ''} aria-label="Previous scene">←</button>
-            <button id="next" ${idx >= list.length - 1 ? 'disabled' : ''} aria-label="Next scene">→</button>
-            <button id="x" aria-label="Close">✕ Close</button>
+  // per-open viewer state, reused across in-place scene changes
+  let curS = null, P = null, G = null, TH = null, out = null, ctx = null;
+  let vlist = [], vidx = 0, imgToken = 0;
+
+  const SHELL = `
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Scene viewer">
+      <div class="box">
+        <div class="hd">
+          <h2 id="v-title" style="flex:1"></h2>
+          <button id="prev" aria-label="Previous scene">←</button>
+          <button id="next" aria-label="Next scene">→</button>
+          <button id="x" aria-label="Close">✕ Close</button>
+        </div>
+        <div class="ctrls" id="v-ctrls" style="margin-bottom:14px">
+          <div class="f"><label for="v_model">Model</label>
+            <select id="v_model">${MLIST.map((m, i) => `<option value="${esc(m.key)}">${esc(m.disp)}${i === 0 ? ' (selected)' : ''}</option>`).join('')}</select></div>
+          <div class="f" style="align-items:flex-start"><label>Layers</label>
+            <div class="chips" id="lays" style="gap:6px 12px">
+              <label class="chk"><input type="checkbox" id="l_refl" checked> Reflectivity</label>
+              <label class="chk"><input type="checkbox" id="l_prob"> Probability</label>
+              <label class="chk"><input type="checkbox" id="l_gt" checked> Ground truth</label>
+              <label class="chk"><input type="checkbox" id="l_pred" checked> Prediction</label>
+            </div></div>
+          <div class="f"><label for="thr">Threshold <b id="thv">—</b></label>
+            <input type="range" id="thr" min="0.02" max="0.9" step="0.01" value="0.15"></div>
+          <div class="f"><label for="op">Overlay opacity</label>
+            <input type="range" id="op" min="0" max="1" step="0.05" value="0.75"></div>
+          <button id="rst" class="ghost">Reset threshold</button>
+        </div>
+        <div class="viewer">
+          <div>
+            <div class="stage" id="stage" style="position:relative">
+              <canvas id="cv" width="${PREVIEW}" height="${PREVIEW}" style="display:block" aria-label="Segmentation overlay"></canvas>
+              <div id="leg2" style="position:absolute;top:8px;left:8px;display:none;flex-direction:column;gap:3px;background:rgba(15,17,21,.66);color:#fff;padding:7px 9px;border-radius:8px;font:500 11px/1.5 var(--sans);pointer-events:none;box-shadow:0 1px 6px rgba(0,0,0,.45)"></div>
+              <div id="noimg" class="state" style="display:none;position:absolute;inset:0;border:0;background:var(--panel)"></div>
+            </div>
+            <p class="small" id="live"></p>
           </div>
-          <div class="viewer">
-            <div>
-              <div class="stage" id="stage" style="position:relative">
-                ${has ? `<canvas id="cv" width="${PREVIEW}" height="${PREVIEW}" style="display:block"
-                          aria-label="Segmentation overlay for ${tsLabel(ts)}"></canvas>
-                         <div id="leg2" style="position:absolute;top:8px;left:8px;display:flex;flex-direction:column;gap:3px;background:rgba(15,17,21,.66);color:#fff;padding:7px 9px;border-radius:8px;font:500 11px/1.5 var(--sans);pointer-events:none;box-shadow:0 1px 6px rgba(0,0,0,.45)"></div>`
-                      : `<div class="state" style="height:100%;border:0;background:var(--panel)">
-                           <div class="big">No imagery exported</div>
-                           <div class="small">Pixel layers were not exported for the ${esc(s.split)} split. Metrics on the right are still full resolution.</div></div>`}
-              </div>
-              ${has ? `
-              <div class="ctrls" style="margin-top:12px">
-                <div class="f" style="align-items:flex-start"><label>Layers</label>
-                  <div class="chips" id="lays" style="gap:6px 12px">
-                    <label class="chk"><input type="checkbox" id="l_refl" checked> Reflectivity (base)</label>
-                    <label class="chk"><input type="checkbox" id="l_prob"> Probability</label>
-                    <label class="chk"><input type="checkbox" id="l_gt" checked> Ground truth</label>
-                    <label class="chk"><input type="checkbox" id="l_pred" checked> Prediction</label>
-                  </div></div>
-                <div class="f"><label for="thr">Threshold <b id="thv">${s.thr}</b></label>
-                  <input type="range" id="thr" min="0.02" max="0.9" step="0.01" value="${s.thr}"></div>
-                <div class="f"><label for="op">Overlay opacity</label>
-                  <input type="range" id="op" min="0" max="1" step="0.05" value="0.75"></div>
-                <button id="rst" class="ghost">Reset to ${s.thr}</button>
-              </div>
-              <p class="small" id="live"></p>` : ''}
-            </div>
-            <div>
-              <h3 style="margin-top:0">Scene</h3>
-              <div class="kv">
-                <span class="k">Timestamp</span><span class="v">${ts}</span>
-                <span class="k">Night</span><span class="v">${esc(s.night || '—')}</span>
-                <span class="k">Split</span><span class="v">${esc(s.split)}</span>
-                <span class="k">Type</span><span class="v">${s.label ? 'has swarm' : 'swarm free'}</span>
-                <span class="k">Hour (UTC)</span><span class="v">${String(s.hour).padStart(2, '0')}:00</span>
-              </div>
-              <h3>Metrics at threshold ${s.thr}</h3>
-              <div class="kv">${
-                s.label === 1 ? [
-                  ['Dice', fmtOr(s.dice, 'dice')], ['IoU', fmtOr(s.iou, 'iou')],
-                  ['Precision', fmtOr(s.precision, 'precision')], ['Recall', fmtOr(s.recall, 'recall')],
-                  ['Boundary IoU', fmtOr(s.boundary_iou, 'boundary_iou')], ['NSD', fmtOr(s.nsd, 'nsd')],
-                  ['HD95', fmtOr(s.hd95, 'hd95')], ['ASSD', fmtOr(s.assd, 'assd')],
-                  ['Truth area', int(s.gt_area)], ['Predicted area', int(s.pred_area)],
-                  ['TP', int(s.tp)], ['FP', int(s.fp)], ['FN', int(s.fn)],
-                  ['Truth regions', s.n_gt_regions ?? '—'], ['Pred regions', s.n_pred_regions ?? '—'],
-                  ['Truth mean range', s.gt_dist_km != null ? s.gt_dist_km + ' km' : '—'],
-                ].map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${v}</span>`).join('')
-                : [['Predicted area', int(s.pred_area)], ['False-positive rate', fmtOr(s.bg_fp_rate, 'bg_fp_rate')],
-                   ['Max probability', fmtOr(s.prob_max, 'dice')]]
-                  .map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${v}</span>`).join('')}
-              </div>
-              <h3>Model comparison</h3>
-              <div class="kv">
-                ${MLIST.map((m, i) => {
-                  const mm = (s.models && s.models[m.key]) || {};
-                  const v = s.label ? fmtOr(mm.dice, 'dice') : fmtOr(mm.bg_fp_rate, 'bg_fp_rate');
-                  return `<span class="k">${esc(m.disp)}${i === 0 ? ' ★' : ''}</span><span class="v">${v}</span>`;
-                }).join('')}
-              </div>
-              <p class="small">All four best models scored on this scene
-              (${s.label ? 'per-scene Dice' : 'false-alarm rate'}). ★ is the selected model; only its pixel
-              layers are stored, so the image is always the selected model's.</p>
-              <h3>Same night</h3>
-              <div id="night"></div>
-            </div>
+          <div>
+            <h3 style="margin-top:0">Scene</h3><div class="kv" id="v-scene"></div>
+            <h3 id="v-metrics-h">Metrics</h3><div class="kv" id="v-metrics"></div>
+            <p class="small" id="v-metrics-note" style="display:none"></p>
+            <h3>Model comparison</h3><div class="kv" id="v-cmp"></div>
+            <p class="small" id="v-cmp-note"></p>
+            <h3>Same night</h3><div id="night"></div>
           </div>
         </div>
-      </div>`;
+      </div>
+    </div>`;
 
-    // Modal owns focus, the key handler and the scroll lock, so re-rendering the
-    // body for the next scene cannot stack listeners or strand the page locked.
-    const nav = d => { const t = list[idx + d]; if (t) open(t.ts); };
-    modal.open(html, {onPrev: () => nav(-1), onNext: () => nav(1)});
-
-    modalEl.querySelector('#x').addEventListener('click', close);
-    modalEl.querySelector('#prev').addEventListener('click', () => nav(-1));
-    modalEl.querySelector('#next').addEventListener('click', () => nav(1));
-
-    // sibling scans from the same night
-    const sib = all.filter(x => x.night && x.night === s.night).sort((a, b) => a.ts - b.ts);
-    modalEl.querySelector('#night').innerHTML = sib.length > 1
-      ? `<div class="chips">` + sib.map(x =>
-          `<button class="chip${x.ts === ts ? ' on' : ''}" data-ts="${x.ts}" title="${x.split} split">
-            ${hhmm(x.ts)} ${x.label ? `· ${fmtOr(x.dice, 'dice')}` : '· empty'}</button>`).join('') + `</div>
-         <p class="small">${sib.length} scans on ${esc(s.night)} across ${[...new Set(sib.map(x => x.split))].join(' / ')}.</p>`
-      : `<p class="small">No other scans from this night.</p>`;
-    modalEl.querySelectorAll('#night .chip').forEach(b =>
-      b.addEventListener('click', () => open(+b.dataset.ts)));
-
-    if (has) await setupCanvas(s);
+  function drawLegend(L, counts) {
+    const leg2 = q('#leg2'), total = PREVIEW * PREVIEW;
+    const sw = bg => `<span style="display:inline-block;width:13px;height:11px;border-radius:2px;flex:none;background:${bg}"></span>`;
+    const row = (bg, name, n) => `<div style="display:flex;align-items:center;gap:6px;white-space:nowrap">
+      ${sw(bg)}<span>${esc(name)}</span>${n == null ? '' : `<span style="margin-left:auto;padding-left:12px;opacity:.75">${((n / total) * 100).toFixed(n / total < 0.01 ? 2 : 1)}%</span>`}</div>`;
+    const rows = [];
+    if (L.pred) rows.push(row('rgb(47,125,209)', 'Prediction', counts.tp + counts.fp));
+    if (L.gt) rows.push(row('rgb(106,62,161)', 'Ground truth', counts.tp + counts.fn));
+    if (L.prob) rows.push(row('linear-gradient(90deg,#000,#f00,#ff0,#fff)', 'Probability 0 → 1', null));
+    if (L.refl) rows.push(row(VIRIDIS_CSS, 'Reflectivity weak → strong', null));
+    leg2.innerHTML = rows.join('');
+    leg2.style.display = rows.length ? 'flex' : 'none';
   }
 
-  /* ---------------- canvas compositing ---------------- */
-  async function setupCanvas(s) {
-    const cv = modalEl.querySelector('#cv');
-    const ctx = cv.getContext('2d', {willReadFrequently: true});
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, PREVIEW, PREVIEW);
-    const px = (im) => {
-      const c = document.createElement('canvas');
-      c.width = c.height = PREVIEW;
-      const x = c.getContext('2d', {willReadFrequently: true});
-      x.drawImage(im, 0, 0, PREVIEW, PREVIEW);
-      return x.getImageData(0, 0, PREVIEW, PREVIEW).data;
-    };
-    const loadImg = src => new Promise((res, rej) => {
-      const i = new Image();
-      i.onload = () => res(i);
-      i.onerror = () => rej(new Error('missing ' + src));
-      i.src = src;
-    });
+  function paint() {
+    if (!curS || !P || !ctx) return;
+    const t = +q('#thr').value, op = +q('#op').value;
+    const L = {refl: q('#l_refl').checked, prob: q('#l_prob').checked, gt: q('#l_gt').checked, pred: q('#l_pred').checked};
+    const cut = t * 255, d = out.data;
+    let tp = 0, fp = 0, fn = 0;
+    for (let i = 0, p = 0; i < P.length; i += 4, p += 4) {
+      const prob = P[i], gt = G[i] > 127, pred = prob > cut;
+      if (gt && pred) tp++; else if (pred) fp++; else if (gt) fn++;
+      let r = 0, g = 0, b = 0;
+      if (L.refl) { const c = viridis(TH[i] / 255); r = c[0]; g = c[1]; b = c[2]; }
+      const over = c => { r = r * (1 - op) + c[0] * op; g = g * (1 - op) + c[1] * op; b = b * (1 - op) + c[2] * op; };
+      if (L.prob) over(rgbHeat(prob));
+      if (L.gt && gt) over(C_GT);
+      if (L.pred && pred) over(C_PRED);
+      d[p] = r; d[p + 1] = g; d[p + 2] = b; d[p + 3] = 255;
+    }
+    ctx.putImageData(out, 0, 0);
+    const s = curS;
+    const dice = tp ? 2 * tp / (2 * tp + fp + fn) : 0;
+    const prec = (tp + fp) ? tp / (tp + fp) : 0, rec = (tp + fn) ? tp / (tp + fn) : 0;
+    q('#thv').textContent = t.toFixed(2);
+    drawLegend(L, {tp, fp, fn});
+    q('#live').innerHTML = s.label === 1
+      ? `On this ${PREVIEW}px preview at threshold ${t.toFixed(2)}: Dice <b>${dice.toFixed(3)}</b>,
+         precision ${prec.toFixed(3)}, recall ${rec.toFixed(3)} (TP ${int(tp)}, FP ${int(fp)}, FN ${int(fn)} preview px).
+         <span style="color:var(--muted)">Full-resolution Dice at threshold ${s.thr} is ${fmtOr(s.dice, 'dice')}.</span>`
+      : `Swarm-free scene. ${int(fp)} preview px predicted as swarm at threshold ${t.toFixed(2)}.`;
+  }
 
-    let P, G, TH;
-    try {
-      const [ip, ig, it] = await Promise.all([
-        loadImg(`${IMG(s.ts)}_prob.png`), loadImg(`${IMG(s.ts)}_gt.png`), loadImg(`${IMG(s.ts)}_th.png`)]);
-      P = px(ip); G = px(ig); TH = px(it);
-    } catch (e) {
-      modalEl.querySelector('#stage').innerHTML =
-        `<div class="state" style="height:100%;border:0"><div class="big">Image failed to load</div>
-         <div class="small">${esc(e.message)}</div></div>`;
+  function renderPanels() {
+    const s = curS, vm = q('#v_model').value, isSel = vm === MKEY0;
+    q('#v-scene').innerHTML = [
+      ['Timestamp', s.ts], ['Night', esc(s.night || '—')], ['Split', esc(s.split)],
+      ['Type', s.label ? 'has swarm' : 'swarm free'], ['Hour (UTC)', String(s.hour).padStart(2, '0') + ':00'],
+    ].map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${v}</span>`).join('');
+
+    q('#v-metrics-h').textContent = `Metrics — ${mname(vm)}`;
+    const note = q('#v-metrics-note');
+    let rowsM;
+    if (s.label === 1 && isSel) {
+      rowsM = [['Dice', fmtOr(s.dice, 'dice')], ['IoU', fmtOr(s.iou, 'iou')],
+        ['Precision', fmtOr(s.precision, 'precision')], ['Recall', fmtOr(s.recall, 'recall')],
+        ['Boundary IoU', fmtOr(s.boundary_iou, 'boundary_iou')], ['NSD', fmtOr(s.nsd, 'nsd')],
+        ['HD95', fmtOr(s.hd95, 'hd95')], ['ASSD', fmtOr(s.assd, 'assd')],
+        ['Truth area', int(s.gt_area)], ['Predicted area', int(s.pred_area)],
+        ['TP', int(s.tp)], ['FP', int(s.fp)], ['FN', int(s.fn)],
+        ['Truth regions', s.n_gt_regions ?? '—'], ['Pred regions', s.n_pred_regions ?? '—']];
+      note.style.display = 'none';
+    } else if (s.label === 1) {
+      const mm = (s.models && s.models[vm]) || {};
+      rowsM = [['Dice', fmtOr(mm.dice, 'dice')],
+        ['Predicted area', mm.pred_area != null ? int(mm.pred_area) : '—'], ['Truth area', int(s.gt_area)]];
+      note.textContent = 'Only per-scene Dice is stored for non-selected models; the full metric suite and the image stay the selected model’s.';
+      note.style.display = '';
+    } else {
+      const mm = isSel ? s : ((s.models && s.models[vm]) || {});
+      rowsM = [['Predicted area', mm.pred_area != null ? int(mm.pred_area) : '—'],
+        ['False-positive rate', fmtOr(mm.bg_fp_rate, 'bg_fp_rate')], ['Max probability', fmtOr(s.prob_max, 'dice')]];
+      note.style.display = 'none';
+    }
+    q('#v-metrics').innerHTML = rowsM.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${v}</span>`).join('');
+
+    q('#v-cmp').innerHTML = MLIST.map(m => {
+      const mm = (s.models && s.models[m.key]) || {};
+      const v = s.label ? fmtOr(mm.dice, 'dice') : fmtOr(mm.bg_fp_rate, 'bg_fp_rate');
+      const hl = m.key === vm ? ' style="color:var(--accent2);font-weight:600"' : '';
+      return `<span class="k"${hl}>${esc(m.disp)}${m.key === MKEY0 ? ' ★' : ''}</span><span class="v"${hl}>${v}</span>`;
+    }).join('');
+    q('#v-cmp-note').innerHTML = `${s.label ? 'Per-scene Dice' : 'False-alarm rate'} for all four best models.
+      ★ is the selected model; its pixel layers are the image shown.`;
+  }
+
+  function renderNight() {
+    const s = curS, ts = s.ts, el = q('#night');
+    const sib = all.filter(x => x.night && x.night === s.night).sort((a, b) => a.ts - b.ts);
+    el.innerHTML = sib.length > 1
+      ? `<div class="chips">` + sib.map(x =>
+          `<button class="chip${x.ts === ts ? ' on' : ''}" data-ts="${x.ts}" title="${x.split} split">
+            ${hhmm(x.ts)} ${x.label ? `· ${fmtOr((x.models && x.models[MKEY0] || {}).dice ?? x.dice, 'dice')}` : '· empty'}</button>`).join('') + `</div>
+         <p class="small">${sib.length} scans on ${esc(s.night)} across ${[...new Set(sib.map(x => x.split))].join(' / ')}. Selecting one updates the view in place.</p>`
+      : `<p class="small">No other scans from this night.</p>`;
+    el.querySelectorAll('.chip[data-ts]').forEach(b => b.addEventListener('click', () => loadScene(+b.dataset.ts)));
+  }
+
+  async function loadScene(ts) {
+    const s = all.find(x => x.ts === ts); if (!s) return;
+    curS = s; vidx = vlist.findIndex(x => x.ts === ts);
+    q('#v-title').textContent = tsLabel(ts);
+    q('#prev').disabled = vidx <= 0;
+    q('#next').disabled = vidx >= vlist.length - 1;
+    renderPanels(); renderNight();
+    const has = withImg.has(ts), cv = q('#cv'), noimg = q('#noimg'), leg2 = q('#leg2');
+    if (!has) {
+      cv.style.display = 'none'; leg2.style.display = 'none'; noimg.style.display = 'flex';
+      noimg.innerHTML = `<div><div class="big">No imagery exported</div>
+        <div class="small">Pixel layers were not exported for the ${esc(s.split)} split. Metrics are still full resolution.</div></div>`;
+      q('#live').textContent = ''; P = G = TH = null;
       return;
     }
-
-    const out = ctx.createImageData(PREVIEW, PREVIEW);
-    const q = sel => modalEl.querySelector(sel);
-    const thrEl = q('#thr'), opEl = q('#op'), thv = q('#thv'), live = q('#live'), leg2 = q('#leg2');
-    const reflEl = q('#l_refl'), probEl = q('#l_prob'), gtEl = q('#l_gt'), predEl = q('#l_pred');
-    // canvas overlay colours, kept in sync with the legend swatches
-    const C_GT = [106, 62, 161], C_PRED = [47, 125, 209];
-
-    const rgb = v => {
-      // perceptually ordered heat ramp for probability
-      const t = v / 255;
-      return [Math.round(255 * Math.min(1, t * 1.6)),
-              Math.round(255 * Math.max(0, Math.min(1, t * 1.6 - 0.5))),
-              Math.round(255 * Math.max(0, t * 1.2 - 0.75))];
-    };
-
-    function paint() {
-      const t = +thrEl.value, op = +opEl.value;
-      const L = {refl: reflEl.checked, prob: probEl.checked, gt: gtEl.checked, pred: predEl.checked};
-      const cut = t * 255;
-      let tp = 0, fp = 0, fn = 0;
-      const d = out.data;
-      // Layers are alpha-blended bottom to top over the reflectivity base (viridis,
-      // matching the report's radar figures), so the base shows through wherever an
-      // overlay is absent. Where prediction and ground truth overlap you see the
-      // correct hits; prediction-only is a false alarm, ground-truth-only is a miss.
-      for (let i = 0, p = 0; i < P.length; i += 4, p += 4) {
-        const prob = P[i], gt = G[i] > 127, pred = prob > cut;
-        if (gt && pred) tp++; else if (pred) fp++; else if (gt) fn++;
-        let r = 0, g = 0, b = 0;
-        if (L.refl) { const c = viridis(TH[i] / 255); r = c[0]; g = c[1]; b = c[2]; }
-        const over = c => { r = r * (1 - op) + c[0] * op; g = g * (1 - op) + c[1] * op; b = b * (1 - op) + c[2] * op; };
-        if (L.prob) over(rgb(prob));
-        if (L.gt && gt) over(C_GT);
-        if (L.pred && pred) over(C_PRED);
-        d[p] = r; d[p + 1] = g; d[p + 2] = b; d[p + 3] = 255;
-      }
-      ctx.putImageData(out, 0, 0);
-      const dice = tp ? 2 * tp / (2 * tp + fp + fn) : 0;
-      const prec = (tp + fp) ? tp / (tp + fp) : 0, rec = (tp + fn) ? tp / (tp + fn) : 0;
-      thv.textContent = t.toFixed(2);
-      drawLegend(L, {tp, fp, fn});
-      live.innerHTML = s.label === 1
-        ? `On this ${PREVIEW}px preview at threshold ${t.toFixed(2)}:
-           Dice <b>${dice.toFixed(3)}</b>, precision ${prec.toFixed(3)}, recall ${rec.toFixed(3)}
-           (TP ${int(tp)}, FP ${int(fp)}, FN ${int(fn)} preview pixels).
-           <span style="color:var(--muted)">The authoritative full-resolution Dice at the project
-           threshold ${s.thr} is ${fmtOr(s.dice, 'dice')}.</span>`
-        : `Swarm-free scene. ${int(fp)} preview pixels predicted as swarm at threshold ${t.toFixed(2)}.`;
+    cv.style.display = 'block'; noimg.style.display = 'none';
+    const my = ++imgToken;
+    try {
+      const [ip, ig, it] = await Promise.all([
+        loadImg(`${IMG(ts)}_prob.png`), loadImg(`${IMG(ts)}_gt.png`), loadImg(`${IMG(ts)}_th.png`)]);
+      if (my !== imgToken) return;   // a newer navigation superseded this load
+      P = px(ip); G = px(ig); TH = px(it);
+      paint();
+    } catch (e) {
+      if (my !== imgToken) return;
+      cv.style.display = 'none'; noimg.style.display = 'flex';
+      noimg.innerHTML = `<div><div class="big">Image failed to load</div><div class="small">${esc(e.message)}</div></div>`;
     }
+  }
 
-    /** Compact colour key overlaid in the corner of the image. Only the layers
-        that are currently on are listed; prediction and ground truth carry their
-        live share of the frame so each colour is both named and quantified. */
-    function drawLegend(L, counts) {
-      const total = PREVIEW * PREVIEW;
-      const sw = bg => `<span style="display:inline-block;width:13px;height:11px;border-radius:2px;flex:none;background:${bg}"></span>`;
-      const row = (bg, name, n) => `<div style="display:flex;align-items:center;gap:6px;white-space:nowrap">
-        ${sw(bg)}<span>${esc(name)}</span>${n == null ? '' :
-          `<span style="margin-left:auto;padding-left:12px;opacity:.75">${((n / total) * 100).toFixed(n / total < 0.01 ? 2 : 1)}%</span>`}</div>`;
-      const rows = [];
-      if (L.pred) rows.push(row('rgb(47,125,209)', 'Prediction', counts.tp + counts.fp));
-      if (L.gt) rows.push(row('rgb(106,62,161)', 'Ground truth', counts.tp + counts.fn));
-      if (L.prob) rows.push(row('linear-gradient(90deg,#000,#f00,#ff0,#fff)', 'Probability 0 → 1', null));
-      if (L.refl) rows.push(row(VIRIDIS_CSS, 'Reflectivity weak → strong', null));
-      leg2.innerHTML = rows.join('');
-      leg2.style.display = rows.length ? 'flex' : 'none';
-    }
+  function step(dir) { const t = vlist[vidx + dir]; if (t) loadScene(t.ts); }
 
-    const inputs = [thrEl, opEl, reflEl, probEl, gtEl, predEl];
-    inputs.forEach(el => { el.addEventListener('input', paint); el.addEventListener('change', paint); });
-    modalEl.querySelector('#rst').addEventListener('click', () => { thrEl.value = s.thr; paint(); });
-    paint();
+  function open(ts) {
+    vlist = rows();
+    modal.open(SHELL, {onPrev: () => step(-1), onNext: () => step(1)});
+    ctx = q('#cv').getContext('2d', {willReadFrequently: true});
+    out = ctx.createImageData(PREVIEW, PREVIEW);
+    q('#x').addEventListener('click', () => modal.close());
+    q('#prev').addEventListener('click', () => step(-1));
+    q('#next').addEventListener('click', () => step(1));
+    ['#l_refl', '#l_prob', '#l_gt', '#l_pred', '#thr', '#op'].forEach(sel => q(sel).addEventListener('input', paint));
+    q('#v_model').addEventListener('change', renderPanels);
+    q('#rst').addEventListener('click', () => { q('#thr').value = curS ? curS.thr : 0.15; paint(); });
+    loadScene(ts);
   }
 
   draw();
   if (query && query.get('ts')) open(+query.get('ts'));
   return {
-    onQuery: q => { if (q.get('ts')) open(+q.get('ts')); },
+    onQuery: qy => { if (qy.get('ts')) open(+qy.get('ts')); },
     destroy: () => modal.destroy(),
   };
 }
