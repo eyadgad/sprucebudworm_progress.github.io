@@ -366,12 +366,13 @@ export async function render(mount, query) {
     const s = curS;
     const dice = tp ? 2 * tp / (2 * tp + fp + fn) : 0;
     const prec = (tp + fp) ? tp / (tp + fp) : 0, rec = (tp + fn) ? tp / (tp + fn) : 0;
+    const authDice = (s.models && s.models[q('#v_model').value] || {}).dice ?? s.dice;
     q('#thv').textContent = t.toFixed(2);
     drawLegend(L, {tp, fp, fn});
     q('#live').innerHTML = s.label === 1
       ? `On this ${PREVIEW}px preview at threshold ${t.toFixed(2)}: Dice <b>${dice.toFixed(3)}</b>,
          precision ${prec.toFixed(3)}, recall ${rec.toFixed(3)} (TP ${int(tp)}, FP ${int(fp)}, FN ${int(fn)} preview px).
-         <span style="color:var(--muted)">Full-resolution Dice at threshold ${s.thr} is ${fmtOr(s.dice, 'dice')}.</span>`
+         <span style="color:var(--muted)">Full-resolution Dice at threshold ${s.thr} is ${fmtOr(authDice, 'dice')}.</span>`
       : `Swarm-free scene. ${int(fp)} preview px predicted as swarm at threshold ${t.toFixed(2)}.`;
   }
 
@@ -452,19 +453,11 @@ export async function render(mount, query) {
     }
   }
 
-  // Model change: swap the prediction image and refresh the analysis in place.
-  // Ground truth and reflectivity are shared across models, so only the prob map
-  // is reloaded.
-  async function applyModel() {
-    renderPanels();
-    if (!curS || !withImg.has(curS.ts) || !TH) return;
-    const my = ++imgToken;
-    try {
-      const ip = await loadImg(`${IMG(curS.ts)}_prob_${q('#v_model').value}.png`);
-      if (my !== imgToken) return;
-      P = px(ip); paint();
-    } catch (e) { /* keep the current image */ }
-  }
+  // Model change: reload the current scene with the chosen model's prediction.
+  // Going through loadScene fetches the three layers atomically (ground truth and
+  // reflectivity come straight from cache), so P, G and TH always belong to the
+  // same scene — a model switch mid-load can never leave a mismatched overlay.
+  function applyModel() { if (curS) loadScene(curS.ts); }
 
   function step(dir) { const t = vlist[vidx + dir]; if (t) loadScene(t.ts); }
 
