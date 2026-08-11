@@ -202,15 +202,7 @@ export async function render(mount) {
       ${Math.abs(mem.train_mean_dice - mem.test_mean_dice).toFixed(4)} Dice
       (area-matched gap ${g >= 0 ? '+' : ''}${g.toFixed(4)}, Mann-Whitney p = ${mem.mannwhitney_p.toFixed(2)}).
       Per-scene performance is driven by <b>swarm size</b> (Spearman ρ = ${mem.area_partial_spearman.toFixed(3)}),
-      not by how much related data the model saw in training.</p>
-
-      <div class="note"><span class="tag">what this means</span><div class="bd">
-        The model performs <b>no better on data it was fitted on</b> than on data it has never seen, so
-        it is <b>under-fitted rather than over-fitted</b> — it has not exhausted what it could learn
-        from the training set. Six architectures reaching the same ~0.63 plateau points the same way:
-        the limit is <b>label noise and genuinely ambiguous swarm edges</b>, not model capacity.
-        The highest-value work is therefore on the labels, not on a bigger network.
-      </div></div>`;
+      not by how much related data the model saw in training.</p>`;
   }
 
   /* ---------- data-quality notes ---------- */

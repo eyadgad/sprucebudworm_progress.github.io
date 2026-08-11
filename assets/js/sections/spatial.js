@@ -18,25 +18,15 @@ export async function render(mount) {
   <div id="filters"></div>
 
   <h2>Region structure</h2>
-  <p class="small">A connected region is a blob of at least 10 touching pixels. Comparing the number of
-  regions in the prediction with the number in the label shows whether the model fragments one swarm
-  into many pieces, or merges several into one.</p>
+  <p class="small">A connected region is a blob of at least 10 touching pixels.</p>
   <div id="regcards"></div>
   <figure><div class="viz" id="c-reg"></div>
-    <figcaption>Predicted regions against labelled regions, one point per scene. Points on the dashed
-    line have matching structure; most fall below it, so the model tends to merge the label's many
-    small blobs into fewer, larger ones. <span style="color:var(--fp)">Red</span> marks failing scenes
-    (Dice &lt; 0.3), <span style="color:var(--accent2)">blue</span> the rest.</figcaption></figure>
+    <figcaption>One point per scene: predicted against labelled region counts. The dashed line is parity.
+    <span style="color:var(--fp)">Red</span> marks failing scenes (Dice &lt; 0.3),
+    <span style="color:var(--accent2)">blue</span> the rest.</figcaption></figure>
   <div id="regtable"></div>
 
-  <h2>Predicted area against labelled area</h2>
-  <figure><div class="viz" id="c-area"></div>
-    <figcaption id="cap-area"></figcaption></figure>
-
   <h2>Errors by distance from the radar</h2>
-  <p class="small">The radar sits at the centre of the grid. The beam climbs with range, so a swarm
-  160 km away is sampled far higher in the atmosphere than one at 30 km. These profiles pool every
-  pixel of every swarm-bearing scene in the split.</p>
   <figure><div class="viz" id="c-radial"></div><figcaption id="cap-radial"></figcaption></figure>
   <div id="radtable"></div>
 
@@ -74,25 +64,6 @@ export async function render(mount) {
       trend: {x0: 0, y0: 0, x1: maxR, y1: maxR},
       aria: 'Predicted against labelled region counts',
     });
-
-    /* ---- area agreement ---- */
-    const areas = S.filter(s => s.gt_area > 0 && s.pred_area > 0);
-    const over = areas.filter(s => s.pred_area > s.gt_area).length;
-    mount.querySelector('#c-area').innerHTML = scatter({
-      points: areas.map(s => ({
-        x: s.gt_area, y: s.pred_area,
-        c: s.pred_area > s.gt_area ? 'var(--fp)' : 'var(--fn)', r: 3.4, o: .62,
-        t: `${s.ts} — labelled ${int(s.gt_area)} px, predicted ${int(s.pred_area)} px, Dice ${s.dice}`})),
-      xlo: 100, xhi: 1e6, ylo: 100, yhi: 1e6, logx: true,
-      xlabel: 'labelled area (pixels, log)', ylabel: 'predicted area (pixels)', W: 880, H: 360,
-      aria: 'Predicted area against labelled area',
-    });
-    mount.querySelector('#cap-area').innerHTML =
-      `${over} of ${areas.length} scenes (${pct(over / areas.length, 0)}) have a predicted area larger than the
-       labelled area, shown in <span style="color:var(--fp)">red</span>; the rest under-predict, in
-       <span style="color:var(--fn)">blue</span>. Systematic over-prediction is consistent with precision
-       (${fmtOr(mean(S.map(s => s.precision).filter(Boolean)), 'precision')}) being lower than recall
-       (${fmtOr(mean(S.map(s => s.recall).filter(Boolean)), 'recall')}).`;
 
     /* ---- radial ---- */
     const edges = R.edges_km, n = R.tp.length;

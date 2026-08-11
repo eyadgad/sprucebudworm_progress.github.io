@@ -37,7 +37,7 @@ export async function render(mount) {
   <div class="small" id="count"></div>
   <div id="table"></div>
 
-  <h2>Why this run, and not simply the top of one column</h2>
+  <h2>Why this run</h2>
   <div id="why"></div>
 
   <h2>Precision and recall trade-off</h2>
@@ -115,8 +115,6 @@ export async function render(mount) {
     const leaders = ['dice','best_val_dice_patch','boundary_iou','nsd','precision','recall','bg_fp_rate','hd95']
       .map(k => ({k, lead: top(k)})).filter(x=>x.lead);
     const selWins = leaders.filter(x=>x.lead.name===sel.name);
-    const near = withD.filter(r=>r.name!==sel.name && Math.abs(r.dice-sel.dice)<0.005)
-      .sort((a,b)=>b.dice-a.dice);
     return `
       <div class="tscroll"><table>
         <thead><tr><th>Metric</th><th>Best run</th><th>Its value</th><th>Selected run</th><th>Gap</th></tr></thead>
@@ -129,18 +127,11 @@ export async function render(mount) {
             <td class="n">${gap===null?'—':(gap===0?'—':(gap>0?'+':'')+gap.toFixed(k==='hd95'?1:4))}</td></tr>`;
         }).join('')}</tbody></table></div>
       <p>The selected run leads on <b>${selWins.length} of ${leaders.length}</b> reported metrics
-      (${selWins.map(x=>M[x.k]?.label||x.k).join(', ') || 'none'}). It does <b>not</b> lead on the others:
-      ${leaders.filter(x=>x.lead.name!==sel.name).slice(0,4).map(x=>
-        `${M[x.k]?.label||x.k} belongs to ${esc(MODEL_NAME[x.lead.model]||x.lead.model)} at ${x.lead.n_elev} elevations`).join('; ')}.</p>
-      ${near.length ? `<p><b>${near.length}</b> other run${near.length>1?'s are':' is'} within 0.005 Dice of it
-        (${near.slice(0,3).map(r=>`${esc(MODEL_NAME[r.model]||r.model)} ${r.n_elev} elev`).join(', ')}). Dice alone therefore
-        does not separate the leaders.</p>` : ''}
+      (${selWins.map(x=>M[x.k]?.label||x.k).join(', ') || 'none'}).</p>
       <div class="note bad"><span class="tag">selection is weakly supported</span><div class="bd">
-        Selecting by maximum test Dice over ${rows.length} runs risks fitting the ${sel.n_pos_scenes}-scene
-        test set: sibling runs lead on boundary placement and on validation Dice, and the gaps between the
-        top runs are far smaller than the scene-to-scene spread. The fair statement is that this run is
-        <b>among the best few</b>; the family (Attention UNet / UNet++, dBZ ≥ 0, Focal Tversky, 7–9
-        elevations) is what the evidence supports, not this one run over its siblings.
+        The top runs differ by less than the scene-to-scene spread, so this is <b>among the best few</b>
+        rather than a clear winner: choosing the maximum test Dice over ${rows.length} runs risks fitting
+        the ${sel.n_pos_scenes}-scene test set.
       </div></div>`;
   }
 

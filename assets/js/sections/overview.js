@@ -91,15 +91,6 @@ export async function render(mount) {
     </ul></div>
   </div>
 
-  ${mem ? `<div class="note"><span class="tag">what limits the score</span><div class="bd">
-    The model scores the same on data it was trained on (<b>${mem.train_mean_dice.toFixed(3)}</b> Dice)
-    as on the held-out test set (<b>${mem.test_mean_dice.toFixed(3)}</b>), so it is
-    <b>under-fitted rather than over-fitted</b>. Together with six architectures all plateauing near
-    0.63, that points to the ceiling being set by <b>label noise and genuinely ambiguous swarm
-    edges</b>, not by the network. Improving the labels is worth more than a bigger model.
-    <a href="#/data">Details</a>.
-  </div></div>` : ''}
-
   <h2>Where to go next</h2>
   <div class="cards">
     ${nav('#/experiments','Compare all runs',`${rows.length} configurations, sortable and filterable`)}

@@ -92,11 +92,8 @@ export async function render(mount) {
     });
     const zeros = d.filter(v => v === 0).length;
     mount.querySelector('#cap-hist').innerHTML =
-      `n = ${d.length}. The distribution is left-skewed with a spike at zero (${zeros} scenes).
-       Mean ${fmtOr(mean(d), 'dice')} sits below the median ${fmtOr(quantile(d, .5), 'dice')}, so the
-       headline average is pulled down by a minority of failures rather than describing a typical scene.
-       The <b>median is the better summary of typical behaviour</b>; the mean is reported for
-       comparability with the training pipeline and the baseline report.`;
+      `n = ${d.length}. Left-skewed with a spike at zero (${zeros} scenes); mean
+       ${fmtOr(mean(d), 'dice')} sits below the median ${fmtOr(quantile(d, .5), 'dice')}.`;
 
     /* ---- paired test ---- */
     const both = S.filter(s => s.dice != null && s.dice_cmp != null);
@@ -117,17 +114,10 @@ export async function render(mount) {
           <td class="n">${fmtOr(mean(b), 'dice')}</td><td class="n">${fmtOr(quantile(b, .5), 'dice')}</td></tr>
       </tbody></table></div>
       <div class="note ${w && w.p < 0.05 ? '' : 'warn'}"><span class="tag">reading</span><div class="bd">
-        ${w ? `The paired difference is <b>${mean(diffs) >= 0 ? '+' : ''}${mean(diffs).toFixed(4)}</b> Dice in favour of the
-          selected model, with a 95% interval of ${ciD ? `${ciD[0].toFixed(4)} to ${ciD[1].toFixed(4)}` : '—'}
-          and p = ${w.p < 0.001 ? '< 0.001' : w.p.toFixed(3)} (n = ${w.n} scenes where the two differ).
-          ${ciD && ciD[0] <= 0 && ciD[1] >= 0
-            ? '<b>The interval includes zero, so the two models are not distinguishable on this evidence.</b>'
-            : `The interval excludes zero, so the ordering is consistent — but the effect is
-               <b>${Math.abs(mean(diffs)) < 0.01 ? 'very small in practical terms' : 'modest'}</b>
-               (${Math.abs(mean(diffs)).toFixed(4)} Dice), far below the scene-to-scene standard deviation of
-               ${std(a).toFixed(3)}. Statistical detectability here reflects the paired design, not a
-               meaningful quality gap.`}
-          Because scenes within a night are correlated, the true p-value is larger than this one.`
+        ${w ? `${ciD && ciD[0] <= 0 && ciD[1] >= 0
+            ? '<b>The 95% interval of the difference includes zero, so the two models are not distinguishable on this evidence.</b>'
+            : `The interval excludes zero, but the difference (${Math.abs(mean(diffs)).toFixed(4)} Dice) is far below the scene-to-scene standard deviation of ${std(a).toFixed(3)}.`}
+          Because scenes within a night are correlated, the true p-value is larger than the one in the table.`
           : 'Too few differing scenes for a signed-rank test.'}
       </div></div>`;
 

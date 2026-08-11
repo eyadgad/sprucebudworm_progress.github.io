@@ -15,8 +15,7 @@ export async function render(mount) {
 
   mount.innerHTML = `
   <h1>Error and failure analysis</h1>
-  <p class="lede">What the model gets wrong, how often, and what those cases have in common. Measured
-  facts and proposed explanations are labelled separately.</p>
+  <p class="lede">What the model gets wrong, how often, and what those cases have in common.</p>
 
   <div id="filters"></div>
 
@@ -48,10 +47,7 @@ export async function render(mount) {
 
   <h2>Worst scenes</h2>
   <p class="small">Sorted by Dice, worst first. Click any row to open it in the sample explorer.</p>
-  <div id="worst"></div>
-
-  <h2>Interpretation</h2>
-  <div id="interp"></div>`;
+  <div id="worst"></div>`;
 
   function draw() {
     const S = sm.samples.filter(s => s.label === 1 && filt.predicate(s));
@@ -127,8 +123,7 @@ export async function render(mount) {
                    ['20k–100k', 20000, 100000], ['> 100k', 100000, Infinity]];
     mount.querySelector('#cap-area').innerHTML =
       `Spearman rank correlation between labelled area and Dice is <b>${rho == null ? '—' : rho.toFixed(3)}</b>
-       over ${A.length} scenes. This is the strongest and most consistent relationship in the evaluation,
-       and it reproduces the baseline report's finding on a different model and a larger test set.`;
+       over ${A.length} scenes.`;
     mount.querySelector('#areastats').innerHTML = `
       <div class="tscroll"><table>
         <thead><tr><th>Labelled area</th><th>Scenes</th><th>Mean Dice</th><th>Mean recall</th>
@@ -160,9 +155,7 @@ export async function render(mount) {
     const confidentFail = bad.filter(s => s.prob_max > 0.8).length;
     mount.querySelector('#cap-conf').innerHTML =
       `${confidentFail} of the ${bad.length} scenes scoring below 0.3 still reach a probability above 0.8
-       somewhere in the scene. Those are <b>confident mistakes</b>, not cases of the model abstaining:
-       raising or lowering the global threshold would not rescue them, because the confidence is in the
-       wrong place. The remainder never become confident anywhere.`;
+       somewhere in the scene — <b>confident mistakes</b> rather than abstentions.`;
 
     /* ---- false alarms ---- */
     if (NEG.length) {
@@ -199,12 +192,7 @@ export async function render(mount) {
     mount.querySelector('#cmptable').innerHTML = `
       <p class="small">Scored on the same ${both.length} scenes, the selected Attention UNet and the
       UNet++ comparison agree at rank correlation <b>${rhoM == null ? '—' : rhoM.toFixed(3)}</b>: only
-      <b>${disagree}</b> scenes differ by more than 0.2 Dice, and <b>${bothZero}</b> score zero for both.</p>
-      <div class="note"><span class="tag">observation</span><div class="bd">
-        The two architectures fail on largely the <b>same</b> scenes. Because they share their inputs,
-        labels and split but differ in architecture, this points to the difficulty living in
-        <b>the data</b> rather than in either network.
-      </div></div>`;
+      <b>${disagree}</b> scenes differ by more than 0.2 Dice, and <b>${bothZero}</b> score zero for both.</p>`;
 
     /* ---- temporal clustering ---- */
     const nights = {};
@@ -225,8 +213,7 @@ export async function render(mount) {
           <td style="text-align:left">${x.bad === x.n ? 'entire night fails' : (x.bad ? 'mixed' : 'no failures')}</td></tr>`).join('')}
       </tbody></table></div>
       <p class="small"><b>${badNights.length}</b> night${badNights.length === 1 ? '' : 's'} in this split
-      fail on every scan. Failures are therefore partly a <b>night-level</b> phenomenon, not just
-      scan-level noise: whatever makes a night hard tends to affect all its scans.</p>`;
+      fail on every scan.</p>`;
 
     /* ---- worst table ---- */
     new DataTable(mount.querySelector('#worst'), {
@@ -246,36 +233,6 @@ export async function render(mount) {
       onRow: s => { location.hash = `#/samples?ts=${s.ts}`; },
     });
 
-    /* ---- interpretation ---- */
-    const tinyShare = A.filter(s => s.gt_area < 5000).length / A.length;
-    const badTiny = bad.filter(s => s.gt_area < 5000).length;
-    mount.querySelector('#interp').innerHTML = `
-      <div class="note ok"><span class="tag">observed</span><div class="bd">
-        <ul style="margin:0;padding-left:18px">
-          <li>Dice rises monotonically with labelled area across every band (Spearman ${rho?.toFixed(3)}).</li>
-          <li>${badTiny} of ${bad.length} scenes below 0.3 Dice have a labelled area under 5,000 px,
-              while only ${pct(tinyShare, 0)} of all scenes are that small.</li>
-          <li>${bothZero} scenes score zero for both architectures.</li>
-          <li>${badNights.length} nights fail on every scan.</li>
-          <li>False alarms on swarm-free scenes stay below ${pct(NEG.length ? Math.max(...NEG.map(s => s.bg_fp_rate)) : 0, 1)} of pixels.</li>
-        </ul>
-      </div></div>
-      <div class="note warn"><span class="tag">hypothesis, not established</span><div class="bd">
-        The following are <b>consistent with</b> the observations above but are not demonstrated by this
-        evaluation. Each would need its own experiment:
-        <ul style="margin:6px 0 0;padding-left:18px">
-          <li><b>Label noise on small swarms.</b> Faint returns near the detection limit are the hardest
-              for a human annotator to outline, so part of the small-target penalty may be disagreement
-              between annotator and model rather than model error. Testing this needs a second annotation
-              of the same scenes.</li>
-          <li><b>Dice is unfair to small targets by construction.</b> A fixed boundary error costs
-              proportionally more Dice on a small object. Some of the trend is therefore a property of the
-              metric, not of the model. Reporting boundary-based metrics per size band would separate these.</li>
-          <li><b>Whole-night failures may be meteorological.</b> Rain, insects other than budworm, or
-              anomalous propagation could explain nights where every scan fails, but no weather variables
-              are joined to these scenes, so this cannot be checked here.</li>
-        </ul>
-      </div></div>`;
   }
 
   const filt = sceneFilters(mount.querySelector('#filters'), {samples: sm.samples, onChange: draw});

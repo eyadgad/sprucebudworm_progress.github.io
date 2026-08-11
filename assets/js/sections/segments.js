@@ -38,7 +38,6 @@ export async function render(mount) {
 
 
   <h2>By swarm size</h2>
-  <p>The strongest pattern in the evaluation: performance rises steeply with the size of the target.</p>
   <figure><div class="viz" id="c-size"></div><figcaption id="cap-size"></figcaption></figure>
   <div id="t-size"></div>
 
@@ -52,8 +51,7 @@ export async function render(mount) {
   </div>
 
   <h2>By night</h2>
-  <p class="small">Nights aggregate several scans of the same weather situation, so a night mean is more
-  stable than a single scan. Sorted worst first, so the problem nights are visible immediately.</p>
+  <p class="small">Night means aggregate several scans; sorted worst first.</p>
   <div id="t-night"></div>
 
   <h2>Difficulty tiers</h2>
