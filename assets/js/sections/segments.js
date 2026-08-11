@@ -5,7 +5,6 @@
 import { load } from '../lib/data.js';
 import { M, fmtOr, int, esc, mean, std, quantile, bootCI } from '../lib/metrics.js';
 import { boxPlot } from '../lib/charts.js';
-import { DataTable } from '../lib/table.js';
 
 const MIN_N = 5;   // groups below this are shown but flagged as unreliable
 
@@ -44,10 +43,6 @@ export async function render(mount) {
     <figure><div class="viz" id="c-frag"></div><figcaption id="cap-frag"></figcaption></figure>
     <figure><div class="viz" id="c-dist"></div><figcaption id="cap-dist"></figcaption></figure>
   </div>
-
-  <h2>By night</h2>
-  <p class="small">Night means aggregate several scans; sorted worst first.</p>
-  <div id="t-night"></div>
 
   <h2>Difficulty tiers</h2>
   <p class="small">Thirds by Dice (descriptive; the tiers are defined using the score itself).</p>
@@ -146,31 +141,6 @@ export async function render(mount) {
     });
     mount.querySelector('#cap-dist').textContent =
       `Grouped by the mean distance of the labelled swarm from the radar. Beam height rises with range, so distant swarms are sampled higher in the atmosphere.`;
-
-    /* ---- nights ---- */
-    const gn = grp(rows, r => r.night);
-    const nightRows = [...gn.entries()].map(([k, v]) => {
-      const s = summarize(v, metric);
-      return {night: k, n: s.n, mean: s.mean, sd: s.sd, med: s.med,
-        precision: mean(v.map(r => r.precision).filter(x => x != null)),
-        recall: mean(v.map(r => r.recall).filter(x => x != null)),
-        area: v.reduce((a, r) => a + (r.gt_area || 0), 0),
-        splits: [...new Set(v.map(r => r.split))].join(', ')};
-    }).sort((a, b) => a.mean - b.mean);
-    new DataTable(mount.querySelector('#t-night'), {
-      columns: [
-        {key: 'night', label: 'Night', cls: '', fmt: (v, r) => esc(v) + flag(r.n)},
-        {key: 'n', label: 'Scans'},
-        {key: 'mean', label: `Mean ${label}`, fmt: v => fmtOr(v, metric)},
-        {key: 'med', label: 'Median', fmt: v => fmtOr(v, metric)},
-        {key: 'sd', label: 'Std dev', fmt: v => v == null ? '—' : v.toFixed(3)},
-        {key: 'precision', label: 'Precision', fmt: v => fmtOr(v, 'precision')},
-        {key: 'recall', label: 'Recall', fmt: v => fmtOr(v, 'recall')},
-        {key: 'area', label: 'Truth px', fmt: v => int(v)},
-      ],
-      rows: nightRows, sort: 'mean', dir: 1, pageSize: 12,
-      empty: 'No nights in this split.',
-    });
 
     /* ---- difficulty tiers ---- */
     const vals = rows.map(r => r[metric]).filter(v => v != null).sort((a, b) => a - b);

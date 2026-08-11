@@ -30,7 +30,6 @@ const ROUTES = {
   samples:     {title: 'Sample explorer',           mod: () => import('./sections/samples.js' + V)},
   errors:      {title: 'Error & failure analysis',  mod: () => import('./sections/errors.js' + V)},
   stats:       {title: 'Statistical analysis',      mod: () => import('./sections/stats.js' + V)},
-  conclusions: {title: 'Conclusions',               mod: () => import('./sections/conclusions.js' + V)},
   about:       {title: 'Methods & glossary',        mod: () => import('./sections/about.js' + V)},
 };
 

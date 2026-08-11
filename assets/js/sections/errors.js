@@ -30,12 +30,6 @@ export async function render(mount) {
   <figure><div class="viz" id="c-area"></div><figcaption id="cap-area"></figcaption></figure>
   <div id="areastats"></div>
 
-  <h2>Which failures are recoverable?</h2>
-  <p class="small">A scene where the model produced no confident pixels anywhere is different from one
-  where it produced confident pixels in the wrong place. The maximum probability reached in the scene
-  separates the two.</p>
-  <figure><div class="viz" id="c-conf"></div><figcaption id="cap-conf"></figcaption></figure>
-
   <h2>False alarms on swarm-free scenes</h2>
   <div id="fa"></div>
 
@@ -137,25 +131,6 @@ export async function render(mount) {
             <td class="n">${fmtOr(mean(v.map(s => s.precision)), 'precision')}</td>
             <td class="n">${v.filter(s => s.dice === 0).length}</td></tr>`;
         }).join('')}</tbody></table></div>`;
-
-    /* ---- confidence of failures ---- */
-    mount.querySelector('#c-conf').innerHTML = scatter({
-      points: S.map(s => ({
-        x: s.prob_max, y: s.dice,
-        c: s.dice === 0 ? 'var(--fp)' : 'var(--accent2)', r: 3.5, o: .65,
-        t: `${tsLabel(s.ts)} — max prob ${s.prob_max}, Dice ${s.dice}`})),
-      xlo: 0, xhi: 1, ylo: 0, yhi: 1,
-      xlabel: 'maximum probability anywhere in the scene', ylabel: 'per-scene Dice',
-      W: 880, H: 340, aria: 'Dice against maximum predicted probability',
-      legend: [
-        {c: 'var(--fp)', label: 'zero-overlap scene (Dice = 0)'},
-        {c: 'var(--accent2)', label: 'some overlap (Dice > 0)'},
-      ],
-    });
-    const confidentFail = bad.filter(s => s.prob_max > 0.8).length;
-    mount.querySelector('#cap-conf').innerHTML =
-      `${confidentFail} of the ${bad.length} scenes scoring below 0.3 still reach a probability above 0.8
-       somewhere in the scene — <b>confident mistakes</b> rather than abstentions.`;
 
     /* ---- false alarms ---- */
     if (NEG.length) {

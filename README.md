@@ -83,13 +83,12 @@ data/samples/*.png             generated per-scene pixel layers
 | 03 | `#/experiments` | All 57 runs, and why one was selected |
 | 04 | `#/training` | Convergence, over/under-fitting, stability |
 | 05 | `#/aggregate` | Validation vs test metrics, confusion matrices, intervals |
-| 06 | `#/segments` | Performance by year, hour, size, fragmentation, night, difficulty |
-| 07 | `#/spatial` | Region structure, area agreement, errors by radar range |
+| 06 | `#/segments` | Performance by year, size, fragmentation, distance, difficulty |
+| 07 | `#/spatial` | Region structure, errors by radar range |
 | 08 | `#/samples` | Every scene; open one to inspect layers and move the threshold |
-| 09 | `#/errors` | Failure taxonomy, drivers, model disagreement, clustering |
+| 09 | `#/errors` | Failure taxonomy, size driver, model disagreement, clustering |
 | 10 | `#/stats` | Distributions, bootstrap intervals, paired tests, correlations |
-| 11 | `#/conclusions` | Limits, readiness, ranked next experiments |
-| 12 | `#/about` | Metric glossary, provenance, unsupported analyses |
+| 11 | `#/about` | Metric glossary, provenance, unsupported analyses |
 
 ---
 
@@ -116,9 +115,9 @@ in a canvas with no further network traffic.
   load of the overview fetches 8 files totalling ~97 KB and reaches
   DOMContentLoaded in ~330 ms; `samples.json`, `histories.json` and the
   sample-explorer code are never touched until needed.
-- **A small companion summary.** The overview, conclusions, stats and about
-  sections need only headline counts, so they read the ~1 KB `summary.json`
-  instead of the 415 KB `dataset.json`.
+- **A small companion summary.** The overview, stats and about sections need only
+  headline counts, so they read the ~1 KB `summary.json` instead of the 415 KB
+  `dataset.json`.
 - **Lazy images.** Thumbnails use `loading="lazy"`; full layers load only when a
   scene is opened. The grid caps at 120 tiles.
 - **Paginated tables.** `DataTable` renders one page at a time, so a 600-row
@@ -158,8 +157,8 @@ always shown, and validation and test results are never pooled.
 1. **Night leakage.** All 170 positive test scenes come from nights that also
    appear in training, and 77 of 117 nights appear in all three splits. Every
    score on this site is therefore optimistic as a measure of generalisation to
-   an unseen night. This is surfaced on the overview, in data exploration, in
-   the statistics section and in the conclusions — it is the dominant caveat.
+   an unseen night. This is surfaced on the overview, in data exploration, and in
+   the statistics section — it is the dominant caveat.
 2. **Selection is weakly separated.** The selected run leads on test Dice only;
    sibling runs lead on boundary IoU, NSD, precision, recall and validation
    Dice. The defensible claim is "among the best few".

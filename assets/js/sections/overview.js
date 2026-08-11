@@ -95,7 +95,6 @@ export async function render(mount) {
     ${nav('#/experiments','Compare all runs',`${rows.length} configurations, sortable and filterable`)}
     ${nav('#/samples','Inspect predictions',`Open any test scene and adjust the threshold`)}
     ${nav('#/errors','See the failures',`What breaks, and the evidence for why`)}
-    ${nav('#/conclusions','Conclusions',`Limits, readiness and recommended next steps`)}
   </div>`;
 
   mount.querySelector('#alt').innerHTML = hBarChart({
