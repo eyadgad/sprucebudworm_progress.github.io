@@ -1,8 +1,7 @@
 /* Methods, metric glossary, data provenance and colour conventions. */
 
 import { load } from '../lib/data.js';
-import { M, SEG, esc, int, MODEL_NAME, LOSS_NAME, targetName } from '../lib/metrics.js';
-import { legend } from '../lib/charts.js';
+import { M, esc, int, MODEL_NAME, LOSS_NAME, targetName } from '../lib/metrics.js';
 
 export async function render(mount) {
   const [ex, ds, sm] = await Promise.all([load('experiments'), load('summary'), load('samples')]);
@@ -27,28 +26,6 @@ export async function render(mount) {
   <p class="small">TP, FP, FN and TN are counts of true-positive, false-positive, false-negative and
   true-negative pixels. P and G are the predicted and ground-truth masks, ∂P and ∂G their boundaries,
   and τ a tolerance in pixels. Σ sums over all pixels of all scenes.</p>
-
-  <h2>Macro versus micro</h2>
-  <div class="note"><span class="tag">important</span><div class="bd">
-    <b>Macro</b> averages a per-scene score over scenes (every scene counts equally, so tiny swarms pull
-    it down); <b>micro</b> pools all pixels first (large swarms dominate). Macro is the headline here and
-    micro is always reported alongside it; both are shown everywhere so neither can be cherry-picked.
-  </div></div>
-
-  <h2>Colour conventions</h2>
-  <p class="small">These colours mean the same thing on every figure in the dashboard, and match the
-  baseline report so the two can be compared directly. Colour is always paired with a text label or a
-  position, never used alone to carry meaning.</p>
-  <div class="panel">${legend([
-    {c: SEG.tp.c, label: 'TP — model and label agree this is swarm'},
-    {c: SEG.fp.c, label: 'FP — model says swarm, label says background'},
-    {c: SEG.fn.c, label: 'FN — label says swarm, model missed it'},
-    {c: SEG.tn.c, label: 'TN / background'},
-  ])}
-  <div style="margin-top:10px">${legend([
-    {c: '#3a6fce', label: 'train split'}, {c: '#2f9d8c', label: 'validation split'},
-    {c: '#e2a33d', label: 'test split'}, {c: 'var(--best)', label: 'selected configuration'},
-  ])}</div></div>
 
   <h2>How the numbers are produced</h2>
   <ol class="small" style="padding-left:20px;line-height:1.85;max-width:82ch">

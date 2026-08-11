@@ -4,7 +4,7 @@
 
 import { load } from '../lib/data.js';
 import { M, fmtOr, int, esc, mean, std, quantile, bootCI } from '../lib/metrics.js';
-import { boxPlot, BOXPLOT_KEY } from '../lib/charts.js';
+import { boxPlot } from '../lib/charts.js';
 import { DataTable } from '../lib/table.js';
 
 const MIN_N = 5;   // groups below this are shown but flagged as unreliable
@@ -27,10 +27,6 @@ export async function render(mount) {
       ${['dice','iou','precision','recall','boundary_iou','nsd'].map(k=>
         `<option value="${k}">${M[k].label}</option>`).join('')}</select></div>
   </div>
-  <div class="note"><span class="tag">reading the box plots</span><div class="bd">
-    ${BOXPLOT_KEY} <b>n</b> is always printed; for small groups use the confidence intervals in the tables
-    rather than the box heights.
-  </div></div>
 
   <h2>By year</h2>
   <figure><div class="viz" id="c-year"></div><figcaption id="cap-year"></figcaption></figure>
@@ -42,9 +38,8 @@ export async function render(mount) {
   <div id="t-size"></div>
 
   <h2>By fragmentation and distance from the radar</h2>
-  <p class="small">Fragmentation is the number of separate connected regions in the ground truth (the
-  labels are made of many small blobs, so most scenes have dozens). Distance is the mean range of the
-  labelled swarm from the radar, where the beam is sampled higher in the atmosphere.</p>
+  <p class="small">Fragmentation = connected regions in the ground truth; distance = mean range of the
+  swarm from the radar.</p>
   <div class="two">
     <figure><div class="viz" id="c-frag"></div><figcaption id="cap-frag"></figcaption></figure>
     <figure><div class="viz" id="c-dist"></div><figcaption id="cap-dist"></figcaption></figure>
@@ -55,8 +50,7 @@ export async function render(mount) {
   <div id="t-night"></div>
 
   <h2>Difficulty tiers</h2>
-  <p class="small">Scenes split into thirds by their own Dice, to characterise what an easy, moderate and
-  hard scene looks like. This is descriptive, not predictive: the tiers are defined using the score itself.</p>
+  <p class="small">Thirds by Dice (descriptive; the tiers are defined using the score itself).</p>
   <div id="t-tier"></div>`;
 
   const cur = () => split === 'both' ? S : S.filter(s => s.split === split);

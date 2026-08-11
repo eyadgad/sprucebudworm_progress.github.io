@@ -27,8 +27,7 @@ export async function render(mount) {
 
   mount.innerHTML = `
   <h1>Training diagnostics</h1>
-  <p class="lede">How the selected run converged, and how its curve compares with any other run you
-  switch on. Curves come from each run's <code>*_history.csv</code> and the per-epoch timings in its log.</p>
+  <p class="lede">Convergence of the selected run, compared with any run you toggle on.</p>
 
   <div class="cards">
     ${card('Epochs run', nEp, `budget ${sel.epochs_budget ?? '—'}`)}

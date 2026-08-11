@@ -27,8 +27,7 @@ export async function render(mount) {
 
   mount.innerHTML = `
   <h1>Detecting spruce budworm moth flights in weather radar</h1>
-  <p class="lede">A neural network reads each radar scan and marks the pixels that contain a moth
-  dispersal swarm. This page summarises which model was chosen, how well it works, and where it fails.</p>
+  <p class="lede">Which model was selected, how it scores on the held-out test set, and where it fails.</p>
 
   <div class="note sel"><span class="tag">selected model</span><div class="bd">
     <b>${MODEL_NAME[sel.model] || sel.model}</b> trained with <b>${LOSS_NAME[sel.loss] || sel.loss}</b> loss,

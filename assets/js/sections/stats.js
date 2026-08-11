@@ -14,14 +14,11 @@ export async function render(mount) {
 
   mount.innerHTML = `
   <h1>Statistical analysis</h1>
-  <p class="lede">Distributions, intervals and paired comparisons behind the headline numbers, with the
-  sample size for every statistic.</p>
+  <p class="lede">Distributions, intervals and paired comparisons behind the headline numbers.</p>
 
   <div class="note warn"><span class="tag">assumption violated</span><div class="bd">
-    Most standard tests assume independent observations. These scenes are <b>not independent</b>:
-    scans repeat every ~30 minutes within a night, so scenes from one night are correlated.
-    Confidence intervals computed over scenes are therefore <b>narrower than the truth</b>, and p-values
-    are optimistic. The night-level summaries below are the more trustworthy view.
+    Scenes within a night are correlated (~30 min cadence), so scene-level intervals are narrower than the
+    truth and p-values optimistic; the night-level summaries are the more trustworthy view.
   </div></div>
 
   <div id="filters"></div>
@@ -33,19 +30,15 @@ export async function render(mount) {
   <figure><div class="viz" id="c-hist"></div><figcaption id="cap-hist"></figcaption></figure>
 
   <h2>Paired model comparison</h2>
-  <p class="small">The two models are evaluated on exactly the same scenes, so a paired test is
-  appropriate. A Wilcoxon signed-rank test is used rather than a t-test because per-scene Dice is
-  bounded, skewed and has a spike at zero.</p>
+  <p class="small">Wilcoxon signed-rank on the same scenes (per-scene Dice is skewed with a zero spike).</p>
   <div id="paired"></div>
 
   <h2>Scene-level versus night-level uncertainty</h2>
-  <p class="small">Averaging within a night first, then bootstrapping over nights, respects the clustering
-  and gives a wider, more honest interval.</p>
+  <p class="small">Bootstrapping over night means rather than scenes respects the clustering.</p>
   <div id="cluster"></div>
 
   <h2>What predicts a good score?</h2>
-  <p class="small">Rank correlations between per-scene metadata and per-scene Dice. Rank correlation is
-  used because these relationships are monotonic but not linear.</p>
+  <p class="small">Rank correlations between per-scene metadata and Dice.</p>
   <div id="corr"></div>
   <figure><div class="viz" id="c-corr"></div><figcaption id="cap-corr"></figcaption></figure>
 

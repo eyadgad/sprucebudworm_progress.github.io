@@ -3,7 +3,7 @@
 
 import { load } from '../lib/data.js';
 import { fmtOr, tip, int, esc, mean, std, quantile, bootCI } from '../lib/metrics.js';
-import { confusion, boxPlot, BOXPLOT_KEY } from '../lib/charts.js';
+import { confusion, boxPlot } from '../lib/charts.js';
 
 export async function render(mount) {
   const sm = await load('samples');
@@ -15,34 +15,22 @@ export async function render(mount) {
 
   mount.innerHTML = `
   <h1>Aggregate evaluation</h1>
-  <p class="lede">Full-scene performance of the selected model at threshold ${thr}. Validation and test
-  are reported separately, never averaged together.</p>
-
-  <div class="note"><span class="tag">macro vs micro</span><div class="bd">
-    <b>Macro</b> averages per-scene scores (every scene counts equally, small swarms drag it down);
-    <b>micro</b> pools all pixels (large swarms dominate). Swarm-free scenes are excluded here and
-    reported separately as a false-alarm rate.
-  </div></div>
+  <p class="lede">Full-scene performance of the selected model at threshold ${thr}. Macro (per-scene mean)
+  and micro (pixel-pooled) are both reported; validation and test are kept separate.</p>
 
   <div id="tables"></div>
 
   <h2>Confusion matrices</h2>
-  <p class="small">Pixel counts pooled over all swarm-bearing scenes in each split, at threshold ${thr}.
-  Note the scale: background dominates, which is why accuracy is close to 1 for any model and is a poor
-  guide here.</p>
+  <p class="small">Pixel counts pooled over all swarm-bearing scenes in each split, at threshold ${thr}.</p>
   <div class="two" id="cms"></div>
 
   <h2>Per-scene variability</h2>
-  <p>A single average hides how uneven performance is. These distributions come from
-  ${int(pos('test').length)} test and ${int(pos('val').length)} validation scenes.</p>
   <figure><div class="viz" id="c-box"></div>
-    <figcaption>Distribution of per-scene Dice, IoU, precision and recall, validation beside test.
-    ${BOXPLOT_KEY}</figcaption></figure>
+    <figcaption>Per-scene Dice, IoU, precision and recall, validation beside test.</figcaption></figure>
 
   <h2>Uncertainty on the headline number</h2>
-  <p class="small">Bootstrap percentile intervals over scenes (2000 resamples, fixed seed). These capture
-  scene-to-scene variability only, not the night-overlap bias noted in
-  <a href="#/data">data exploration</a>.</p>
+  <p class="small">Bootstrap percentile intervals over scenes (2000 resamples, fixed seed); scene-to-scene
+  variability only, not the night-overlap bias.</p>
   <div id="ci"></div>`;
 
   /* ---------------- metric tables ---------------- */

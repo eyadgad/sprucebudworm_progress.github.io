@@ -33,41 +33,30 @@ export async function render(mount) {
   <h2>Split and season coverage</h2>
   <div class="two">
     <figure><div class="viz" id="c-split"></div>
-      <figcaption>Scenes per split, separating those that contain a swarm from swarm-free scenes.
-      Swarm-free scenes are included at roughly 30% of positives so the model learns not to fire on
-      empty skies.</figcaption></figure>
+      <figcaption>Scenes per split by type. Swarm-free scenes are ~30% of positives.</figcaption></figure>
     <figure><div class="viz" id="c-year"></div>
-      <figcaption>Positive scenes per year, stacked by split. Every year appears in every split at
-      about 70 / 20 / 10, so no season is held out entirely.</figcaption></figure>
+      <figcaption>Positive scenes per year, stacked by split.</figcaption></figure>
   </div>
 
   <h2>Target size and class imbalance</h2>
-  <p>Each positive scene contains a swarm covering a small fraction of the ${int(ds.grid.h * ds.grid.w)}-pixel
-  grid. This imbalance is the dominant difficulty of the task and drives the choice of loss function.</p>
   <div class="cards" id="area-cards"></div>
   <div class="two">
     <figure><div class="viz" id="c-area"></div>
-      <figcaption>Distribution of swarm area per positive scene (log scale). The spread covers more than
-      three orders of magnitude, so a single average Dice hides very different regimes.</figcaption></figure>
+      <figcaption>Swarm area per positive scene (log scale).</figcaption></figure>
     <figure><div class="viz" id="c-areasplit"></div>
-      <figcaption>Swarm area by split. Overlapping boxes indicate the splits are comparable in target
-      size; a shifted box would mean the test set is systematically easier or harder.</figcaption></figure>
+      <figcaption>Swarm area by split.</figcaption></figure>
   </div>
 
   <h2>Effect of the label threshold</h2>
-  <p>Labels store reflectivity in dBZ for swarm pixels. A threshold turns them into a binary mask.
-  Experiment 3 selected <b>dBZ ≥ 0</b>. This is what each choice keeps:</p>
+  <p class="small">Labels store dBZ per swarm pixel; a threshold binarises them. Experiment 3 selected
+  <b>dBZ ≥ 0</b>.</p>
   <div id="thr-table"></div>
 
   <h2>Are the splits comparable?</h2>
-  <p>If the test split were systematically different from training, the reported score would not be
-  meaningful. These summaries compare them directly.</p>
   <div id="cmp-table"></div>
 
   <h2>Generalisation check</h2>
-  <p>Comparing the score on data the model was <b>fitted on</b> against data it has never seen shows
-  whether it has learned a general rule or memorised examples, and where the performance ceiling
-  comes from.</p>
+  <p class="small">Score on data the model was fitted on versus data it has never seen.</p>
   <div id="memo"></div>
 
   <h2>Data quality notes</h2>

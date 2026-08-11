@@ -52,18 +52,9 @@ export async function render(mount, query) {
 
   mount.innerHTML = `
   <h1>Sample explorer</h1>
-  <p class="lede">Every evaluated scene, searchable and sortable. Open one to inspect the reflectivity
-  input, the label, the probability map and the errors, and to move the decision threshold yourself.</p>
-
-  <div class="note"><span class="tag">how to read the previews</span><div class="bd">
-    Pixel layers are stored for <b>${withImg.size} scenes</b> across the
-    ${[...IMG_SPLITS].join(' and ')} split${IMG_SPLITS.size > 1 ? 's' : ''}.
-    Previews are ${PREVIEW}×${PREVIEW}, downsampled from 960×960 by taking the maximum of each
-    2×2 block so thin swarms stay visible. That thickens both masks, so the
-    <b>interactive readout is systematically optimistic</b>, typically by a few hundredths of Dice.
-    Use it to judge <i>shape and where the errors are</i>, not to quote a score. Every number in the
-    side panel and in all other sections is computed at full 960×960 resolution.
-  </div></div>
+  <p class="lede">Every evaluated scene. Open one to inspect the layers and move the threshold.</p>
+  <p class="small">Previews are ${PREVIEW}px (block-max downsampled from 960), so the interactive readout
+  runs a few hundredths of Dice optimistic; the side-panel and full-section numbers are 960×960.</p>
 
   <div class="ctrls" id="ctrls"></div>
   <div class="chips" id="presets"></div>
