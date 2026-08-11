@@ -376,46 +376,38 @@ export async function render(mount, query) {
   }
 
   function renderPanels() {
-    const s = curS, vm = q('#v_model').value, isSel = vm === MKEY0;
+    const s = curS, vm = q('#v_model').value;
     q('#v-scene').innerHTML = [
       ['Timestamp', s.ts], ['Night', esc(s.night || '—')], ['Split', esc(s.split)],
       ['Type', s.label ? 'has swarm' : 'swarm free'], ['Hour (UTC)', String(s.hour).padStart(2, '0') + ':00'],
     ].map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${v}</span>`).join('');
 
     q('#v-metrics-h').textContent = `Metrics — ${mname(vm)}`;
-    const note = q('#v-metrics-note');
+    q('#v-metrics-note').style.display = 'none';
+    const m = (s.models && s.models[vm]) || {};
     let rowsM;
-    if (s.label === 1 && isSel) {
-      rowsM = [['Dice', fmtOr(s.dice, 'dice')], ['IoU', fmtOr(s.iou, 'iou')],
-        ['Precision', fmtOr(s.precision, 'precision')], ['Recall', fmtOr(s.recall, 'recall')],
-        ['Boundary IoU', fmtOr(s.boundary_iou, 'boundary_iou')], ['NSD', fmtOr(s.nsd, 'nsd')],
-        ['HD95', fmtOr(s.hd95, 'hd95')], ['ASSD', fmtOr(s.assd, 'assd')],
-        ['Truth area', int(s.gt_area)], ['Predicted area', int(s.pred_area)],
-        ['TP', int(s.tp)], ['FP', int(s.fp)], ['FN', int(s.fn)],
-        ['Truth regions', s.n_gt_regions ?? '—'], ['Pred regions', s.n_pred_regions ?? '—']];
-      note.style.display = 'none';
-    } else if (s.label === 1) {
-      const mm = (s.models && s.models[vm]) || {};
-      rowsM = [['Dice', fmtOr(mm.dice, 'dice')],
-        ['Predicted area', mm.pred_area != null ? int(mm.pred_area) : '—'], ['Truth area', int(s.gt_area)]];
-      note.textContent = 'Only per-scene Dice is stored for non-selected models; the full metric suite and the image stay the selected model’s.';
-      note.style.display = '';
+    if (s.label === 1) {
+      rowsM = [['Dice', fmtOr(m.dice, 'dice')], ['IoU', fmtOr(m.iou, 'iou')],
+        ['Precision', fmtOr(m.precision, 'precision')], ['Recall', fmtOr(m.recall, 'recall')],
+        ['Boundary IoU', fmtOr(m.boundary_iou, 'boundary_iou')], ['NSD', fmtOr(m.nsd, 'nsd')],
+        ['HD95', fmtOr(m.hd95, 'hd95')], ['ASSD', fmtOr(m.assd, 'assd')],
+        ['Truth area', int(s.gt_area)], ['Predicted area', m.pred_area != null ? int(m.pred_area) : '—'],
+        ['TP', m.tp != null ? int(m.tp) : '—'], ['FP', m.fp != null ? int(m.fp) : '—'], ['FN', m.fn != null ? int(m.fn) : '—'],
+        ['Truth regions', s.n_gt_regions ?? '—'], ['Pred regions', m.n_pred_regions ?? '—']];
     } else {
-      const mm = isSel ? s : ((s.models && s.models[vm]) || {});
-      rowsM = [['Predicted area', mm.pred_area != null ? int(mm.pred_area) : '—'],
-        ['False-positive rate', fmtOr(mm.bg_fp_rate, 'bg_fp_rate')], ['Max probability', fmtOr(s.prob_max, 'dice')]];
-      note.style.display = 'none';
+      rowsM = [['Predicted area', m.pred_area != null ? int(m.pred_area) : '—'],
+        ['False-positive rate', fmtOr(m.bg_fp_rate, 'bg_fp_rate')], ['Max probability', fmtOr(s.prob_max, 'dice')]];
     }
     q('#v-metrics').innerHTML = rowsM.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${v}</span>`).join('');
 
-    q('#v-cmp').innerHTML = MLIST.map(m => {
-      const mm = (s.models && s.models[m.key]) || {};
+    q('#v-cmp').innerHTML = MLIST.map(m2 => {
+      const mm = (s.models && s.models[m2.key]) || {};
       const v = s.label ? fmtOr(mm.dice, 'dice') : fmtOr(mm.bg_fp_rate, 'bg_fp_rate');
-      const hl = m.key === vm ? ' style="color:var(--accent2);font-weight:600"' : '';
-      return `<span class="k"${hl}>${esc(m.disp)}${m.key === MKEY0 ? ' ★' : ''}</span><span class="v"${hl}>${v}</span>`;
+      const hl = m2.key === vm ? ' style="color:var(--accent2);font-weight:600"' : '';
+      return `<span class="k"${hl}>${esc(m2.disp)}${m2.key === MKEY0 ? ' ★' : ''}</span><span class="v"${hl}>${v}</span>`;
     }).join('');
     q('#v-cmp-note').innerHTML = `${s.label ? 'Per-scene Dice' : 'False-alarm rate'} for all four best models.
-      ★ is the selected model; its pixel layers are the image shown.`;
+      ★ is the selected model; the image and metrics above follow the model chosen at the top.`;
   }
 
   function renderNight() {
@@ -449,7 +441,7 @@ export async function render(mount, query) {
     const my = ++imgToken;
     try {
       const [ip, ig, it] = await Promise.all([
-        loadImg(`${IMG(ts)}_prob.png`), loadImg(`${IMG(ts)}_gt.png`), loadImg(`${IMG(ts)}_th.png`)]);
+        loadImg(`${IMG(ts)}_prob_${q('#v_model').value}.png`), loadImg(`${IMG(ts)}_gt.png`), loadImg(`${IMG(ts)}_th.png`)]);
       if (my !== imgToken) return;   // a newer navigation superseded this load
       P = px(ip); G = px(ig); TH = px(it);
       paint();
@@ -458,6 +450,20 @@ export async function render(mount, query) {
       cv.style.display = 'none'; noimg.style.display = 'flex';
       noimg.innerHTML = `<div><div class="big">Image failed to load</div><div class="small">${esc(e.message)}</div></div>`;
     }
+  }
+
+  // Model change: swap the prediction image and refresh the analysis in place.
+  // Ground truth and reflectivity are shared across models, so only the prob map
+  // is reloaded.
+  async function applyModel() {
+    renderPanels();
+    if (!curS || !withImg.has(curS.ts) || !TH) return;
+    const my = ++imgToken;
+    try {
+      const ip = await loadImg(`${IMG(curS.ts)}_prob_${q('#v_model').value}.png`);
+      if (my !== imgToken) return;
+      P = px(ip); paint();
+    } catch (e) { /* keep the current image */ }
   }
 
   function step(dir) { const t = vlist[vidx + dir]; if (t) loadScene(t.ts); }
@@ -471,7 +477,7 @@ export async function render(mount, query) {
     q('#prev').addEventListener('click', () => step(-1));
     q('#next').addEventListener('click', () => step(1));
     ['#l_refl', '#l_prob', '#l_gt', '#l_pred', '#thr', '#op'].forEach(sel => q(sel).addEventListener('input', paint));
-    q('#v_model').addEventListener('change', renderPanels);
+    q('#v_model').addEventListener('change', applyModel);
     q('#rst').addEventListener('click', () => { q('#thr').value = curS ? curS.thr : 0.15; paint(); });
     loadScene(ts);
   }
