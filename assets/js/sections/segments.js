@@ -44,9 +44,7 @@ export async function render(mount) {
     <figure><div class="viz" id="c-dist"></div><figcaption id="cap-dist"></figcaption></figure>
   </div>
 
-  <h2>Difficulty tiers</h2>
-  <p class="small">Thirds by Dice (descriptive; the tiers are defined using the score itself).</p>
-  <div id="t-tier"></div>`;
+  `;
 
   const cur = () => split === 'both' ? S : S.filter(s => s.split === split);
   const grp = (rows, keyFn) => {
@@ -142,30 +140,6 @@ export async function render(mount) {
     mount.querySelector('#cap-dist').textContent =
       `Grouped by the mean distance of the labelled swarm from the radar. Beam height rises with range, so distant swarms are sampled higher in the atmosphere.`;
 
-    /* ---- difficulty tiers ---- */
-    const vals = rows.map(r => r[metric]).filter(v => v != null).sort((a, b) => a - b);
-    const t1 = quantile(vals, 1 / 3), t2 = quantile(vals, 2 / 3);
-    const tiers = [
-      ['Hard (bottom third)', rows.filter(r => r[metric] != null && r[metric] <= t1)],
-      ['Moderate (middle)', rows.filter(r => r[metric] != null && r[metric] > t1 && r[metric] <= t2)],
-      ['Easy (top third)', rows.filter(r => r[metric] != null && r[metric] > t2)],
-    ];
-    mount.querySelector('#t-tier').innerHTML = `
-      <div class="tscroll"><table>
-        <thead><tr><th>Tier</th><th>Scenes</th><th>Mean ${esc(label)}</th><th>Median truth area</th>
-        <th>Median truth regions</th><th>Median predicted regions</th><th>Mean precision</th><th>Mean recall</th></tr></thead>
-        <tbody>${tiers.map(([k, v]) => {
-          const areas = v.map(r => r.gt_area).filter(x => x != null);
-          return `<tr><td>${esc(k)}</td><td class="n">${v.length}</td>
-            <td class="n">${fmtOr(mean(v.map(r => r[metric])), metric)}</td>
-            <td class="n">${areas.length ? int(quantile(areas, .5)) : '—'}</td>
-            <td class="n">${int(quantile(v.map(r => r.n_gt_regions).filter(x => x != null), .5))}</td>
-            <td class="n">${int(quantile(v.map(r => r.n_pred_regions).filter(x => x != null), .5))}</td>
-            <td class="n">${fmtOr(mean(v.map(r => r.precision).filter(x => x != null)), 'precision')}</td>
-            <td class="n">${fmtOr(mean(v.map(r => r.recall).filter(x => x != null)), 'recall')}</td></tr>`;
-        }).join('')}</tbody></table></div>
-      <p class="small">Tier boundaries are the 33rd and 67th percentiles of ${esc(label)} on this split
-      (${t1?.toFixed(3)} and ${t2?.toFixed(3)}). The clearest separator between tiers is target area.</p>`;
   }
 
   function groupTable(groups, metric) {

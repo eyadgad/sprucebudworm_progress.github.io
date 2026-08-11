@@ -36,9 +36,6 @@ export async function render(mount) {
   <h2>Do the two models fail on the same scenes?</h2>
   <div id="cmptable"></div>
 
-  <h2>Do failures cluster in time?</h2>
-  <div id="clusters"></div>
-
   <h2>Worst scenes</h2>
   <p class="small">Sorted by Dice, worst first. Click any row to open it in the sample explorer.</p>
   <div id="worst"></div>`;
@@ -168,27 +165,6 @@ export async function render(mount) {
       <p class="small">Scored on the same ${both.length} scenes, the selected Attention UNet and the
       UNet++ comparison agree at rank correlation <b>${rhoM == null ? '—' : rhoM.toFixed(3)}</b>: only
       <b>${disagree}</b> scenes differ by more than 0.2 Dice, and <b>${bothZero}</b> score zero for both.</p>`;
-
-    /* ---- temporal clustering ---- */
-    const nights = {};
-    S.forEach(s => { if (s.night) (nights[s.night] ||= []).push(s); });
-    const nightStats = Object.entries(nights).map(([k, v]) => ({
-      night: k, n: v.length, mean: mean(v.map(s => s.dice)),
-      bad: v.filter(s => s.dice < 0.3).length,
-    })).filter(x => x.n >= 2).sort((a, b) => a.mean - b.mean);
-    const badNights = nightStats.filter(x => x.bad === x.n);
-    mount.querySelector('#clusters').innerHTML = `
-      <p class="small">Grouping the ${bad.length} poor scenes by night shows whether failures are isolated
-      scans or whole bad nights.</p>
-      <div class="tscroll"><table>
-        <thead><tr><th>Night</th><th>Scans</th><th>Mean Dice</th><th>Scans below 0.3</th><th>Pattern</th></tr></thead>
-        <tbody>${nightStats.slice(0, 10).map(x => `<tr>
-          <td>${esc(x.night)}</td><td class="n">${x.n}</td><td class="n">${fmtOr(x.mean, 'dice')}</td>
-          <td class="n">${x.bad}</td>
-          <td style="text-align:left">${x.bad === x.n ? 'entire night fails' : (x.bad ? 'mixed' : 'no failures')}</td></tr>`).join('')}
-      </tbody></table></div>
-      <p class="small"><b>${badNights.length}</b> night${badNights.length === 1 ? '' : 's'} in this split
-      fail on every scan.</p>`;
 
     /* ---- worst table ---- */
     new DataTable(mount.querySelector('#worst'), {
