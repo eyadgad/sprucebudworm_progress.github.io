@@ -63,8 +63,9 @@ export class DataTable {
         ? `<span class="tip" tabindex="0" data-tip="${esc(c.tip)}">${esc(c.label)}</span>`
         : esc(c.label);
       const sortable = c.sortable !== false;
-      return `<th${sortable ? ` class="sortable" data-k="${esc(c.key)}" tabindex="0" role="button"
-        aria-label="Sort by ${esc(c.label)}"` : ''}>${lbl} ${arrow}</th>`;
+      const order = active ? (this.dir === -1 ? 'descending' : 'ascending') : 'none';
+      return `<th${sortable ? ` class="sortable" data-k="${esc(c.key)}" tabindex="0"
+        aria-label="Sort by ${esc(c.label)}" aria-sort="${order}"` : ''}>${lbl} ${arrow}</th>`;
     }).join('');
 
     const body = slice.map((r, i) => {
@@ -95,14 +96,18 @@ export class DataTable {
         if (this.sortKey === k) this.dir = -this.dir;
         else { this.sortKey = k; this.dir = -1; }
         this.page = 0; this.render();
+        [...this.el.querySelectorAll('th.sortable')].find(h => h.dataset.k === k)?.focus();
       };
       th.addEventListener('click', go);
       th.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
     });
     this.el.querySelectorAll('[data-nav]').forEach(b =>
       b.addEventListener('click', () => {
-        this.page += b.dataset.nav === 'next' ? 1 : -1;
+        const nav = b.dataset.nav;
+        this.page += nav === 'next' ? 1 : -1;
         this.render();
+        (this.el.querySelector(`[data-nav="${nav}"]:not([disabled])`) ||
+          this.el.querySelector('[data-nav]:not([disabled])'))?.focus();
         this.el.scrollIntoView({block: 'nearest'});
       }));
     if (this.onRow) {

@@ -2,8 +2,10 @@
    split-integrity problem that shapes how every later number should be read. */
 
 import { load } from '../lib/data.js';
-import { int, pct, SPLIT_COLOR, quantile, mean } from '../lib/metrics.js';
+import { int, pct, SPLIT_COLOR, quantile, mean, esc, tsLabel } from '../lib/metrics.js';
 import { barChart, histogram, boxPlot } from '../lib/charts.js';
+import { DataTable } from '../lib/table.js';
+import { scanCoverageChart } from '../lib/scan-coverage.js';
 
 const SPLITS = ['train', 'val', 'test'];
 
@@ -12,8 +14,9 @@ export async function render(mount) {
   const scenes = ds.scenes;
   const lk = ds.leakage;
 
-  const state = {split: 'all', year: 'all', type: 'all', size: 'all'};
   const years = [...new Set(scenes.map(s => s.year))].sort();
+  let coverageYear = years.at(-1);
+  const state = {split: 'all', year: 'all', type: 'all', size: 'all', query: ''};
 
   mount.innerHTML = `
   <h1>Data exploration</h1>
@@ -26,9 +29,33 @@ export async function render(mount) {
     contribute to all three splits; the generalisation check below tests what that means.
   </div></div>
 
-  <h2>Filters</h2>
+  <h2>Scan dates and split assignments</h2>
+  <p class="small">Every coloured cell is one exact half-hour scan in the machine-learning manifest.
+  Dates run down the chart and UTC time runs across it, matching the overnight collection window.
+  Season buttons change this chart; the filters below control the exact scan list.</p>
+  <div class="coverage-toolbar">
+    <div><div class="control-label" id="coverage-years-label">Season</div>
+      <div class="chips" id="coverage-years" role="group" aria-labelledby="coverage-years-label"></div></div>
+    <div class="coverage-summary" id="coverage-summary"></div>
+  </div>
+  <figure>
+    <div class="coverage-scroll" id="coverage-chart" tabindex="0" role="region"
+      aria-label="Scrollable scan assignment chart"></div>
+    <div class="legend coverage-legend">
+      ${SPLITS.map(s => `<span><i class="sw" style="background:${SPLIT_COLOR[s]}"></i>${s === 'val' ? 'validation' : s}</span>`).join('')}
+      <span><i class="coverage-dot" aria-hidden="true"></i>contains a swarm</span>
+      <span><i class="coverage-empty" aria-hidden="true"></i>not in the ML manifest</span>
+    </div>
+    <figcaption>Cells without a dot are sampled swarm-free scenes. Blank cells may be a missing scan or an
+    unused negative scene; this view describes the selected 2,052-scene ML manifest, not all raw PPI files.
+    Some biological nights cross midnight and therefore occupy two calendar-date rows.</figcaption>
+  </figure>
+
+  <h3>Exact scan list</h3>
+  <p class="small">Use these filters to list the precise timestamps assigned to train, validation, or test.</p>
   <div class="ctrls" id="ctrls"></div>
-  <div class="small" id="count"></div>
+  <div class="small" id="count" role="status" aria-live="polite"></div>
+  <div id="scan-table"></div>
 
   <h2>Split and season coverage</h2>
   <div class="two">
@@ -78,12 +105,20 @@ export async function render(mount) {
   mk('Scene type', 'type', [['all', 'All scenes'], ['pos', 'With swarm'], ['neg', 'Swarm free']]);
   mk('Swarm size', 'size', [['all', 'Any size'], ['tiny', 'Under 1k px'], ['small', '1k – 10k px'],
     ['mid', '10k – 50k px'], ['big', 'Over 50k px']]);
+  const searchWrap = document.createElement('div');
+  searchWrap.className = 'f';
+  searchWrap.innerHTML = `<label for="scan-search">Scan / date</label>
+    <input id="scan-search" type="search" placeholder="e.g. 2019-07-24 or 00:30">`;
+  const search = searchWrap.querySelector('input');
+  search.addEventListener('input', e => { state.query = e.target.value; draw(); });
+  ctrls.appendChild(searchWrap);
   const reset = document.createElement('button');
   reset.textContent = 'Reset filters';
   reset.className = 'ghost';
   reset.addEventListener('click', () => {
-    Object.assign(state, {split: 'all', year: 'all', type: 'all', size: 'all'});
+    Object.assign(state, {split: 'all', year: 'all', type: 'all', size: 'all', query: ''});
     ctrls.querySelectorAll('select').forEach(s => s.value = 'all');
+    search.value = '';
     draw();
   });
   ctrls.appendChild(reset);
@@ -91,11 +126,60 @@ export async function render(mount) {
   const sizeBand = a => a === null || a === undefined ? null
     : a < 1000 ? 'tiny' : a < 10000 ? 'small' : a < 50000 ? 'mid' : 'big';
 
-  const filtered = () => scenes.filter(s =>
-    (state.split === 'all' || s.split === state.split) &&
-    (state.year === 'all' || String(s.year) === state.year) &&
-    (state.type === 'all' || (state.type === 'pos' ? s.label === 1 : s.label === 0)) &&
-    (state.size === 'all' || (s.label === 1 && sizeBand(s.area) === state.size)));
+  const filtered = () => {
+    const q = state.query.trim().toLowerCase();
+    return scenes.filter(s => {
+      const stamp = tsLabel(s.ts);
+      const searchable = `${stamp} ${stamp.slice(0, 10)} ${stamp.slice(11)} ${s.ts} ${s.split} ` +
+        `${s.split === 'val' ? 'validation' : ''} ${s.label === 1 ? 'with swarm positive' : 'swarm free negative'} ${s.night || ''}`;
+      return (state.split === 'all' || s.split === state.split) &&
+        (state.year === 'all' || String(s.year) === state.year) &&
+        (state.type === 'all' || (state.type === 'pos' ? s.label === 1 : s.label === 0)) &&
+        (state.size === 'all' || (s.label === 1 && sizeBand(s.area) === state.size)) &&
+        (!q || searchable.toLowerCase().includes(q));
+    });
+  };
+
+  /* ---------- exact assignment timeline ---------- */
+  const yearBar = mount.querySelector('#coverage-years');
+  years.forEach(year => {
+    const button = document.createElement('button');
+    button.className = 'chip';
+    button.textContent = year;
+    button.dataset.year = year;
+    button.addEventListener('click', () => { coverageYear = year; drawCoverage(); });
+    yearBar.appendChild(button);
+  });
+
+  function drawCoverage() {
+    const {model, svg} = scanCoverageChart(scenes, coverageYear);
+    yearBar.querySelectorAll('button').forEach(button => {
+      const active = Number(button.dataset.year) === coverageYear;
+      button.classList.toggle('on', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    mount.querySelector('#coverage-summary').innerHTML =
+      `<span><b>${model.cells.length.toLocaleString('en-US')}</b>&nbsp;assigned scans</span><i class="coverage-sep">·</i>` +
+      `<span><i class="sw" style="background:${SPLIT_COLOR.train}"></i>${model.counts.train} train</span><i class="coverage-sep">·</i>` +
+      `<span><i class="sw" style="background:${SPLIT_COLOR.val}"></i>${model.counts.val} validation</span><i class="coverage-sep">·</i>` +
+      `<span><i class="sw" style="background:${SPLIT_COLOR.test}"></i>${model.counts.test} test</span>`;
+    mount.querySelector('#coverage-chart').innerHTML = svg;
+  }
+  drawCoverage();
+
+  const scanTable = new DataTable(mount.querySelector('#scan-table'), {
+    rows: [], pageSize: 30, sort: 'ts', dir: 1,
+    columns: [
+      {key: 'ts', label: 'Scan timestamp (UTC)', fmt: value => `<code>${esc(tsLabel(value))}</code>`},
+      {key: 'split', label: 'Split', fmt: value =>
+        `<span class="sw" style="background:${SPLIT_COLOR[value]}"></span> ${value === 'val' ? 'validation' : esc(value)}`},
+      {key: 'label', label: 'Scene type', fmt: value => value === 1
+        ? `<span class="scan-positive-dot" aria-hidden="true"></span> with swarm`
+        : 'swarm free'},
+      {key: 'area', label: 'Swarm area (px)', fmt: value => value == null ? '<span class="na">—</span>' : int(value)},
+      {key: 'night', label: 'Positive night', fmt: value => value ? esc(value) : '<span class="na">not assigned</span>'},
+    ],
+  });
 
   /* ---------- static (unfiltered) figures ---------- */
   const cnt = ds.split_summary.counts;
@@ -218,6 +302,7 @@ export async function render(mount) {
     mount.querySelector('#count').innerHTML =
       `Matching <b>${int(f.length)}</b> of ${int(scenes.length)} scenes` +
       (f.length ? '' : ' — no scenes match, widen a filter.');
+    scanTable.setRows(f);
 
     const areas = f.filter(s => s.label === 1 && s.area > 0).map(s => s.area);
     const cardsEl = mount.querySelector('#area-cards');
