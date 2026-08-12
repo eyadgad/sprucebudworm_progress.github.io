@@ -30,7 +30,7 @@ Everything under `data/` is generated. From the project root:
 ```bash
 .venv\Scripts\python.exe scripts\export_dashboard_data.py --only experiments,dataset
 .venv\Scripts\python.exe scripts\export_dashboard_data.py --only predict
-.venv\Scripts\python.exe scripts\export_dashboard_data.py --only images --img-splits test,val
+.venv\Scripts\python.exe scripts\export_dashboard_data.py --only packs --data-root ..\Data --site-dir ..\sprucebudworm_progress.github.io
 ```
 
 | Stage | Needs GPU | Time | Produces |
@@ -38,7 +38,7 @@ Everything under `data/` is generated. From the project root:
 | `experiments` | no | seconds | `experiments.json`, `histories.json` |
 | `dataset` | no | ~90 s | `dataset.json`, `summary.json` |
 | `predict` | yes | ~40 min | `samples.json`, `threshold.json` |
-| `images` | yes | ~15 min | `data/samples/*.png` (test + val) |
+| `packs` | no | ~2 min | one `.sbw.gz` pack and one `.webp` thumbnail per test/validation scene |
 
 Verify a rebuild with:
 
@@ -69,9 +69,12 @@ assets/js/lib/
                                (owns focus, key handling and the scroll lock)
   data.js                      cached fetch + loading / error / empty / N-A states
   metrics.test.js, ui.test.js  node tests for the helpers and the modal
+  sample-pack.js               strict SBW1 decoder and three-scene LRU cache
+  sample-pack.test.js          browser/Node tests for packed sample assets
 assets/js/sections/*.js        one module per dashboard section
 data/*.json                    generated analysis
-data/samples/*.png             generated per-scene pixel layers
+data/samples/*.sbw.gz          generated per-scene packed pixel layers
+data/samples/*.webp            generated lazy grid thumbnails
 ```
 
 ### Sections
@@ -99,12 +102,15 @@ data/samples/*.png             generated per-scene pixel layers
 | `histories.json` | 248 KB | Per-epoch loss / LR / validation metrics per run |
 | `dataset.json` | 415 KB | 2,052 scene records, target areas under 3 label definitions, leakage audit |
 | `summary.json` | <1 KB | Headline counts only — keeps the first page load small |
-| `samples.json` | 296 KB | Per-scene metrics for 615 evaluated scenes, both models |
+| `samples.json` | 296 KB | Per-scene metrics for 615 evaluated scenes and all four viewer models |
 | `threshold.json` | 9 KB | Threshold sweeps, probability histograms, reliability bins, radial profile |
-| `data/samples/*.png` | 37 MB | `_prob`, `_gt`, `_th`, `_thumb` per evaluated scene, test + val (2,460 files) |
+| `data/samples/*.{sbw.gz,webp}` | ~20 MB | Four probability maps, bit-packed truth and categorical max-six reflectivity in 615 packs, plus 615 thumbnails |
 
-Probability maps are stored as 8-bit PNGs so the browser can re-threshold them
-in a canvas with no further network traffic.
+Each scene stores four 8-bit probability maps, bit-packed ground truth and the
+categorical maximum reflectivity across elevations 0-5 in one gzip-compressed
+SBW1 pack. Metadata also records full-scene and thumbnail dimensions plus
+content/model versions. The browser can re-threshold or switch models with no
+further request.
 
 ---
 
@@ -117,12 +123,13 @@ in a canvas with no further network traffic.
 - **A small companion summary.** The overview, stats and about sections need only
   headline counts, so they read the ~1 KB `summary.json` instead of the 415 KB
   `dataset.json`.
-- **Lazy images.** Thumbnails use `loading="lazy"`; full layers load only when a
-  scene is opened. The grid caps at 120 tiles.
+- **Lazy thumbnails and packed scenes.** Lossless WebP thumbnails use
+  `loading="lazy"`; one gzip pack loads only when a scene is opened. The grid
+  caps at 120 tiles and a three-scene LRU limits decoded memory.
 - **Paginated tables.** `DataTable` renders one page at a time, so a 600-row
   sample table puts ~20 rows in the DOM.
-- **Client-side re-thresholding.** Moving the threshold slider recomputes from
-  the already-loaded probability PNG; no request is made.
+- **Client-side re-thresholding and model switching.** Both use typed-array views
+  from the already-loaded pack; no request is made.
 - **Cached fetches.** `data.js` de-duplicates concurrent and repeat requests, so
   revisiting a section costs nothing.
 - **Hand-written SVG.** No charting library, so there is no third-party payload
