@@ -23,7 +23,15 @@ const REFL_BANDS = [
   {max:19, color:[247, 139,  20], label:'12.1 – 19 dBZ'},
   {max:25, color:[242,  31,  23], label:'19.1 – 25 dBZ'},
 ];
-const reflectivityColor = byte => {
+const reflectivityBackground = pixels => {
+  const counts = new Uint32Array(256);
+  for (let i = 0; i < pixels.length; i += 4) counts[pixels[i]]++;
+  let mode = 0;
+  for (let i = 1; i < counts.length; i++) if (counts[i] > counts[mode]) mode = i;
+  return mode;
+};
+const reflectivityColor = (byte, background) => {
+  if (byte === background) return [0, 0, 0];
   const dbz = -10 + (byte / 255) * 35;
   return (REFL_BANDS.find(b => dbz <= b.max) || REFL_BANDS.at(-1)).color;
 };
@@ -152,8 +160,9 @@ export async function render(mount, query) {
       _thbx.clearRect(0, 0, T, T); _thbx.drawImage(th, 0, 0, T, T); const R = _thbx.getImageData(0, 0, T, T).data;
       _thbx.clearRect(0, 0, T, T); _thbx.drawImage(pr, 0, 0, T, T); const PR = _thbx.getImageData(0, 0, T, T).data;
       const o = c2.createImageData(T, T), d = o.data;
+      const background = reflectivityBackground(R);
       for (let i = 0; i < R.length; i += 4) {
-        const c = reflectivityColor(R[i]); let r = c[0], g = c[1], b = c[2];
+        const c = reflectivityColor(R[i], background); let r = c[0], g = c[1], b = c[2];
         if (PR[i] > 127) { r = r * 0.25 + 47 * 0.75; g = g * 0.25 + 125 * 0.75; b = b * 0.25 + 209 * 0.75; }
         d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255;
       }
@@ -353,13 +362,14 @@ export async function render(mount, query) {
     if (!curS || !P || !ctx) return;
     const t = +q('#thr').value, op = +q('#op').value;
     const L = {refl: q('#l_refl').checked, gt: q('#l_gt').checked, pred: q('#l_pred').checked};
+    const background = reflectivityBackground(TH);
     const cut = t * 255, d = out.data;
     let tp = 0, fp = 0, fn = 0;
     for (let i = 0, p = 0; i < P.length; i += 4, p += 4) {
       const prob = P[i], gt = G[i] > 127, pred = prob > cut;
       if (gt && pred) tp++; else if (pred) fp++; else if (gt) fn++;
       let r = 0, g = 0, b = 0;
-      if (L.refl) { const c = reflectivityColor(TH[i]); r = c[0]; g = c[1]; b = c[2]; }
+      if (L.refl) { const c = reflectivityColor(TH[i], background); r = c[0]; g = c[1]; b = c[2]; }
       const over = c => { r = r * (1 - op) + c[0] * op; g = g * (1 - op) + c[1] * op; b = b * (1 - op) + c[2] * op; };
       if (L.gt && gt) over(C_GT);
       if (L.pred && pred) over(C_PRED);
