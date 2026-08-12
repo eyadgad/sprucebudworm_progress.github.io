@@ -9,12 +9,11 @@ import { load } from '../lib/data.js';
 import { M, fmtOr, int, esc, tsLabel, hhmm, quantile } from '../lib/metrics.js';
 import { DataTable } from '../lib/table.js';
 import { Modal } from '../lib/ui.js';
+import { assetUrl, fetchSamplePack, packedBit, SamplePackCache,
+  validateSampleAssets } from '../lib/sample-pack.js';
 
-const IMG = ts => `data/samples/${ts}`;
-const PREVIEW = 480;   // stored preview resolution; metrics come from full 960
-
-/* Six discrete reflectivity bands requested for the radar display. The stored
-   preview byte spans the displayed -10..25 dBZ range. */
+/* Codes 1..6 in an SBW1 pack map directly to these physical dBZ bands. Code 0
+   is missing/background and remains black. */
 const REFL_BANDS = [
   {max:-1, color:[190, 222, 230], label:'-10 – -1 dBZ'},
   {max: 2, color:[117, 231, 137], label:'-1.1 – 2 dBZ'},
@@ -23,18 +22,7 @@ const REFL_BANDS = [
   {max:19, color:[247, 139,  20], label:'12.1 – 19 dBZ'},
   {max:25, color:[242,  31,  23], label:'19.1 – 25 dBZ'},
 ];
-const reflectivityBackground = pixels => {
-  const counts = new Uint32Array(256);
-  for (let i = 0; i < pixels.length; i += 4) counts[pixels[i]]++;
-  let mode = 0;
-  for (let i = 1; i < counts.length; i++) if (counts[i] > counts[mode]) mode = i;
-  return mode;
-};
-const reflectivityColor = (byte, background) => {
-  if (byte === background) return [0, 0, 0];
-  const dbz = -10 + (byte / 255) * 35;
-  return (REFL_BANDS.find(b => dbz <= b.max) || REFL_BANDS.at(-1)).color;
-};
+const reflectivityColor = code => code ? REFL_BANDS[code - 1].color : [0, 0, 0];
 const REFL_CSS = `linear-gradient(90deg,
   rgb(190,222,230) 0 25.7%, rgb(117,231,137) 25.7% 34.3%,
   rgb(42,220,18) 34.3% 48.6%, rgb(247,235,39) 48.6% 62.9%,
@@ -42,6 +30,7 @@ const REFL_CSS = `linear-gradient(90deg,
 
 export async function render(mount, query) {
   const sm = await load('samples');
+  const assets = validateSampleAssets(sm.sample_assets);
   const all = sm.samples;
   // Splits whose pixel layers were exported by stage `images`. Scenes outside
   // these splits still list their metrics but open without imagery.
@@ -49,11 +38,12 @@ export async function render(mount, query) {
   const withImg = new Set(all.filter(s => IMG_SPLITS.has(s.split)).map(s => s.ts));
   const YEARS = [...new Set(all.map(s => s.year))].sort();
   // The best four models, each scored per scene in `s.models[key]` ({dice} for
-  // scenes with a swarm, {bg_fp_rate} for swarm-free scenes). Full per-scene
-  // metrics and the pixel layers exist only for the first (selected) model, so
-  // switching model re-ranks and re-labels by that model's Dice while the imagery
-  // stays the selected model's.
+  // scenes with a swarm, {bg_fp_rate} for swarm-free scenes). Their probability
+  // maps share one scene pack in the order declared by sample_assets.model_order.
   const MLIST = sm.models || [{key: 'sel', disp: sm.model_name_sel || 'Attention UNet'}];
+  if (MLIST.map(m => m.key).join('\0') !== assets.model_order.join('\0')) {
+    throw new Error('samples.json models do not match sample_assets.model_order.');
+  }
   const MKEY0 = MLIST[0].key;
   const mname = k => (MLIST.find(m => m.key === k) || {}).disp || k;
   const state = {split: 'test', type: 'pos', year: 'all', night: 'all',
@@ -66,7 +56,7 @@ export async function render(mount, query) {
   mount.innerHTML = `
   <h1>Sample explorer</h1>
   <p class="lede">Every evaluated scene. Open one to inspect the layers and move the threshold.</p>
-  <p class="small">Previews are ${PREVIEW}px (block-max downsampled from 960), so the interactive readout
+  <p class="small">Previews are ${assets.width}x${assets.height}px (block-max downsampled from 960), so the interactive readout
   runs a few hundredths of Dice optimistic; the side-panel and full-section numbers are 960×960.</p>
 
   <div class="ctrls" id="ctrls"></div>
@@ -140,35 +130,10 @@ export async function render(mount, query) {
     draw();
   }));
 
-  /* ---------------- image helpers (shared by thumbnails and the viewer) ------- */
-  const loadImg = src => new Promise((res, rej) => {
-    const i = new Image(); i.decoding = 'async';
-    i.onload = () => res(i); i.onerror = () => rej(new Error('missing ' + src)); i.src = src;
-  });
-  // one reusable offscreen per resolution; each read is synchronous so sharing is safe
-  const _big = document.createElement('canvas'); _big.width = _big.height = PREVIEW;
-  const _bigx = _big.getContext('2d', {willReadFrequently: true});
-  const px = im => { _bigx.clearRect(0, 0, PREVIEW, PREVIEW); _bigx.drawImage(im, 0, 0, PREVIEW, PREVIEW); return _bigx.getImageData(0, 0, PREVIEW, PREVIEW).data; };
-  const T = 120;
-  const _thb = document.createElement('canvas'); _thb.width = _thb.height = T;
-  const _thbx = _thb.getContext('2d', {willReadFrequently: true});
-  // Thumbnail: banded reflectivity with the model's prediction tinted over it,
-  // so the grid shows the radar returns in colour rather than a white/black mask.
-  function renderThumb(canvas, ts) {
-    const c2 = canvas.getContext('2d');
-    Promise.all([loadImg(`${IMG(ts)}_th.png`), loadImg(`${IMG(ts)}_thumb.png`)]).then(([th, pr]) => {
-      _thbx.clearRect(0, 0, T, T); _thbx.drawImage(th, 0, 0, T, T); const R = _thbx.getImageData(0, 0, T, T).data;
-      _thbx.clearRect(0, 0, T, T); _thbx.drawImage(pr, 0, 0, T, T); const PR = _thbx.getImageData(0, 0, T, T).data;
-      const o = c2.createImageData(T, T), d = o.data;
-      const background = reflectivityBackground(R);
-      for (let i = 0; i < R.length; i += 4) {
-        const c = reflectivityColor(R[i], background); let r = c[0], g = c[1], b = c[2];
-        if (PR[i] > 127) { r = r * 0.25 + 47 * 0.75; g = g * 0.25 + 125 * 0.75; b = b * 0.25 + 209 * 0.75; }
-        d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255;
-      }
-      c2.putImageData(o, 0, 0);
-    }).catch(() => {});
-  }
+  /* ---------------- packed asset helpers ------------------------------------ */
+  const packUrl = ts => assetUrl(assets.pack_path, ts, assets.version);
+  const thumbnailUrl = ts => assetUrl(assets.thumbnail_path, ts, assets.version);
+  const packs = new SamplePackCache(ts => fetchSamplePack(packUrl(ts), assets), 3);
 
   /* ---------------- filtering ---------------- */
   function rows() {
@@ -225,8 +190,8 @@ export async function render(mount, query) {
       body.innerHTML = `<div class="sgrid">` + r.slice(0, 120).map(s => {
         const has = withImg.has(s.ts);
         return `<button class="scell" data-ts="${s.ts}">
-          ${has ? `<canvas class="im" width="120" height="120" data-ts="${s.ts}" style="display:block"
-             aria-label="Reflectivity with prediction for scene ${tsLabel(s.ts)}"></canvas>`
+          ${has ? `<img class="im" width="${assets.thumbnail_width}" height="${assets.thumbnail_height}" loading="lazy" decoding="async"
+             src="${esc(thumbnailUrl(s.ts))}" alt="Maximum reflectivity with prediction for scene ${tsLabel(s.ts)}">`
             : `<span class="im" style="display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)">no image</span>`}
           <span class="cap"><b>${hhmm(s.ts)}</b> <span class="m">${String(s.ts).slice(0, 8)}</span><br>
           ${s.label === 1
@@ -236,13 +201,12 @@ export async function render(mount, query) {
       }).join('') + `</div>
         <p class="small" style="margin-top:10px">
           Thumbnails show <span class="swk" style="vertical-align:-2px;background:${REFL_CSS}"></span>
-          <b>reflectivity</b> (-10 to 25 dBZ) with the model's
+          <b>maximum reflectivity across the lowest 6 elevations</b> (-10 to 25 dBZ) with the model's
           <span class="swk" style="vertical-align:-2px;background:rgb(47,125,209)"></span> <b>prediction</b>
           at threshold ${sm.threshold}. Open a scene for the labelled error view and the layer controls.</p>` +
         (r.length > 120 ? `<p class="small">Showing the first 120 of ${r.length}. Narrow the filters or switch to the table view to see the rest.</p>` : '');
       body.querySelectorAll('.scell').forEach(b =>
         b.addEventListener('click', () => open(+b.dataset.ts)));
-      body.querySelectorAll('canvas.im[data-ts]').forEach(c => renderThumb(c, +c.dataset.ts));
     } else {
       body.innerHTML = `<div id="tbl"></div>`;
       // flatten each model's per-scene Dice onto the row so the table can show
@@ -282,8 +246,8 @@ export async function render(mount, query) {
   const C_GT = [106, 62, 161], C_PRED = [47, 125, 209];
 
   // per-open viewer state, reused across in-place scene changes
-  let curS = null, P = null, G = null, TH = null, out = null, ctx = null;
-  let vlist = [], vidx = 0, imgToken = 0;
+  let curS = null, currentPack = null, P = null, G = null, TH = null, out = null, ctx = null;
+  let vlist = [], vidx = 0, loadToken = 0;
 
   const SHELL = `
     <div class="modal" role="dialog" aria-modal="true" aria-label="Scene viewer">
@@ -307,7 +271,7 @@ export async function render(mount, query) {
           <div class="viewer-control-row">
             <span class="viewer-control-label">Layers</span>
             <div class="layer-choices" id="lays">
-              <label class="chk"><input type="checkbox" id="l_refl" checked> Reflectivity</label>
+              <label class="chk"><input type="checkbox" id="l_refl" checked> Maximum reflectivity &middot; lowest 6 elevations</label>
               <label class="chk"><input type="checkbox" id="l_gt" checked> Ground truth</label>
               <label class="chk"><input type="checkbox" id="l_pred" checked> Prediction</label>
             </div>
@@ -328,7 +292,7 @@ export async function render(mount, query) {
         <div class="viewer">
           <div>
             <div class="stage" id="stage" style="position:relative">
-              <canvas id="cv" width="${PREVIEW}" height="${PREVIEW}" style="display:block" aria-label="Segmentation overlay"></canvas>
+              <canvas id="cv" width="${assets.width}" height="${assets.height}" style="display:block" aria-label="Segmentation overlay"></canvas>
               <div id="leg2" style="position:absolute;top:8px;left:8px;display:none;flex-direction:column;gap:3px;background:rgba(15,17,21,.66);color:#fff;padding:7px 9px;border-radius:8px;font:500 11px/1.5 var(--sans);pointer-events:none;box-shadow:0 1px 6px rgba(0,0,0,.45)"></div>
               <div id="noimg" class="state" style="display:none;position:absolute;inset:0;border:0;background:var(--panel)"></div>
             </div>
@@ -346,7 +310,7 @@ export async function render(mount, query) {
     </div>`;
 
   function drawLegend(L, counts) {
-    const leg2 = q('#leg2'), total = PREVIEW * PREVIEW;
+    const leg2 = q('#leg2'), total = assets.width * assets.height;
     const sw = bg => `<span style="display:inline-block;width:13px;height:11px;border-radius:2px;flex:none;background:${bg}"></span>`;
     const row = (bg, name, n) => `<div style="display:flex;align-items:center;gap:6px;white-space:nowrap">
       ${sw(bg)}<span>${esc(name)}</span>${n == null ? '' : `<span style="margin-left:auto;padding-left:12px;opacity:.75">${((n / total) * 100).toFixed(n / total < 0.01 ? 2 : 1)}%</span>`}</div>`;
@@ -362,14 +326,13 @@ export async function render(mount, query) {
     if (!curS || !P || !ctx) return;
     const t = +q('#thr').value, op = +q('#op').value;
     const L = {refl: q('#l_refl').checked, gt: q('#l_gt').checked, pred: q('#l_pred').checked};
-    const background = reflectivityBackground(TH);
     const cut = t * 255, d = out.data;
     let tp = 0, fp = 0, fn = 0;
-    for (let i = 0, p = 0; i < P.length; i += 4, p += 4) {
-      const prob = P[i], gt = G[i] > 127, pred = prob > cut;
+    for (let i = 0, p = 0; i < P.length; i++, p += 4) {
+      const prob = P[i], gt = packedBit(G, i) === 1, pred = prob > cut;
       if (gt && pred) tp++; else if (pred) fp++; else if (gt) fn++;
       let r = 0, g = 0, b = 0;
-      if (L.refl) { const c = reflectivityColor(TH[i], background); r = c[0]; g = c[1]; b = c[2]; }
+      if (L.refl) { const c = reflectivityColor(TH[i]); r = c[0]; g = c[1]; b = c[2]; }
       const over = c => { r = r * (1 - op) + c[0] * op; g = g * (1 - op) + c[1] * op; b = b * (1 - op) + c[2] * op; };
       if (L.gt && gt) over(C_GT);
       if (L.pred && pred) over(C_PRED);
@@ -383,7 +346,7 @@ export async function render(mount, query) {
     q('#thv').textContent = t.toFixed(2);
     drawLegend(L, {tp, fp, fn});
     q('#live').innerHTML = s.label === 1
-      ? `On this ${PREVIEW}px preview at threshold ${t.toFixed(2)}: Dice <b>${dice.toFixed(3)}</b>,
+      ? `On this ${assets.width}x${assets.height}px preview at threshold ${t.toFixed(2)}: Dice <b>${dice.toFixed(3)}</b>,
          precision ${prec.toFixed(3)}, recall ${rec.toFixed(3)} (TP ${int(tp)}, FP ${int(fp)}, FN ${int(fn)} preview px).
          <span style="color:var(--muted)">Full-resolution Dice at threshold ${s.thr} is ${fmtOr(authDice, 'dice')}.</span>`
       : `Swarm-free scene. ${int(fp)} preview px predicted as swarm at threshold ${t.toFixed(2)}.`;
@@ -410,7 +373,7 @@ export async function render(mount, query) {
         ['Truth regions', s.n_gt_regions ?? '—'], ['Pred regions', m.n_pred_regions ?? '—']];
     } else {
       rowsM = [['Predicted area', m.pred_area != null ? int(m.pred_area) : '—'],
-        ['False-positive rate', fmtOr(m.bg_fp_rate, 'bg_fp_rate')], ['Max probability', fmtOr(s.prob_max, 'dice')]];
+        ['False-positive rate', fmtOr(m.bg_fp_rate, 'bg_fp_rate')]];
     }
     q('#v-metrics').innerHTML = rowsM.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${v}</span>`).join('');
 
@@ -438,6 +401,7 @@ export async function render(mount, query) {
 
   async function loadScene(ts) {
     const s = all.find(x => x.ts === ts); if (!s) return;
+    const my = ++loadToken;
     curS = s; vidx = vlist.findIndex(x => x.ts === ts);
     q('#v-title').textContent = tsLabel(ts);
     q('#prev').disabled = vidx <= 0;
@@ -448,29 +412,33 @@ export async function render(mount, query) {
       cv.style.display = 'none'; leg2.style.display = 'none'; noimg.style.display = 'flex';
       noimg.innerHTML = `<div><div class="big">No imagery exported</div>
         <div class="small">Pixel layers were not exported for the ${esc(s.split)} split. Metrics are still full resolution.</div></div>`;
-      q('#live').textContent = ''; P = G = TH = null;
+      q('#live').textContent = ''; currentPack = P = G = TH = null;
       return;
     }
-    cv.style.display = 'block'; noimg.style.display = 'none';
-    const my = ++imgToken;
+    cv.style.display = 'none'; leg2.style.display = 'none'; noimg.style.display = 'flex';
+    noimg.innerHTML = `<div><div class="spin" role="status" aria-live="polite"></div><div>Loading sample...</div></div>`;
+    q('#live').textContent = ''; currentPack = P = G = TH = null;
     try {
-      const [ip, ig, it] = await Promise.all([
-        loadImg(`${IMG(ts)}_prob_${modelKey()}.png`), loadImg(`${IMG(ts)}_gt.png`), loadImg(`${IMG(ts)}_th.png`)]);
-      if (my !== imgToken) return;   // a newer navigation superseded this load
-      P = px(ip); G = px(ig); TH = px(it);
+      const pack = await packs.get(ts);
+      if (my !== loadToken) return;   // a newer navigation superseded this load
+      currentPack = pack;
+      P = pack.probabilities[modelKey()]; G = pack.groundTruth; TH = pack.reflectivity;
+      cv.style.display = 'block'; noimg.style.display = 'none';
       paint();
     } catch (e) {
-      if (my !== imgToken) return;
+      if (my !== loadToken) return;
       cv.style.display = 'none'; noimg.style.display = 'flex';
       noimg.innerHTML = `<div><div class="big">Image failed to load</div><div class="small">${esc(e.message)}</div></div>`;
     }
   }
 
-  // Model change: reload the current scene with the chosen model's prediction.
-  // Going through loadScene fetches the three layers atomically (ground truth and
-  // reflectivity come straight from cache), so P, G and TH always belong to the
-  // same scene — a model switch mid-load can never leave a mismatched overlay.
-  function applyModel() { if (curS) loadScene(curS.ts); }
+  // All four probability maps share the active scene pack. A model change only
+  // selects another typed-array view and repaints; it performs no network I/O.
+  function applyModel() {
+    if (!curS) return;
+    renderPanels();
+    if (currentPack) { P = currentPack.probabilities[modelKey()]; paint(); }
+  }
 
   function step(dir) { const t = vlist[vidx + dir]; if (t) loadScene(t.ts); }
 
@@ -478,7 +446,7 @@ export async function render(mount, query) {
     vlist = rows();
     modal.open(SHELL, {onPrev: () => step(-1), onNext: () => step(1)});
     ctx = q('#cv').getContext('2d', {willReadFrequently: true});
-    out = ctx.createImageData(PREVIEW, PREVIEW);
+    out = ctx.createImageData(assets.width, assets.height);
     q('#x').addEventListener('click', () => modal.close());
     q('#prev').addEventListener('click', () => step(-1));
     q('#next').addEventListener('click', () => step(1));

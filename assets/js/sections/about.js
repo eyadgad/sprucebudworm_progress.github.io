@@ -49,20 +49,20 @@ export async function render(mount) {
       <td class="n">${ex.experiments.length}</td><td class="small">stage <code>experiments</code></td></tr>
     <tr><td><code>dataset.json</code></td><td style="text-align:left">Scene metadata, target areas under three label definitions, night/split overlap audit</td>
       <td class="n">${int(ds.n_scenes)}</td><td class="small">stage <code>dataset</code></td></tr>
-    <tr><td><code>samples.json</code></td><td style="text-align:left">Per-scene metrics for both models, region counts, radial statistics</td>
+    <tr><td><code>samples.json</code></td><td style="text-align:left">Per-scene metrics for four viewer models, region counts, radial statistics and packed-asset metadata</td>
       <td class="n">${int(sm.samples.length)}</td><td class="small">stage <code>predict</code></td></tr>
     <tr><td><code>threshold.json</code></td><td style="text-align:left">Threshold sweeps, probability histograms, reliability bins, radial error profile</td>
       <td class="n">—</td><td class="small">stage <code>predict</code></td></tr>
-    <tr><td><code>samples/*.png</code></td><td style="text-align:left">Probability, ground-truth, reflectivity and thumbnail layers per evaluated scene</td>
-      <td class="n">2,460</td><td class="small">stage <code>images</code></td></tr>
+    <tr><td><code>samples/*.{sbw.gz,webp}</code></td><td style="text-align:left">One packed four-model/ground-truth/max-six-reflectivity asset and one thumbnail per evaluated scene</td>
+      <td class="n">1,230</td><td class="small">stage <code>packs</code></td></tr>
   </tbody></table></div>
 
   <h2>Rebuilding the data</h2>
   <pre style="background:var(--panel);border:1px solid var(--hair);border-radius:9px;padding:13px;overflow-x:auto;font-size:12.5px"><code>. venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only experiments,dataset
 .venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only predict
-.venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only images --img-splits test,val</code></pre>
+.venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only packs --data-root ..\\Data --site-dir ..\\sprucebudworm_progress.github.io</code></pre>
   <p class="small">The <code>predict</code> stage needs a GPU and takes roughly 40 minutes for 615 scenes
-  with two models. <code>experiments</code> and <code>dataset</code> need no GPU and take under two minutes.
+  with four models. <code>experiments</code> and <code>dataset</code> need no GPU and take under two minutes.
   To serve the site locally: <code>python -m http.server 8899</code> from this folder, then open
   <code>http://127.0.0.1:8899</code>. Opening <code>index.html</code> directly from disk will not work,
   because ES modules and <code>fetch</code> require an HTTP origin.</p>
@@ -109,8 +109,6 @@ export async function render(mount) {
        'An extra sweep pass per scene in stage predict (~200 KB).'],
       ['Weather-conditioned performance', 'No meteorological variables are joined to the scenes.',
        'A weather table keyed by night.'],
-      ['Visual model-vs-model comparison', 'Pixel layers are stored for the selected model only.',
-       'Running stage images for the comparison checkpoint as well (~13 MB more).'],
       ['Training scene imagery', 'Layers are exported for the evaluated splits (test and validation) only; training scenes are not browsable.',
        'Extending stage images to the train split (~90 MB more).'],
       ['Annotator agreement / label noise', 'Each scene has exactly one annotation.',
