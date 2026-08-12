@@ -81,13 +81,12 @@ data/samples/*.png             generated per-scene pixel layers
 | 01 | `#/overview` | What was built, how well it works, what to distrust |
 | 02 | `#/data` | Coverage, target sizes, label-threshold effects, split integrity |
 | 03 | `#/experiments` | All 57 runs, and why one was selected |
-| 04 | `#/training` | Convergence, over/under-fitting, stability |
-| 05 | `#/aggregate` | Validation vs test metrics, confusion matrices, intervals |
-| 06 | `#/segments` | Performance by year, size, fragmentation, distance, difficulty |
-| 07 | `#/samples` | Every scene; open one to inspect layers and move the threshold |
-| 08 | `#/errors` | Failure taxonomy, size driver, model disagreement, clustering |
-| 09 | `#/stats` | Distributions, bootstrap intervals, paired tests, correlations |
-| 10 | `#/about` | Metric glossary, provenance, unsupported analyses |
+| 04 | `#/aggregate` | Validation vs test metrics, confusion matrices, intervals |
+| 05 | `#/segments` | Performance by year, size, fragmentation, distance, difficulty |
+| 06 | `#/samples` | Every scene; open one to inspect layers and move the threshold |
+| 07 | `#/errors` | Failure taxonomy, size driver, model disagreement, clustering |
+| 08 | `#/stats` | Distributions, bootstrap intervals, paired tests, correlations |
+| 09 | `#/about` | Metric glossary, provenance, unsupported analyses |
 
 ---
 
