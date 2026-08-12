@@ -11,9 +11,10 @@ const MODEL_C = {
   smp_unetpp:'#3a6fce', smp_deeplabv3p:'#e2a33d', smp_segformer:'#cf6a5c',
 };
 const RANKABLE = ['dice','dice_micro','iou','precision','recall','boundary_iou','nsd','best_val_dice_patch','hd95','assd','bg_fp_rate'];
-const DEFAULT_FILTERS = {
-  study:'elevation', model:'all', loss:'all', target:'all', elev:'all', dem:'all', epochs:'all', rank:'dice',
-};
+const defaultState = () => ({
+  study:new Set(['elevation']), model:new Set(), loss:new Set(), target:new Set(),
+  channels:new Set(), epochs:new Set(), rank:'dice',
+});
 
 // The most recent campaign varies only the number of radar elevations for the
 // two finalist architectures. Keep the rule tied to the run id rather than the
@@ -26,11 +27,10 @@ export async function render(mount) {
   const ex = await load('experiments');
   const rows = ex.experiments;
   const sel = rows.find(r => r.selected);
-  const state = {...DEFAULT_FILTERS};
+  const state = defaultState();
 
   const models = [...new Set(rows.map(r => r.model))];
   const losses = [...new Set(rows.map(r => r.loss))];
-  const elevationCounts = [...new Set(rows.map(r => r.n_elev))].sort((a,b)=>a-b);
 
   mount.innerHTML = `
   <h1>Experiment comparison</h1>
@@ -63,45 +63,76 @@ export async function render(mount) {
 
   /* ---------------- filters ---------------- */
   const ctrls = mount.querySelector('#ctrls');
-  const mk = (label, key, opts) => {
-    const w = document.createElement('div'); w.className = 'f';
-    const id = 'x_' + key;
-    w.innerHTML = `<label for="${id}">${label}</label><select id="${id}">` +
-      opts.map(o => `<option value="${esc(o[0])}"${String(o[0])===String(state[key])?' selected':''}>${esc(o[1])}</option>`).join('') + '</select>';
-    w.querySelector('select').addEventListener('change', e => { state[key] = e.target.value; draw(); });
-    ctrls.appendChild(w);
+  const menus = new Map();
+  const checkMenu = (label, key, opts, {releaseStudy=false} = {}) => {
+    const d = document.createElement('details');
+    d.className = 'check-menu'; d.id = 'x_' + key;
+    d.innerHTML = `<summary></summary><div class="check-menu-pop">${opts.map(([v, t]) =>
+      `<label><input type="checkbox" value="${esc(v)}"${state[key].has(v)?' checked':''}> <span>${esc(t)}</span></label>`
+    ).join('')}</div>`;
+    const refresh = () => {
+      const chosen = opts.filter(([v]) => state[key].has(v)).map(([,t]) => t);
+      d.querySelector('summary').textContent = chosen.length
+        ? `${label}: ${chosen.length === 1 ? chosen[0] : chosen.length + ' selected'}`
+        : `${label}: All`;
+      d.querySelectorAll('input').forEach(i => { i.checked = state[key].has(i.value); });
+    };
+    d.querySelectorAll('input').forEach(i => i.addEventListener('change', () => {
+      i.checked ? state[key].add(i.value) : state[key].delete(i.value);
+      // The initial elevation-study view contains neither DEM nor 50-epoch
+      // runs. A channel/epoch choice is a request to search the whole corpus.
+      if (releaseStudy && state[key].size) {
+        state.study.clear();
+        menus.get('study')?.refresh();
+      }
+      refresh(); draw();
+    }));
+    d.addEventListener('toggle', () => {
+      if (d.open) menus.forEach((m, k) => { if (k !== key) m.el.open = false; });
+    });
+    menus.set(key, {el:d, refresh});
+    refresh(); ctrls.appendChild(d);
   };
-  mk('Experiment set','study',[
+  checkMenu('Experiment set','study',[
     ['elevation','Elevation sweep (latest)'],
     ['sweep50','50-epoch channel / label sweep'],
     ['baseline','Baseline experiments'],
-    ['all','All experiments'],
   ]);
-  mk('Architecture','model',[['all','All architectures'],...models.map(m=>[m, MODEL_NAME[m]||m])]);
-  mk('Loss','loss',[['all','All losses'],...losses.map(l=>[l, LOSS_NAME[l]||l])]);
-  mk('Label','target',[['all','All labels'],['isfinite','any echo'],['dbz0','dBZ ≥ 0'],['dbz5','dBZ ≥ 5']]);
-  mk('Elevations','elev',[['all','Any count'],...elevationCounts.map(n=>[String(n),String(n)])]);
-  mk('DEM channel','dem',[['all','With or without DEM'],['yes','Includes DEM'],['no','No DEM']]);
-  mk('Epoch budget','epochs',[['all','Any epoch budget'],['50','50 epochs'],['100','100 epochs']]);
-  mk('Rank by','rank',RANKABLE.map(k=>[k, M[k]?.label || k]));
+  checkMenu('Architecture','model',models.map(m=>[m, MODEL_NAME[m]||m]));
+  checkMenu('Loss','loss',losses.map(l=>[l, LOSS_NAME[l]||l]));
+  checkMenu('Label','target',[['isfinite','any echo'],['dbz0','dBZ ≥ 0'],['dbz5','dBZ ≥ 5']]);
+  checkMenu('Channels','channels',[
+    ['dem','DEM'], ['beam','Beam height'], ['valid_mask','Valid-pixel mask'],
+    ...Array.from({length:10}, (_,i) => [`th_e${i}`, `Reflectivity elevation ${i}`]),
+  ], {releaseStudy:true});
+  checkMenu('Epoch budget','epochs',[['50','50 epochs'],['100','100 epochs']], {releaseStudy:true});
+  const rank = document.createElement('div'); rank.className = 'f';
+  rank.innerHTML = `<label for="x_rank">Rank by</label><select id="x_rank">${RANKABLE.map(k=>
+    `<option value="${esc(k)}">${esc(M[k]?.label || k)}</option>`).join('')}</select>`;
+  rank.querySelector('select').addEventListener('change', e => { state.rank=e.target.value; draw(); });
+  ctrls.appendChild(rank);
   const rst = document.createElement('button');
   rst.textContent='Reset'; rst.className='ghost';
   rst.addEventListener('click',()=>{
-    Object.assign(state, DEFAULT_FILTERS);
-    ctrls.querySelectorAll('select').forEach(s=>{ s.value=state[s.id.replace(/^x_/,'')]; });
+    const fresh = defaultState();
+    for (const k of ['study','model','loss','target','channels','epochs']) state[k] = fresh[k];
+    state.rank = fresh.rank; rank.querySelector('select').value = state.rank;
+    menus.forEach(m => { m.el.open=false; m.refresh(); });
     draw();
   });
   ctrls.appendChild(rst);
 
   const tgtKey = r => r.target_mode==='isfinite' ? 'isfinite' : (r.dbz_threshold>=5?'dbz5':'dbz0');
+  const hasChannel = (r, c) => c === 'beam'
+    ? r.channels.some(x => x.startsWith('bh_e') || x.startsWith('height_e'))
+    : r.channels.includes(c);
   const filtered = () => rows.filter(r =>
-    (state.study==='all'||studyKey(r)===state.study) &&
-    (state.model==='all'||r.model===state.model) &&
-    (state.loss==='all'||r.loss===state.loss) &&
-    (state.target==='all'||tgtKey(r)===state.target) &&
-    (state.elev==='all'||String(r.n_elev)===state.elev) &&
-    (state.dem==='all'||r.has_dem===(state.dem==='yes')) &&
-    (state.epochs==='all'||String(r.epochs_budget)===state.epochs));
+    (!state.study.size||state.study.has(studyKey(r))) &&
+    (!state.model.size||state.model.has(r.model)) &&
+    (!state.loss.size||state.loss.has(r.loss)) &&
+    (!state.target.size||state.target.has(tgtKey(r))) &&
+    (!state.channels.size||[...state.channels].every(c => hasChannel(r,c))) &&
+    (!state.epochs.size||state.epochs.has(String(r.epochs_budget))));
 
   /* ---------------- table ---------------- */
   const cols = [
