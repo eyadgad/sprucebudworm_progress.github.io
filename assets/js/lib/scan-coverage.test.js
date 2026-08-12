@@ -2,7 +2,8 @@
    Run in Node: node assets/js/lib/scan-coverage.test.js
    Run in a browser: import this module and call runScanCoverageTests(). */
 
-import { NIGHT_SLOTS, scanCoverageChart, scanCoverageModel } from './scan-coverage.js';
+import { NIGHT_SLOTS, SCENE_TYPE_COLOR, SPLIT_MARKER_COLOR,
+  scanCoverageChart, scanCoverageModel } from './scan-coverage.js';
 
 export function runScanCoverageTests() {
   const results = [];
@@ -18,6 +19,9 @@ export function runScanCoverageTests() {
   ];
   const model = scanCoverageModel(scenes, 2019);
   const {svg} = scanCoverageChart(scenes, 2019);
+  const group = ts => svg.match(new RegExp(`<g class="coverage-scan" data-ts="${ts}"[\\s\\S]*?</g>`))?.[0] || '';
+  const hasRectFill = (g, colour) => new RegExp(`<rect[^>]*fill="${colour}"`).test(g);
+  const hasCircleFill = (g, colour) => new RegExp(`<circle[^>]*fill="${colour}"`).test(g);
 
   ok('night axis has every half-hour from 19:00 through 11:00',
     NIGHT_SLOTS.length === 33 && NIGHT_SLOTS[0].key === '1900' && NIGHT_SLOTS.at(-1).key === '1100');
@@ -29,13 +33,27 @@ export function runScanCoverageTests() {
   ok('counts every split exactly',
     model.counts.train === 2 && model.counts.val === 1 && model.counts.test === 1);
   ok('renders exactly one SVG group per scan', (svg.match(/class="coverage-scan"/g) || []).length === 4);
-  ok('positive marker appears only for positive scenes',
-    (svg.match(/class="coverage-positive"/g) || []).length === 2);
+  ok('renders one split circle inside every scan box',
+    (svg.match(/class="coverage-split-marker"/g) || []).length === 4 &&
+    [201907022330, 201907030000, 201907030030, 201907050000].every(ts =>
+      (group(ts).match(/<rect /g) || []).length === 1 && (group(ts).match(/<circle /g) || []).length === 1));
+  ok('with-swarm boxes are green and swarm-free boxes are blue',
+    hasRectFill(group(201907022330), SCENE_TYPE_COLOR.positive) &&
+    hasRectFill(group(201907030030), SCENE_TYPE_COLOR.positive) &&
+    hasRectFill(group(201907030000), SCENE_TYPE_COLOR.negative) &&
+    hasRectFill(group(201907050000), SCENE_TYPE_COLOR.negative));
+  ok('circle colours encode train, validation, and test independently of box fill',
+    hasCircleFill(group(201907022330), SPLIT_MARKER_COLOR.train) &&
+    hasCircleFill(group(201907050000), SPLIT_MARKER_COLOR.train) &&
+    hasCircleFill(group(201907030000), SPLIT_MARKER_COLOR.val) &&
+    hasCircleFill(group(201907030030), SPLIT_MARKER_COLOR.test));
   ok('tooltips contain exact time, split, and type',
     svg.includes('2019-07-03 00:30 UTC — test — with swarm'));
-  ok('all split colours are rendered', ['#3a6fce', '#2f9d8c', '#e2a33d'].every(c => svg.includes(c)));
   ok('chart has an accessible name and description',
-    svg.includes('role="img" aria-labelledby=') && svg.includes('The exact records are listed in the table below.'));
+    svg.includes('role="img" aria-labelledby=') &&
+    svg.includes('Green boxes contain a spruce budworm swarm and blue boxes are swarm free.') &&
+    svg.includes('Each box has a coloured circle giving its train, validation, or test assignment.'));
+  ok('obsolete positive-only marker is absent', !svg.includes('coverage-positive'));
   ok('chart output has no invalid numbers', !/NaN|Infinity|undefined/.test(svg));
 
   let duplicateRejected = false;

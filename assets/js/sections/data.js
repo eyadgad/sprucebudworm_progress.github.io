@@ -5,7 +5,7 @@ import { load } from '../lib/data.js';
 import { int, pct, SPLIT_COLOR, quantile, mean, esc, tsLabel } from '../lib/metrics.js';
 import { barChart, histogram, boxPlot } from '../lib/charts.js';
 import { DataTable } from '../lib/table.js';
-import { scanCoverageChart } from '../lib/scan-coverage.js';
+import { scanCoverageChart, SCENE_TYPE_COLOR, SPLIT_MARKER_COLOR } from '../lib/scan-coverage.js';
 
 const SPLITS = ['train', 'val', 'test'];
 
@@ -39,15 +39,20 @@ export async function render(mount) {
     <div class="coverage-summary" id="coverage-summary"></div>
   </div>
   <figure>
-    <div class="coverage-scroll" id="coverage-chart" tabindex="0" role="region"
-      aria-label="Scrollable scan assignment chart"></div>
-    <div class="legend coverage-legend">
-      ${SPLITS.map(s => `<span><i class="sw" style="background:${SPLIT_COLOR[s]}"></i>${s === 'val' ? 'validation' : s}</span>`).join('')}
-      <span><i class="coverage-dot" aria-hidden="true"></i>contains a swarm</span>
-      <span><i class="coverage-empty" aria-hidden="true"></i>not in the ML manifest</span>
+    <div class="coverage-legend">
+      <div class="coverage-key"><b>Scene type</b>
+        <span><i class="sw coverage-with-swarm-key" style="background:${SCENE_TYPE_COLOR.positive}"></i>with swarm</span>
+        <span><i class="sw" style="background:${SCENE_TYPE_COLOR.negative}"></i>swarm free</span>
+        <span><i class="coverage-empty" aria-hidden="true"></i>not in the ML manifest</span>
+      </div>
+      <div class="coverage-key"><b>Split assignment</b>
+        ${SPLITS.map(s => `<span><i class="coverage-split-dot" style="--marker:${SPLIT_MARKER_COLOR[s]}"></i>${s === 'val' ? 'validation' : s}</span>`).join('')}
+      </div>
     </div>
-    <figcaption>Cells without a dot are sampled swarm-free scenes. Blank cells may be a missing scan or an
-    unused negative scene; this view describes the selected 2,052-scene ML manifest, not all raw PPI files.
+    <div class="coverage-scroll" id="coverage-chart" tabindex="0" role="region"
+      aria-label="Scrollable scan assignment chart; green and blue boxes show scene type, circles show data split"></div>
+    <figcaption>Box colour shows scene type; circle colour shows split. Blank cells may be a missing scan or
+    an unused negative scene; this view describes the selected 2,052-scene ML manifest, not all raw PPI files.
     Some biological nights cross midnight and therefore occupy two calendar-date rows.</figcaption>
   </figure>
 
@@ -160,9 +165,9 @@ export async function render(mount) {
     });
     mount.querySelector('#coverage-summary').innerHTML =
       `<span><b>${model.cells.length.toLocaleString('en-US')}</b>&nbsp;assigned scans</span><i class="coverage-sep">·</i>` +
-      `<span><i class="sw" style="background:${SPLIT_COLOR.train}"></i>${model.counts.train} train</span><i class="coverage-sep">·</i>` +
-      `<span><i class="sw" style="background:${SPLIT_COLOR.val}"></i>${model.counts.val} validation</span><i class="coverage-sep">·</i>` +
-      `<span><i class="sw" style="background:${SPLIT_COLOR.test}"></i>${model.counts.test} test</span>`;
+      `<span><i class="coverage-split-dot" style="--marker:${SPLIT_MARKER_COLOR.train}"></i>${model.counts.train} train</span><i class="coverage-sep">·</i>` +
+      `<span><i class="coverage-split-dot" style="--marker:${SPLIT_MARKER_COLOR.val}"></i>${model.counts.val} validation</span><i class="coverage-sep">·</i>` +
+      `<span><i class="coverage-split-dot" style="--marker:${SPLIT_MARKER_COLOR.test}"></i>${model.counts.test} test</span>`;
     mount.querySelector('#coverage-chart').innerHTML = svg;
   }
   drawCoverage();
@@ -172,10 +177,10 @@ export async function render(mount) {
     columns: [
       {key: 'ts', label: 'Scan timestamp (UTC)', fmt: value => `<code>${esc(tsLabel(value))}</code>`},
       {key: 'split', label: 'Split', fmt: value =>
-        `<span class="sw" style="background:${SPLIT_COLOR[value]}"></span> ${value === 'val' ? 'validation' : esc(value)}`},
-      {key: 'label', label: 'Scene type', fmt: value => value === 1
-        ? `<span class="scan-positive-dot" aria-hidden="true"></span> with swarm`
-        : 'swarm free'},
+        `<span class="coverage-split-dot" style="--marker:${SPLIT_MARKER_COLOR[value]}"></span> ${value === 'val' ? 'validation' : esc(value)}`},
+      {key: 'label', label: 'Scene type', fmt: value =>
+        `<span class="sw" style="background:${SCENE_TYPE_COLOR[value === 1 ? 'positive' : 'negative']}"></span> ` +
+        (value === 1 ? 'with swarm' : 'swarm free')},
       {key: 'area', label: 'Swarm area (px)', fmt: value => value == null ? '<span class="na">—</span>' : int(value)},
       {key: 'night', label: 'Positive night', fmt: value => value ? esc(value) : '<span class="na">not assigned</span>'},
     ],

@@ -4,11 +4,17 @@
    that exact cadence (including :30 scans) and returns both a testable data
    model and an accessible SVG. */
 
-import { esc, SPLIT_COLOR } from './metrics.js';
+import { esc } from './metrics.js';
 
 const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/* Coverage uses two independent encodings: box colour says what the scan
+   contains, while the circle says which split owns it. The marker palette is
+   deliberately high-chroma so all three remain legible on both box colours. */
+export const SCENE_TYPE_COLOR = Object.freeze({positive: '#21845f', negative: '#286fbb'});
+export const SPLIT_MARKER_COLOR = Object.freeze({train: '#ffe066', val: '#ffcbe1', test: '#b9f3ff'});
 
 export const NIGHT_SLOTS = Object.freeze([
   ...Array.from({length: 10}, (_, i) => 19 * 60 + i * 30),
@@ -63,7 +69,7 @@ export function scanCoverageModel(scenes, selectedYear) {
   const counts = {train: 0, val: 0, test: 0, positive: 0, negative: 0};
   const cells = rows.map(row => {
     const split = row.scene.split;
-    if (!Object.hasOwn(SPLIT_COLOR, split)) throw new Error(`Unknown split for ${row.ts}: ${split}`);
+    if (!Object.hasOwn(SPLIT_MARKER_COLOR, split)) throw new Error(`Unknown split for ${row.ts}: ${split}`);
     if (row.scene.label !== 0 && row.scene.label !== 1)
       throw new Error(`Invalid scene label for ${row.ts}: ${row.scene.label}`);
     if (Number(row.scene.year) !== row.year || String(row.scene.date) !== row.date ||
@@ -101,8 +107,8 @@ export function scanCoverageChart(scenes, selectedYear) {
   const plotW = slots.length * cellW, plotH = dates.length * rowH;
   const W = left + plotW + right, H = top + plotH + bottom;
   const titleId = `coverage-title-${year}`, descId = `coverage-desc-${year}`;
-  const aria = `${year} scan assignments: ${cells.length} scenes; ${counts.train} training, ` +
-    `${counts.val} validation, and ${counts.test} test.`;
+  const aria = `${year} scan assignments: ${cells.length} scenes; ${counts.positive} with swarm and ` +
+    `${counts.negative} swarm free; ${counts.train} training, ${counts.val} validation, and ${counts.test} test.`;
 
   const hourLabels = slots.map((slot, col) => slot.minutes % 60 === 0
     ? `<text x="${left + col * cellW + cellW / 2}" y="21" text-anchor="middle" class="ax">${slot.label}</text>`
@@ -124,15 +130,18 @@ export function scanCoverageChart(scenes, selectedYear) {
       `${cell.split === 'val' ? 'validation' : cell.split} — ${cell.positive ? 'with swarm' : 'swarm free'}`;
     return `<g class="coverage-scan" data-ts="${cell.ts}" data-split="${cell.split}" data-positive="${cell.positive ? '1' : '0'}">` +
       `<title>${esc(label)}</title>` +
-      `<rect x="${x}" y="${y}" width="${cellW - 1}" height="${rowH - 1}" rx="1" fill="${SPLIT_COLOR[cell.split]}"/>` +
-      (cell.positive ? `<circle cx="${x + (cellW - 1) / 2}" cy="${y + (rowH - 1) / 2}" r="2.35" class="coverage-positive"/>` : '') +
+      `<rect x="${x}" y="${y}" width="${cellW - 1}" height="${rowH - 1}" ` +
+        `rx="${cell.positive ? 3 : 0}" fill="${SCENE_TYPE_COLOR[cell.positive ? 'positive' : 'negative']}" ` +
+        `class="${cell.positive ? 'coverage-with-swarm' : 'coverage-swarm-free'}"/>` +
+      `<circle cx="${x + (cellW - 1) / 2}" cy="${y + (rowH - 1) / 2}" r="3.35" ` +
+        `fill="${SPLIT_MARKER_COLOR[cell.split]}" class="coverage-split-marker"/>` +
       `</g>`;
   }).join('');
   const midnightX = left + 10 * cellW;
 
   return {model, svg: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="${titleId} ${descId}">
     <title id="${titleId}">${esc(aria)}</title>
-    <desc id="${descId}">Dates are rows, newest first. Half-hour UTC times from 19:00 through 11:00 are columns. Colour gives the train, validation, or test assignment. A dot marks a scene containing a spruce budworm swarm. The exact records are listed in the table below.</desc>
+    <desc id="${descId}">Dates are rows, newest first. Half-hour UTC times from 19:00 through 11:00 are columns. Green boxes contain a spruce budworm swarm and blue boxes are swarm free. Each box has a coloured circle giving its train, validation, or test assignment. The exact records are listed in the table below.</desc>
     <rect x="${left}" y="${top}" width="${plotW}" height="${plotH}" rx="2" fill="var(--panel2)"/>
     ${hourLabels}${vertical}${horizontal}${monthLines}${dateLabels}
     <line x1="${midnightX}" y1="${top - 7}" x2="${midnightX}" y2="${top + plotH}" class="coverage-midnight"/>
