@@ -264,13 +264,8 @@ export async function render(mount, query) {
   const modalEl = mount.querySelector('#modal');
   const modal = new Modal(modalEl);
   const q = sel => modalEl.querySelector(sel);
+  const modelKey = () => q('input[name="v_model"]:checked')?.value || MKEY0;
   const C_GT = [106, 62, 161], C_PRED = [47, 125, 209];
-  const rgbHeat = v => {
-    const t = v / 255;
-    return [Math.round(255 * Math.min(1, t * 1.6)),
-            Math.round(255 * Math.max(0, Math.min(1, t * 1.6 - 0.5))),
-            Math.round(255 * Math.max(0, t * 1.2 - 0.75))];
-  };
 
   // per-open viewer state, reused across in-place scene changes
   let curS = null, P = null, G = null, TH = null, out = null, ctx = null;
@@ -285,21 +280,36 @@ export async function render(mount, query) {
           <button id="next" aria-label="Next scene">→</button>
           <button id="x" aria-label="Close">✕ Close</button>
         </div>
-        <div class="ctrls" id="v-ctrls" style="margin-bottom:14px">
-          <div class="f"><label for="v_model">Model</label>
-            <select id="v_model">${MLIST.map((m, i) => `<option value="${esc(m.key)}">${esc(m.disp)}${i === 0 ? ' (selected)' : ''}</option>`).join('')}</select></div>
-          <div class="f" style="align-items:flex-start"><label>Layers</label>
-            <div class="chips" id="lays" style="gap:6px 12px">
+        <div class="viewer-controls" id="v-ctrls">
+          <div class="viewer-control-row">
+            <span class="viewer-control-label">Model</span>
+            <div class="model-choices" role="radiogroup" aria-label="Model">
+              ${MLIST.map((m, i) => `<label class="model-choice">
+                <input type="radio" name="v_model" value="${esc(m.key)}"${i === 0 ? ' checked' : ''}>
+                <span>${esc(m.disp)}</span>${i === 0 ? '<small>selected</small>' : ''}
+              </label>`).join('')}
+            </div>
+          </div>
+          <div class="viewer-control-row">
+            <span class="viewer-control-label">Layers</span>
+            <div class="layer-choices" id="lays">
               <label class="chk"><input type="checkbox" id="l_refl" checked> Reflectivity</label>
-              <label class="chk"><input type="checkbox" id="l_prob"> Probability</label>
               <label class="chk"><input type="checkbox" id="l_gt" checked> Ground truth</label>
               <label class="chk"><input type="checkbox" id="l_pred" checked> Prediction</label>
-            </div></div>
-          <div class="f"><label for="thr">Threshold <b id="thv">—</b></label>
-            <input type="range" id="thr" min="0.02" max="0.9" step="0.01" value="0.15"></div>
-          <div class="f"><label for="op">Overlay opacity</label>
-            <input type="range" id="op" min="0" max="1" step="0.05" value="0.75"></div>
-          <button id="rst" class="ghost">Reset threshold</button>
+            </div>
+          </div>
+          <div class="viewer-control-row viewer-range-row">
+            <span class="viewer-control-label">Display</span>
+            <div class="viewer-slider"><label for="thr">Threshold <b id="thv">—</b></label>
+              <input type="range" id="thr" min="0.02" max="0.9" step="0.01" value="0.15"></div>
+            <div class="viewer-slider"><label for="op">Overlay opacity</label>
+              <input type="range" id="op" min="0" max="1" step="0.05" value="0.75"></div>
+            <button id="rst" class="ghost compact">Reset threshold</button>
+          </div>
+          <div class="viewer-control-row viewer-night-row">
+            <span class="viewer-control-label">Same night</span>
+            <div id="night"></div>
+          </div>
         </div>
         <div class="viewer">
           <div>
@@ -316,7 +326,6 @@ export async function render(mount, query) {
             <p class="small" id="v-metrics-note" style="display:none"></p>
             <h3>Model comparison</h3><div class="kv" id="v-cmp"></div>
             <p class="small" id="v-cmp-note"></p>
-            <h3>Same night</h3><div id="night"></div>
           </div>
         </div>
       </div>
@@ -330,7 +339,6 @@ export async function render(mount, query) {
     const rows = [];
     if (L.pred) rows.push(row('rgb(47,125,209)', 'Prediction', counts.tp + counts.fp));
     if (L.gt) rows.push(row('rgb(106,62,161)', 'Ground truth', counts.tp + counts.fn));
-    if (L.prob) rows.push(row('linear-gradient(90deg,#000,#f00,#ff0,#fff)', 'Probability 0 → 1', null));
     if (L.refl) rows.push(row(VIRIDIS_CSS, 'Reflectivity weak → strong', null));
     leg2.innerHTML = rows.join('');
     leg2.style.display = rows.length ? 'flex' : 'none';
@@ -339,7 +347,7 @@ export async function render(mount, query) {
   function paint() {
     if (!curS || !P || !ctx) return;
     const t = +q('#thr').value, op = +q('#op').value;
-    const L = {refl: q('#l_refl').checked, prob: q('#l_prob').checked, gt: q('#l_gt').checked, pred: q('#l_pred').checked};
+    const L = {refl: q('#l_refl').checked, gt: q('#l_gt').checked, pred: q('#l_pred').checked};
     const cut = t * 255, d = out.data;
     let tp = 0, fp = 0, fn = 0;
     for (let i = 0, p = 0; i < P.length; i += 4, p += 4) {
@@ -348,7 +356,6 @@ export async function render(mount, query) {
       let r = 0, g = 0, b = 0;
       if (L.refl) { const c = viridis(TH[i] / 255); r = c[0]; g = c[1]; b = c[2]; }
       const over = c => { r = r * (1 - op) + c[0] * op; g = g * (1 - op) + c[1] * op; b = b * (1 - op) + c[2] * op; };
-      if (L.prob) over(rgbHeat(prob));
       if (L.gt && gt) over(C_GT);
       if (L.pred && pred) over(C_PRED);
       d[p] = r; d[p + 1] = g; d[p + 2] = b; d[p + 3] = 255;
@@ -357,7 +364,7 @@ export async function render(mount, query) {
     const s = curS;
     const dice = tp ? 2 * tp / (2 * tp + fp + fn) : 0;
     const prec = (tp + fp) ? tp / (tp + fp) : 0, rec = (tp + fn) ? tp / (tp + fn) : 0;
-    const authDice = (s.models && s.models[q('#v_model').value] || {}).dice ?? s.dice;
+    const authDice = (s.models && s.models[modelKey()] || {}).dice ?? s.dice;
     q('#thv').textContent = t.toFixed(2);
     drawLegend(L, {tp, fp, fn});
     q('#live').innerHTML = s.label === 1
@@ -368,7 +375,7 @@ export async function render(mount, query) {
   }
 
   function renderPanels() {
-    const s = curS, vm = q('#v_model').value;
+    const s = curS, vm = modelKey();
     q('#v-scene').innerHTML = [
       ['Timestamp', s.ts], ['Night', esc(s.night || '—')], ['Split', esc(s.split)],
       ['Type', s.label ? 'has swarm' : 'swarm free'], ['Hour (UTC)', String(s.hour).padStart(2, '0') + ':00'],
@@ -433,7 +440,7 @@ export async function render(mount, query) {
     const my = ++imgToken;
     try {
       const [ip, ig, it] = await Promise.all([
-        loadImg(`${IMG(ts)}_prob_${q('#v_model').value}.png`), loadImg(`${IMG(ts)}_gt.png`), loadImg(`${IMG(ts)}_th.png`)]);
+        loadImg(`${IMG(ts)}_prob_${modelKey()}.png`), loadImg(`${IMG(ts)}_gt.png`), loadImg(`${IMG(ts)}_th.png`)]);
       if (my !== imgToken) return;   // a newer navigation superseded this load
       P = px(ip); G = px(ig); TH = px(it);
       paint();
@@ -460,8 +467,8 @@ export async function render(mount, query) {
     q('#x').addEventListener('click', () => modal.close());
     q('#prev').addEventListener('click', () => step(-1));
     q('#next').addEventListener('click', () => step(1));
-    ['#l_refl', '#l_prob', '#l_gt', '#l_pred', '#thr', '#op'].forEach(sel => q(sel).addEventListener('input', paint));
-    q('#v_model').addEventListener('change', applyModel);
+    ['#l_refl', '#l_gt', '#l_pred', '#thr', '#op'].forEach(sel => q(sel).addEventListener('input', paint));
+    modalEl.querySelectorAll('input[name="v_model"]').forEach(el => el.addEventListener('change', applyModel));
     q('#rst').addEventListener('click', () => { q('#thr').value = curS ? curS.thr : 0.15; paint(); });
     loadScene(ts);
   }
