@@ -193,7 +193,7 @@ th .tip::after{text-transform:none}
 .scell .cap{padding:6px 8px;font-size:11px;line-height:1.35}
 .scell .cap b{font-family:var(--mono);font-size:10.5px;font-weight:600}
 .scell .cap .m{color:var(--muted);font-family:var(--mono);font-size:10.5px}
-.viewer{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(240px,.65fr);gap:18px}
+.viewer{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(240px,.65fr);gap:12px}
 @media(max-width:900px){.viewer{grid-template-columns:1fr}}
 .stage{position:relative;background:#000;border:1px solid var(--hair);border-radius:11px;overflow:hidden;aspect-ratio:1}
 .stage canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;touch-action:none}
@@ -215,10 +215,37 @@ th .tip::after{text-transform:none}
   border:1px solid var(--hair);border-radius:8px;padding:6px 10px;cursor:pointer;background:var(--panel)}
 .chk input{accent-color:var(--accent2);margin:0}
 
+/* Compact four-row control stack in the scene viewer. */
+.viewer-controls{display:grid;gap:0;margin:0 0 10px;border-top:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.viewer-control-row{display:grid;grid-template-columns:78px minmax(0,1fr);gap:8px;align-items:center;padding:6px 2px;border-bottom:1px solid var(--hair)}
+.viewer-control-row:last-child{border-bottom:0}
+.viewer-control-label,.viewer-slider label{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.model-choices,.layer-choices{display:flex;align-items:center;flex-wrap:wrap;gap:5px 16px}
+.model-choice{display:inline-flex;align-items:center;gap:6px;color:var(--ink2);font-size:12.5px;cursor:pointer;white-space:nowrap}
+.model-choice input{width:15px;height:15px;margin:0;accent-color:var(--accent2)}
+.model-choice:has(input:checked){color:var(--ink);font-weight:650}
+.model-choice small{font:500 9px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--accent2);background:var(--accent-soft);border-radius:10px;padding:2px 6px}
+.viewer-controls .chk{border:0;background:none;border-radius:0;padding:2px 0;font-size:12.5px}
+.viewer-range-row{grid-template-columns:78px minmax(210px,1fr) minmax(210px,1fr) auto}
+.viewer-slider{display:grid;grid-template-columns:auto minmax(110px,1fr);gap:8px;align-items:center}
+.viewer-slider input[type=range]{width:100%;min-width:110px}
+.viewer-controls .compact{padding:4px 7px;font-size:11.5px;white-space:nowrap}
+.viewer-night-row{align-items:start}
+.viewer-night-row .chips{gap:4px}
+.viewer-night-row .chip{padding:3px 9px;font-size:11px}
+.viewer-night-row .small{margin:3px 0 0;font-size:10.8px}
+@media(max-width:760px){
+  .viewer-control-row,.viewer-range-row{grid-template-columns:1fr;gap:5px}
+  .viewer-range-row{grid-template-columns:1fr 1fr}
+  .viewer-range-row .viewer-control-label{grid-column:1/-1}
+  .viewer-range-row .compact{justify-self:start}
+}
+@media(max-width:520px){.viewer-range-row{grid-template-columns:1fr}}
+
 .kv{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:13px}
 .kv .k{color:var(--muted);font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
 .kv .v{font-variant-numeric:tabular-nums;text-align:right;font-family:var(--mono);font-size:12.5px}
 .modal{position:fixed;inset:0;background:rgba(8,12,18,.72);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:26px 16px;overflow-y:auto}
-.modal .box{background:var(--paper);border:1px solid var(--hair);border-radius:14px;max-width:1120px;width:100%;padding:20px 22px 26px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
-.modal .hd{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.modal .box{background:var(--paper);border:1px solid var(--hair);border-radius:14px;max-width:1180px;width:100%;padding:14px 16px 18px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.modal .hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .modal .hd h2{margin:0}
