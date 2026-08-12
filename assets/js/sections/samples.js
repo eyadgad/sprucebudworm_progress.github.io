@@ -13,19 +13,24 @@ import { Modal } from '../lib/ui.js';
 const IMG = ts => `data/samples/${ts}`;
 const PREVIEW = 480;   // stored preview resolution; metrics come from full 960
 
-/* Viridis colormap (matplotlib), used to colour the reflectivity base so it
-   matches the report's radar figures (which plot reflectivity with viridis)
-   instead of a plain greyscale ramp. */
-const VIRIDIS = [
-  [68, 1, 84], [72, 40, 120], [62, 74, 137], [49, 104, 142], [38, 130, 142],
-  [31, 158, 137], [53, 183, 121], [110, 206, 88], [181, 222, 43], [223, 227, 41], [253, 231, 37]];
-function viridis(t) {
-  t = t < 0 ? 0 : t > 1 ? 1 : t;
-  const x = t * (VIRIDIS.length - 1), i = Math.floor(x), f = x - i;
-  const a = VIRIDIS[i], b = VIRIDIS[Math.min(i + 1, VIRIDIS.length - 1)];
-  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
-}
-const VIRIDIS_CSS = 'linear-gradient(90deg,rgb(68,1,84),rgb(38,130,142),rgb(94,201,98),rgb(253,231,37))';
+/* Six discrete reflectivity bands requested for the radar display. The stored
+   preview byte spans the displayed -10..25 dBZ range. */
+const REFL_BANDS = [
+  {max:-1, color:[190, 222, 230], label:'-10 – -1 dBZ'},
+  {max: 2, color:[117, 231, 137], label:'-1.1 – 2 dBZ'},
+  {max: 7, color:[ 42, 220,  18], label:'2.1 – 7 dBZ'},
+  {max:12, color:[247, 235,  39], label:'7.1 – 12 dBZ'},
+  {max:19, color:[247, 139,  20], label:'12.1 – 19 dBZ'},
+  {max:25, color:[242,  31,  23], label:'19.1 – 25 dBZ'},
+];
+const reflectivityColor = byte => {
+  const dbz = -10 + (byte / 255) * 35;
+  return (REFL_BANDS.find(b => dbz <= b.max) || REFL_BANDS.at(-1)).color;
+};
+const REFL_CSS = `linear-gradient(90deg,
+  rgb(190,222,230) 0 25.7%, rgb(117,231,137) 25.7% 34.3%,
+  rgb(42,220,18) 34.3% 48.6%, rgb(247,235,39) 48.6% 62.9%,
+  rgb(247,139,20) 62.9% 82.9%, rgb(242,31,23) 82.9% 100%)`;
 
 export async function render(mount, query) {
   const sm = await load('samples');
@@ -139,7 +144,7 @@ export async function render(mount, query) {
   const T = 120;
   const _thb = document.createElement('canvas'); _thb.width = _thb.height = T;
   const _thbx = _thb.getContext('2d', {willReadFrequently: true});
-  // Thumbnail: viridis reflectivity with the model's prediction tinted over it,
+  // Thumbnail: banded reflectivity with the model's prediction tinted over it,
   // so the grid shows the radar returns in colour rather than a white/black mask.
   function renderThumb(canvas, ts) {
     const c2 = canvas.getContext('2d');
@@ -148,7 +153,7 @@ export async function render(mount, query) {
       _thbx.clearRect(0, 0, T, T); _thbx.drawImage(pr, 0, 0, T, T); const PR = _thbx.getImageData(0, 0, T, T).data;
       const o = c2.createImageData(T, T), d = o.data;
       for (let i = 0; i < R.length; i += 4) {
-        const c = viridis(R[i] / 255); let r = c[0], g = c[1], b = c[2];
+        const c = reflectivityColor(R[i]); let r = c[0], g = c[1], b = c[2];
         if (PR[i] > 127) { r = r * 0.25 + 47 * 0.75; g = g * 0.25 + 125 * 0.75; b = b * 0.25 + 209 * 0.75; }
         d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255;
       }
@@ -221,8 +226,8 @@ export async function render(mount, query) {
         </button>`;
       }).join('') + `</div>
         <p class="small" style="margin-top:10px">
-          Thumbnails show <span class="swk" style="vertical-align:-2px;background:${VIRIDIS_CSS}"></span>
-          <b>reflectivity</b> (weak → strong) with the model's
+          Thumbnails show <span class="swk" style="vertical-align:-2px;background:${REFL_CSS}"></span>
+          <b>reflectivity</b> (-10 to 25 dBZ) with the model's
           <span class="swk" style="vertical-align:-2px;background:rgb(47,125,209)"></span> <b>prediction</b>
           at threshold ${sm.threshold}. Open a scene for the labelled error view and the layer controls.</p>` +
         (r.length > 120 ? `<p class="small">Showing the first 120 of ${r.length}. Narrow the filters or switch to the table view to see the rest.</p>` : '');
@@ -339,7 +344,7 @@ export async function render(mount, query) {
     const rows = [];
     if (L.pred) rows.push(row('rgb(47,125,209)', 'Prediction', counts.tp + counts.fp));
     if (L.gt) rows.push(row('rgb(106,62,161)', 'Ground truth', counts.tp + counts.fn));
-    if (L.refl) rows.push(row(VIRIDIS_CSS, 'Reflectivity weak → strong', null));
+    if (L.refl) REFL_BANDS.forEach(b => rows.push(row(`rgb(${b.color.join(',')})`, b.label, null)));
     leg2.innerHTML = rows.join('');
     leg2.style.display = rows.length ? 'flex' : 'none';
   }
@@ -354,7 +359,7 @@ export async function render(mount, query) {
       const prob = P[i], gt = G[i] > 127, pred = prob > cut;
       if (gt && pred) tp++; else if (pred) fp++; else if (gt) fn++;
       let r = 0, g = 0, b = 0;
-      if (L.refl) { const c = viridis(TH[i] / 255); r = c[0]; g = c[1]; b = c[2]; }
+      if (L.refl) { const c = reflectivityColor(TH[i]); r = c[0]; g = c[1]; b = c[2]; }
       const over = c => { r = r * (1 - op) + c[0] * op; g = g * (1 - op) + c[1] * op; b = b * (1 - op) + c[2] * op; };
       if (L.gt && gt) over(C_GT);
       if (L.pred && pred) over(C_PRED);
