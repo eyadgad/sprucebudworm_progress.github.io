@@ -45,11 +45,12 @@ Verify a rebuild with:
 ```bash
 .venv\Scripts\python.exe scripts\test_dashboard.py
 node assets/js/lib/metrics.test.js
+node assets/js/lib/scan-coverage.test.js
 ```
 
-The first cross-checks every generated file against `outputs/experiments/*_result.json`
-and asserts per-scene arithmetic; the second tests the shared statistics and
-formatting helpers.
+The Python suite cross-checks every generated file against
+`outputs/experiments/*_result.json` and asserts per-scene arithmetic. The Node
+suites test the shared statistics helpers and the exact scan-coverage chart.
 
 ---
 
@@ -71,6 +72,8 @@ assets/js/lib/
   metrics.test.js, ui.test.js  node tests for the helpers and the modal
   sample-pack.js               strict SBW1 decoder and three-scene LRU cache
   sample-pack.test.js          browser/Node tests for packed sample assets
+  scan-coverage.js             exact date × half-hour split-assignment chart
+  scan-coverage.test.js        coverage cadence, count, and accessibility tests
 assets/js/sections/*.js        one module per dashboard section
 data/*.json                    generated analysis
 data/samples/*.sbw.gz          generated per-scene packed pixel layers
@@ -82,7 +85,7 @@ data/samples/*.webp            generated lazy grid thumbnails
 | # | Route | What it answers |
 |---|---|---|
 | 01 | `#/overview` | What was built, how well it works, what to distrust |
-| 02 | `#/data` | Coverage, target sizes, label-threshold effects, split integrity |
+| 02 | `#/data` | Exact scan assignments, date/time coverage, target sizes, split integrity |
 | 03 | `#/experiments` | All 57 runs, and why one was selected |
 | 04 | `#/training` | Convergence, over/under-fitting, stability |
 | 05 | `#/aggregate` | Validation vs test metrics, confusion matrices, intervals |
