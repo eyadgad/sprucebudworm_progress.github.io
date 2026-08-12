@@ -1,4 +1,4 @@
-/* Router + shell.
+﻿/* Router + shell.
 
    Sections are separate ES modules loaded with dynamic import(), so visiting
    the overview never downloads the sample explorer or its charts. Each module
@@ -23,6 +23,7 @@ const ROUTES = {
   overview:    {title: 'Executive overview',        mod: () => import('./sections/overview.js' + V)},
   data:        {title: 'Data exploration',          mod: () => import('./sections/data.js' + V)},
   experiments: {title: 'Experiment comparison',     mod: () => import('./sections/experiments.js' + V)},
+  training:    {title: 'Training diagnostics',      mod: () => import('./sections/training.js' + V)},
   aggregate:   {title: 'Aggregate evaluation',      mod: () => import('./sections/aggregate.js' + V)},
   segments:    {title: 'Performance breakdown',     mod: () => import('./sections/segments.js' + V)},
   samples:     {title: 'Sample explorer',           mod: () => import('./sections/samples.js' + V)},
