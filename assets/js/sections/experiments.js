@@ -11,15 +11,26 @@ const MODEL_C = {
   smp_unetpp:'#3a6fce', smp_deeplabv3p:'#e2a33d', smp_segformer:'#cf6a5c',
 };
 const RANKABLE = ['dice','dice_micro','iou','precision','recall','boundary_iou','nsd','best_val_dice_patch','hd95','assd','bg_fp_rate'];
+const DEFAULT_FILTERS = {
+  study:'elevation', model:'all', loss:'all', target:'all', elev:'all', dem:'all', epochs:'all', rank:'dice',
+};
+
+// The most recent campaign varies only the number of radar elevations for the
+// two finalist architectures. Keep the rule tied to the run id rather than the
+// current row order: experiments.json is sorted by filename during export.
+const studyKey = r => /^sweep_(attunet|unetpp)_dbz0_e\d+_focaltv$/.test(r.name)
+  ? 'elevation'
+  : Number(r.epochs_budget) === 50 ? 'sweep50' : 'baseline';
 
 export async function render(mount) {
   const ex = await load('experiments');
   const rows = ex.experiments;
   const sel = rows.find(r => r.selected);
-  const state = {model:'all', loss:'all', target:'all', elev:'all', rank:'dice'};
+  const state = {...DEFAULT_FILTERS};
 
   const models = [...new Set(rows.map(r => r.model))];
   const losses = [...new Set(rows.map(r => r.loss))];
+  const elevationCounts = [...new Set(rows.map(r => r.n_elev))].sort((a,b)=>a-b);
 
   mount.innerHTML = `
   <h1>Experiment comparison</h1>
@@ -56,27 +67,41 @@ export async function render(mount) {
     const w = document.createElement('div'); w.className = 'f';
     const id = 'x_' + key;
     w.innerHTML = `<label for="${id}">${label}</label><select id="${id}">` +
-      opts.map(o => `<option value="${esc(o[0])}">${esc(o[1])}</option>`).join('') + '</select>';
+      opts.map(o => `<option value="${esc(o[0])}"${String(o[0])===String(state[key])?' selected':''}>${esc(o[1])}</option>`).join('') + '</select>';
     w.querySelector('select').addEventListener('change', e => { state[key] = e.target.value; draw(); });
     ctrls.appendChild(w);
   };
+  mk('Experiment set','study',[
+    ['elevation','Elevation sweep (latest)'],
+    ['sweep50','50-epoch channel / label sweep'],
+    ['baseline','Baseline experiments'],
+    ['all','All experiments'],
+  ]);
   mk('Architecture','model',[['all','All architectures'],...models.map(m=>[m, MODEL_NAME[m]||m])]);
   mk('Loss','loss',[['all','All losses'],...losses.map(l=>[l, LOSS_NAME[l]||l])]);
   mk('Label','target',[['all','All labels'],['isfinite','any echo'],['dbz0','dBZ ≥ 0'],['dbz5','dBZ ≥ 5']]);
-  mk('Elevations','elev',[['all','Any count'],['1','1'],['3','3'],['6','6'],['9','9'],['10','10']]);
+  mk('Elevations','elev',[['all','Any count'],...elevationCounts.map(n=>[String(n),String(n)])]);
+  mk('DEM channel','dem',[['all','With or without DEM'],['yes','Includes DEM'],['no','No DEM']]);
+  mk('Epoch budget','epochs',[['all','Any epoch budget'],['50','50 epochs'],['100','100 epochs']]);
   mk('Rank by','rank',RANKABLE.map(k=>[k, M[k]?.label || k]));
   const rst = document.createElement('button');
   rst.textContent='Reset'; rst.className='ghost';
-  rst.addEventListener('click',()=>{Object.assign(state,{model:'all',loss:'all',target:'all',elev:'all'});
-    ctrls.querySelectorAll('select').forEach(s=>{ if(s.id!=='x_rank') s.value='all';}); draw();});
+  rst.addEventListener('click',()=>{
+    Object.assign(state, DEFAULT_FILTERS);
+    ctrls.querySelectorAll('select').forEach(s=>{ s.value=state[s.id.replace(/^x_/,'')]; });
+    draw();
+  });
   ctrls.appendChild(rst);
 
   const tgtKey = r => r.target_mode==='isfinite' ? 'isfinite' : (r.dbz_threshold>=5?'dbz5':'dbz0');
   const filtered = () => rows.filter(r =>
+    (state.study==='all'||studyKey(r)===state.study) &&
     (state.model==='all'||r.model===state.model) &&
     (state.loss==='all'||r.loss===state.loss) &&
     (state.target==='all'||tgtKey(r)===state.target) &&
-    (state.elev==='all'||String(r.n_elev)===state.elev));
+    (state.elev==='all'||String(r.n_elev)===state.elev) &&
+    (state.dem==='all'||r.has_dem===(state.dem==='yes')) &&
+    (state.epochs==='all'||String(r.epochs_budget)===state.epochs));
 
   /* ---------------- table ---------------- */
   const cols = [
@@ -85,6 +110,7 @@ export async function render(mount) {
       `<span class="pill">${esc(LOSS_NAME[r.loss]||r.loss)}</span>`+
       `<span class="pill">${esc(targetName(r.target_mode,r.dbz_threshold))}</span>`+
       `<span class="pill">${r.n_elev} elev</span>`+
+      `<span class="pill">${r.epochs_budget} epochs</span>`+
       (r.has_dem?'<span class="pill">DEM</span>':'')+(r.has_beam?'<span class="pill">beam</span>':'')+
       (r.selected?'<span class="pill" style="color:var(--best);border-color:var(--best)">selected</span>':'')},
     {key:'best_val_dice_patch', label:'Val Dice', tip:M.best_val_dice_patch.def, fmt:v=>fmtOr(v,'best_val_dice_patch')},
