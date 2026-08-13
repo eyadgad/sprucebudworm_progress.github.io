@@ -248,6 +248,11 @@ export async function render(mount, query) {
   // per-open viewer state, reused across in-place scene changes
   let curS = null, currentPack = null, P = null, G = null, TH = null, out = null, ctx = null;
   let vlist = [], vidx = 0, loadToken = 0;
+  // Scan-only zoom/pan (CSS transform on the canvas wrapper; legend stays put).
+  const ZOOM_MIN = 1, ZOOM_MAX = 8, ZOOM_STEP = 1.25;
+  let zoom = 1, panX = 0, panY = 0;
+  // Legend position inside the stage (px from top-left). null = default corner.
+  let legPos = null;
 
   const SHELL = `
     <div class="modal" role="dialog" aria-modal="true" aria-label="Scene viewer">
@@ -291,9 +296,17 @@ export async function render(mount, query) {
         </div>
         <div class="viewer">
           <div>
-            <div class="stage" id="stage" style="position:relative">
-              <canvas id="cv" width="${assets.width}" height="${assets.height}" style="display:block" aria-label="Segmentation overlay"></canvas>
-              <div id="leg2" style="position:absolute;top:8px;left:8px;display:none;flex-direction:column;gap:3px;background:rgba(15,17,21,.66);color:#fff;padding:7px 9px;border-radius:8px;font:500 11px/1.5 var(--sans);pointer-events:none;box-shadow:0 1px 6px rgba(0,0,0,.45)"></div>
+            <div class="stage" id="stage">
+              <div class="stage-scan" id="stage-scan">
+                <canvas id="cv" width="${assets.width}" height="${assets.height}" aria-label="Segmentation overlay"></canvas>
+              </div>
+              <div id="leg2" class="scan-legend" hidden title="Drag to move"></div>
+              <div class="zoom-ctrls" id="zoom-ctrls" role="group" aria-label="Scan zoom">
+                <button type="button" id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+                <button type="button" id="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+                <button type="button" id="zoom-reset" title="Reset zoom" aria-label="Reset zoom">1×</button>
+                <span class="zoom-lvl" id="zoom-lvl" aria-live="polite">100%</span>
+              </div>
               <div id="noimg" class="state" style="display:none;position:absolute;inset:0;border:0;background:var(--panel)"></div>
             </div>
             <p class="small" id="live"></p>
@@ -309,17 +322,84 @@ export async function render(mount, query) {
       </div>
     </div>`;
 
+  function applyZoom() {
+    const scan = q('#stage-scan'), lvl = q('#zoom-lvl'), stage = q('#stage');
+    if (!scan || !stage) return;
+    // Clamp pan so the scaled scan still covers the stage when zoomed in.
+    const sw = stage.clientWidth, sh = stage.clientHeight;
+    if (zoom <= 1) {
+      zoom = 1; panX = 0; panY = 0;
+    } else {
+      const maxX = (sw * (zoom - 1)) / 2;
+      const maxY = (sh * (zoom - 1)) / 2;
+      panX = Math.max(-maxX, Math.min(maxX, panX));
+      panY = Math.max(-maxY, Math.min(maxY, panY));
+    }
+    scan.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    if (lvl) lvl.textContent = `${Math.round(zoom * 100)}%`;
+    stage.classList.toggle('is-zoomed', zoom > 1);
+    const zout = q('#zoom-out'), zin = q('#zoom-in'), zrst = q('#zoom-reset');
+    if (zout) zout.disabled = zoom <= ZOOM_MIN;
+    if (zin) zin.disabled = zoom >= ZOOM_MAX;
+    if (zrst) zrst.disabled = zoom === 1 && panX === 0 && panY === 0;
+  }
+
+  function setZoom(next, cx, cy) {
+    const stage = q('#stage'); if (!stage) return;
+    const prev = zoom;
+    zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, next));
+    if (zoom === prev) { applyZoom(); return; }
+    // Zoom toward a point inside the stage (cursor for wheel; center for buttons).
+    const r = stage.getBoundingClientRect();
+    const px = (cx == null ? r.width / 2 : cx - r.left) - r.width / 2;
+    const py = (cy == null ? r.height / 2 : cy - r.top) - r.height / 2;
+    const k = zoom / prev;
+    panX = px - (px - panX) * k;
+    panY = py - (py - panY) * k;
+    applyZoom();
+  }
+
+  function resetZoom() { zoom = 1; panX = 0; panY = 0; applyZoom(); }
+
+  function clampLegend() {
+    const stage = q('#stage'), leg = q('#leg2');
+    if (!stage || !leg || leg.hidden || legPos == null) return;
+    const pad = 4;
+    const maxX = Math.max(pad, stage.clientWidth - leg.offsetWidth - pad);
+    const maxY = Math.max(pad, stage.clientHeight - leg.offsetHeight - pad);
+    legPos.x = Math.max(pad, Math.min(maxX, legPos.x));
+    legPos.y = Math.max(pad, Math.min(maxY, legPos.y));
+    leg.style.left = legPos.x + 'px';
+    leg.style.top = legPos.y + 'px';
+    leg.style.right = 'auto';
+    leg.style.bottom = 'auto';
+  }
+
+  function placeLegendDefault() {
+    const leg = q('#leg2');
+    if (!leg) return;
+    if (legPos == null) {
+      leg.style.left = '8px';
+      leg.style.top = '8px';
+      leg.style.right = 'auto';
+      leg.style.bottom = 'auto';
+    } else {
+      clampLegend();
+    }
+  }
+
   function drawLegend(L, counts) {
     const leg2 = q('#leg2'), total = assets.width * assets.height;
-    const sw = bg => `<span style="display:inline-block;width:13px;height:11px;border-radius:2px;flex:none;background:${bg}"></span>`;
-    const row = (bg, name, n) => `<div style="display:flex;align-items:center;gap:6px;white-space:nowrap">
-      ${sw(bg)}<span>${esc(name)}</span>${n == null ? '' : `<span style="margin-left:auto;padding-left:12px;opacity:.75">${((n / total) * 100).toFixed(n / total < 0.01 ? 2 : 1)}%</span>`}</div>`;
+    const sw = bg => `<span class="scan-legend-sw" style="background:${bg}"></span>`;
+    const row = (bg, name, n) => `<div class="scan-legend-row">
+      ${sw(bg)}<span>${esc(name)}</span>${n == null ? '' : `<span class="scan-legend-pct">${((n / total) * 100).toFixed(n / total < 0.01 ? 2 : 1)}%</span>`}</div>`;
     const rows = [];
     if (L.pred) rows.push(row('rgb(47,125,209)', 'Prediction', counts.tp + counts.fp));
     if (L.gt) rows.push(row('rgb(106,62,161)', 'Ground truth', counts.tp + counts.fn));
     if (L.refl) REFL_BANDS.forEach(b => rows.push(row(`rgb(${b.color.join(',')})`, b.label, null)));
     leg2.innerHTML = rows.join('');
-    leg2.style.display = rows.length ? 'flex' : 'none';
+    leg2.hidden = !rows.length;
+    if (rows.length) placeLegendDefault();
   }
 
   function paint() {
@@ -408,14 +488,27 @@ export async function render(mount, query) {
     q('#next').disabled = vidx >= vlist.length - 1;
     renderPanels(); renderNight();
     const has = withImg.has(ts), cv = q('#cv'), noimg = q('#noimg'), leg2 = q('#leg2');
+    const scan = q('#stage-scan'), zc = q('#zoom-ctrls');
+    const hideScan = () => {
+      cv.style.display = 'none';
+      if (scan) scan.style.visibility = 'hidden';
+      if (zc) zc.hidden = true;
+      leg2.hidden = true;
+    };
+    const showScan = () => {
+      cv.style.display = 'block';
+      if (scan) scan.style.visibility = 'visible';
+      if (zc) zc.hidden = false;
+      applyZoom();
+    };
     if (!has) {
-      cv.style.display = 'none'; leg2.style.display = 'none'; noimg.style.display = 'flex';
+      hideScan(); noimg.style.display = 'flex';
       noimg.innerHTML = `<div><div class="big">No imagery exported</div>
         <div class="small">Pixel layers were not exported for the ${esc(s.split)} split. Metrics are still full resolution.</div></div>`;
       q('#live').textContent = ''; currentPack = P = G = TH = null;
       return;
     }
-    cv.style.display = 'none'; leg2.style.display = 'none'; noimg.style.display = 'flex';
+    hideScan(); noimg.style.display = 'flex';
     noimg.innerHTML = `<div><div class="spin" role="status" aria-live="polite"></div><div>Loading sample...</div></div>`;
     q('#live').textContent = ''; currentPack = P = G = TH = null;
     try {
@@ -423,11 +516,11 @@ export async function render(mount, query) {
       if (my !== loadToken) return;   // a newer navigation superseded this load
       currentPack = pack;
       P = pack.probabilities[modelKey()]; G = pack.groundTruth; TH = pack.reflectivity;
-      cv.style.display = 'block'; noimg.style.display = 'none';
+      showScan(); noimg.style.display = 'none';
       paint();
     } catch (e) {
       if (my !== loadToken) return;
-      cv.style.display = 'none'; noimg.style.display = 'flex';
+      hideScan(); noimg.style.display = 'flex';
       noimg.innerHTML = `<div><div class="big">Image failed to load</div><div class="small">${esc(e.message)}</div></div>`;
     }
   }
@@ -442,8 +535,89 @@ export async function render(mount, query) {
 
   function step(dir) { const t = vlist[vidx + dir]; if (t) loadScene(t.ts); }
 
+  function bindScanInteractions() {
+    const stage = q('#stage'), scan = q('#stage-scan'), leg = q('#leg2');
+    if (!stage || !scan || !leg) return;
+
+    q('#zoom-in').addEventListener('click', () => setZoom(zoom * ZOOM_STEP));
+    q('#zoom-out').addEventListener('click', () => setZoom(zoom / ZOOM_STEP));
+    q('#zoom-reset').addEventListener('click', resetZoom);
+
+    // Wheel zoom only while the pointer is over the scan stage.
+    stage.addEventListener('wheel', e => {
+      if (q('#noimg')?.style.display === 'flex') return;
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+      setZoom(zoom * factor, e.clientX, e.clientY);
+    }, {passive: false});
+
+    // Drag-to-pan the scan when zoomed (pointer on stage, not on legend/buttons).
+    let panDrag = null;
+    stage.addEventListener('pointerdown', e => {
+      if (e.button !== 0 || zoom <= 1) return;
+      if (e.target.closest('.scan-legend, .zoom-ctrls, #noimg')) return;
+      panDrag = {id: e.pointerId, x: e.clientX, y: e.clientY, ox: panX, oy: panY};
+      stage.setPointerCapture(e.pointerId);
+      stage.classList.add('is-panning');
+      e.preventDefault();
+    });
+    stage.addEventListener('pointermove', e => {
+      if (!panDrag || e.pointerId !== panDrag.id) return;
+      panX = panDrag.ox + (e.clientX - panDrag.x);
+      panY = panDrag.oy + (e.clientY - panDrag.y);
+      applyZoom();
+    });
+    const endPan = e => {
+      if (!panDrag || e.pointerId !== panDrag.id) return;
+      panDrag = null;
+      stage.classList.remove('is-panning');
+      try { stage.releasePointerCapture(e.pointerId); } catch (_) { /* already released */ }
+    };
+    stage.addEventListener('pointerup', endPan);
+    stage.addEventListener('pointercancel', endPan);
+
+    // Drag the legend anywhere inside the scan window.
+    let legDrag = null;
+    leg.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      const r = leg.getBoundingClientRect();
+      const sr = stage.getBoundingClientRect();
+      legPos = {x: r.left - sr.left, y: r.top - sr.top};
+      legDrag = {id: e.pointerId, x: e.clientX, y: e.clientY, ox: legPos.x, oy: legPos.y};
+      leg.setPointerCapture(e.pointerId);
+      leg.classList.add('is-dragging');
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    leg.addEventListener('pointermove', e => {
+      if (!legDrag || e.pointerId !== legDrag.id) return;
+      legPos = {
+        x: legDrag.ox + (e.clientX - legDrag.x),
+        y: legDrag.oy + (e.clientY - legDrag.y),
+      };
+      clampLegend();
+    });
+    const endLeg = e => {
+      if (!legDrag || e.pointerId !== legDrag.id) return;
+      legDrag = null;
+      leg.classList.remove('is-dragging');
+      try { leg.releasePointerCapture(e.pointerId); } catch (_) { /* already released */ }
+    };
+    leg.addEventListener('pointerup', endLeg);
+    leg.addEventListener('pointercancel', endLeg);
+
+    // Keep legend inside bounds if the stage resizes.
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => { clampLegend(); applyZoom(); }).observe(stage);
+    }
+
+    resetZoom();
+    placeLegendDefault();
+  }
+
   function open(ts) {
     vlist = rows();
+    zoom = 1; panX = 0; panY = 0; legPos = null;
     modal.open(SHELL, {onPrev: () => step(-1), onNext: () => step(1)});
     ctx = q('#cv').getContext('2d', {willReadFrequently: true});
     out = ctx.createImageData(assets.width, assets.height);
@@ -453,6 +627,7 @@ export async function render(mount, query) {
     ['#l_refl', '#l_gt', '#l_pred', '#thr', '#op'].forEach(sel => q(sel).addEventListener('input', paint));
     modalEl.querySelectorAll('input[name="v_model"]').forEach(el => el.addEventListener('change', applyModel));
     q('#rst').addEventListener('click', () => { q('#thr').value = curS ? curS.thr : 0.15; paint(); });
+    bindScanInteractions();
     loadScene(ts);
   }
 

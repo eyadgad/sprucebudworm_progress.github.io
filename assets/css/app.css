@@ -220,8 +220,31 @@ th .tip::after{text-transform:none}
 .scell .cap .m{color:var(--muted);font-family:var(--mono);font-size:10.5px}
 .viewer{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(240px,.65fr);gap:12px}
 @media(max-width:900px){.viewer{grid-template-columns:1fr}}
-.stage{position:relative;background:#000;border:1px solid var(--hair);border-radius:11px;overflow:hidden;aspect-ratio:1}
-.stage canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;touch-action:none}
+.stage{position:relative;background:#000;border:1px solid var(--hair);border-radius:11px;overflow:hidden;aspect-ratio:1;touch-action:none;user-select:none}
+.stage-scan{position:absolute;inset:0;transform-origin:center center;will-change:transform}
+.stage canvas{display:block;width:100%;height:100%;image-rendering:pixelated;pointer-events:none}
+.stage.is-zoomed{cursor:grab}
+.stage.is-panning{cursor:grabbing}
+/* In-scan legend: floats over the image and can be dragged within the stage. */
+.scan-legend{position:absolute;top:8px;left:8px;z-index:3;display:flex;flex-direction:column;gap:3px;
+  background:rgba(15,17,21,.72);color:#fff;padding:7px 9px;border-radius:8px;
+  font:500 11px/1.5 var(--sans);box-shadow:0 1px 6px rgba(0,0,0,.45);cursor:grab;
+  max-width:min(220px,calc(100% - 16px));touch-action:none}
+.scan-legend[hidden]{display:none!important}
+.scan-legend.is-dragging{cursor:grabbing;opacity:.92;z-index:4}
+.scan-legend-row{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.scan-legend-sw{display:inline-block;width:13px;height:11px;border-radius:2px;flex:none}
+.scan-legend-pct{margin-left:auto;padding-left:12px;opacity:.75;font-variant-numeric:tabular-nums}
+/* Zoom controls sit on the scan only (not the side panel). */
+.zoom-ctrls{position:absolute;right:8px;bottom:8px;z-index:3;display:flex;align-items:center;gap:4px;
+  background:rgba(15,17,21,.72);border-radius:8px;padding:4px;box-shadow:0 1px 6px rgba(0,0,0,.45)}
+.zoom-ctrls[hidden]{display:none!important}
+.zoom-ctrls button{appearance:none;border:0;background:rgba(255,255,255,.1);color:#fff;width:28px;height:26px;
+  border-radius:6px;font:600 14px/1 var(--sans);cursor:pointer;padding:0}
+.zoom-ctrls button:hover:not(:disabled){background:rgba(255,255,255,.22)}
+.zoom-ctrls button:disabled{opacity:.35;cursor:default}
+.zoom-ctrls .zoom-lvl{min-width:42px;text-align:center;color:#fff;font:600 11px/1 var(--mono);
+  font-variant-numeric:tabular-nums;padding:0 4px;opacity:.9}
 /* viewer legend: every colour carries a name, a plain-language meaning and a live count */
 .lgbox{border:1px solid var(--hair);border-radius:10px;background:var(--panel);padding:4px 2px;margin-top:10px}
 .lgrow{display:grid;grid-template-columns:16px minmax(120px,auto) 1fr auto;gap:10px;align-items:center;
