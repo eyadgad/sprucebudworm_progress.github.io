@@ -77,24 +77,31 @@ export async function render(mount) {
   const defaultSplit = doc.defaults?.split === 'val' ? 'val' : 'test';
   const defaultOperating = doc.defaults?.scan_operating_point === 'any_cell' ? 'any' : 'selected';
   const defaultAggregation = doc.defaults?.night_aggregation === 'mean' ? 'mean' : 'max';
-  const state = {model: selectedKey, split: defaultSplit,
+  const state = {level: 'scan', model: selectedKey, split: defaultSplit,
     scanOperating: defaultOperating, nightAggregation: defaultAggregation};
 
   mount.innerHTML = `
-  <h1>SBW presence detection</h1>
-  <p class="lede">Beyond pixel overlap, can the model tell whether spruce budworm is present in an
-  individual radar scan or across a night? Pixel-level segmentation remains in
-  <a href="#/aggregate">Aggregate evaluation</a>.</p>
+  <div class="presence-intro">
+    <h1>SBW presence detection</h1>
+    <p class="lede">Choose whether to evaluate one radar scan or a whole migration night.
+    Pixel-level overlap is reported separately in <a href="#/aggregate">Aggregate evaluation</a>.</p>
+  </div>
 
-  <div class="note"><span class="tag">presence rule</span><div class="bd">
-    A scan is <b>SBW-present</b> when its ground-truth mask contains at least one full-resolution
-    ${int(doc.definitions.pixel_size_m)} m grid cell (${km2(doc.definitions.pixel_area_km2)} km&sup2;).
-    The model score is its predicted SBW-cell count at the locked pixel-probability threshold.
-    Calling a score present requires a separate area cutoff; equality counts as present.
-  </div></div>
+  <div class="presence-task-tabs" role="tablist" aria-label="Presence evaluation level">
+    <button type="button" class="presence-task-tab" id="presence-tab-scan" data-level="scan"
+      role="tab" aria-selected="true" aria-controls="presence-panel-scan" tabindex="0">
+      <span class="presence-task-number" aria-hidden="true">01</span>
+      <span><b>Scan detection</b><small>Is SBW present in this radar scan?</small></span>
+    </button>
+    <button type="button" class="presence-task-tab" id="presence-tab-night" data-level="night"
+      role="tab" aria-selected="false" aria-controls="presence-panel-night" tabindex="-1">
+      <span class="presence-task-number" aria-hidden="true">02</span>
+      <span><b>Night migration</b><small>Did migration occur during this night?</small></span>
+    </button>
+  </div>
 
-  <div class="presence-controls" aria-label="Presence analysis controls">
-    <fieldset class="presence-control-row"><legend>Model</legend>
+  <div class="presence-toolbar" role="group" aria-label="Shared analysis controls">
+    <fieldset class="presence-compact-control presence-model-control"><legend>Model</legend>
       <div class="model-choices" role="radiogroup" aria-label="Presence model">
         ${doc.models.map(model => `<label class="model-choice">
           <input type="radio" name="presence-model" value="${esc(model.key)}"${model.key === selectedKey ? ' checked' : ''}>
@@ -102,78 +109,123 @@ export async function render(mount) {
         </label>`).join('')}
       </div>
     </fieldset>
-    <fieldset class="presence-control-row"><legend>Evaluation split</legend>
+    <fieldset class="presence-compact-control presence-split-control"><legend>Dataset</legend>
       <div class="model-choices" role="radiogroup" aria-label="Evaluation split">
         <label class="model-choice"><input type="radio" name="presence-split" value="test"${defaultSplit === 'test' ? ' checked' : ''}> Test (held out)</label>
         <label class="model-choice"><input type="radio" name="presence-split" value="val"${defaultSplit === 'val' ? ' checked' : ''}> Validation</label>
       </div>
     </fieldset>
-    <fieldset class="presence-control-row"><legend>Scan operating point</legend>
-      <div class="model-choices" role="radiogroup" aria-label="Scan operating point">
-        <label class="model-choice"><input type="radio" name="scan-operating" value="any"${defaultOperating === 'any' ? ' checked' : ''}> Any predicted cell</label>
-        <label class="model-choice"><input type="radio" name="scan-operating" value="selected"${defaultOperating === 'selected' ? ' checked' : ''}> Validation-selected area</label>
+  </div>
+  <p class="presence-context" id="presence-status" role="status" aria-live="polite"></p>
+
+  <details class="presence-disclosure presence-definition">
+    <summary>How SBW presence and the evaluation cohort are defined</summary>
+    <div class="presence-details-body presence-detail-grid">
+      <div><h3>Presence rule</h3><p>A scan is <b>SBW-present</b> when its ground-truth mask contains at
+      least one full-resolution ${int(doc.definitions.pixel_size_m)} m grid cell
+      (${km2(doc.definitions.pixel_area_km2)} km&sup2;). The model score is its predicted SBW-cell count
+      at the locked pixel-probability threshold. Calling a score present requires a separate area cutoff;
+      equality counts as present.</p></div>
+      <div><h3>Sampled negatives</h3><p>Swarm-free scans were sampled for this machine-learning cohort,
+      not at operational prevalence. <b>Accuracy and precision describe this curated cohort, not the
+      false-alarm burden in continuous radar operation.</b> Negative masks are all-zero arrays by dataset
+      design, not independent pixel-by-pixel annotations.</p></div>
+    </div>
+  </details>
+
+  <section class="presence-level" id="presence-panel-scan" role="tabpanel"
+    aria-labelledby="presence-tab-scan" tabindex="0">
+    <div class="presence-level-head">
+      <div><p class="presence-eyebrow">Individual radar scan</p><h2>Scan detection</h2>
+        <p>How reliably does the model separate SBW-present scans from SBW-free scans?</p></div>
+      <fieldset class="presence-level-control"><legend>Presence cutoff</legend>
+        <div class="model-choices" role="radiogroup" aria-label="Scan operating point">
+          <label class="model-choice"><input type="radio" name="scan-operating" value="any"${defaultOperating === 'any' ? ' checked' : ''}>
+            <span>Any predicted cell <span class="presence-option-note">cutoff &ge; 1 cell</span></span></label>
+          <label class="model-choice"><input type="radio" name="scan-operating" value="selected"${defaultOperating === 'selected' ? ' checked' : ''}>
+            <span>Validation-selected area <span class="presence-option-note" id="scan-cutoff-option"></span></span></label>
+        </div>
+      </fieldset>
+    </div>
+    <p class="presence-method" id="scan-method"></p>
+    <p class="presence-glance" id="scan-glance" role="note"></p>
+    <div class="cards presence-metric-cards" id="scan-cards"></div>
+    <p class="presence-cohort-note"><b>Interpretation:</b> cohort prevalence is curated, so accuracy and
+    precision do not estimate continuous-operation false alarms. See the definition note above.</p>
+    <div class="two presence-chart-grid">
+      <figure><div class="viz" id="scan-roc"></div><figcaption id="scan-roc-cap"></figcaption></figure>
+      <figure><div class="viz" id="scan-confusion"></div><figcaption id="scan-confusion-cap"></figcaption></figure>
+    </div>
+
+    <details class="presence-disclosure presence-results-detail">
+      <summary>Compare both scan presence cutoffs</summary>
+      <div class="presence-details-body">
+        <p class="small">The one-cell row is the prespecified baseline. The alternative cutoff was fitted
+        on validation by maximum Youden J and then applied unchanged to test; it is never selected on test.</p>
+        <div id="scan-comparison"></div>
       </div>
-    </fieldset>
-    <fieldset class="presence-control-row"><legend>Night summary</legend>
-      <div class="model-choices" role="radiogroup" aria-label="Night score summary">
-        <label class="model-choice"><input type="radio" name="night-aggregation" value="max"${defaultAggregation === 'max' ? ' checked' : ''}> Maximum area</label>
-        <label class="model-choice"><input type="radio" name="night-aggregation" value="mean"${defaultAggregation === 'mean' ? ' checked' : ''}> Mean area</label>
+    </details>
+  </section>
+
+  <section class="presence-level" id="presence-panel-night" role="tabpanel"
+    aria-labelledby="presence-tab-night" tabindex="0" hidden>
+    <div class="presence-level-head">
+      <div><p class="presence-eyebrow">Noon-to-noon UTC window</p><h2>Night migration</h2>
+        <p>How well does the nightly swarm-area summary separate migration from non-migration nights?</p></div>
+      <fieldset class="presence-level-control"><legend>Night score</legend>
+        <div class="model-choices" role="radiogroup" aria-label="Night score summary">
+          <label class="model-choice"><input type="radio" name="night-aggregation" value="max"${defaultAggregation === 'max' ? ' checked' : ''}> Maximum area</label>
+          <label class="model-choice"><input type="radio" name="night-aggregation" value="mean"${defaultAggregation === 'mean' ? ' checked' : ''}> Mean area</label>
+        </div>
+      </fieldset>
+    </div>
+
+    <details class="presence-limit" id="night-limitations">
+      <summary><span class="presence-limit-tag">Exploratory</span><span>
+        <b>These are partial, overlapping nights</b><small id="leakage-summary"></small>
+        <small class="presence-limit-warning" id="leakage-score-warning"></small>
+      </span></summary>
+      <div id="leakage-note"></div>
+    </details>
+
+    <p class="presence-method" id="night-method"></p>
+    <p class="presence-glance" id="night-glance" role="note"></p>
+    <div class="cards presence-metric-cards" id="night-cards"></div>
+    <div class="two presence-chart-grid">
+      <figure><div class="viz" id="night-dist"></div><figcaption id="night-dist-cap"></figcaption></figure>
+      <figure><div class="viz" id="night-roc"></div><figcaption id="night-roc-cap"></figcaption></figure>
+    </div>
+
+    <details class="presence-disclosure presence-results-detail">
+      <summary>View distribution test details</summary>
+      <div class="presence-details-body" id="night-mw"></div>
+    </details>
+
+    <div class="presence-section-heading"><h3>Night decision at the validation-selected cutoff</h3>
+      <p>The cutoff is selected on validation and kept unchanged when viewing test results.</p></div>
+    <div class="two presence-night-decision">
+      <figure><div class="viz" id="night-confusion"></div><figcaption id="night-confusion-cap"></figcaption></figure>
+      <div class="panel" id="night-cutoff"></div>
+    </div>
+
+    <details class="presence-disclosure presence-results-detail">
+      <summary>Browse exact results for every night</summary>
+      <div class="presence-details-body">
+        <p class="small">Coverage is the number of evaluated scans in this split divided by all labelled
+        manifest scans assigned to that operational night.</p>
+        <p class="presence-scroll-hint">Scroll horizontally to see every result column.</p>
+        <div id="night-table"></div>
       </div>
-    </fieldset>
-  </div>
-  <p class="small" id="presence-status" role="status" aria-live="polite"></p>
-
-  <div class="note warn" id="leakage-note"></div>
-  <div class="note warn"><span class="tag">sampled negatives</span><div class="bd">
-    Swarm-free scans were sampled for this machine-learning cohort rather than collected at their
-    operational prevalence. <b>Accuracy and precision therefore describe this curated cohort, not the
-    false-alarm burden in continuous radar operation.</b> Sensitivity, specificity and ROC-AUC remain
-    useful conditional diagnostics, but should still be confirmed on a prospectively sampled season.
-    Negative-scene masks are constructed as all-zero arrays by dataset design, not independently
-    annotated pixel by pixel.
-  </div></div>
-
-  <h2>Scan-level presence</h2>
-  <p class="small" id="scan-method"></p>
-  <div class="cards presence-metric-cards" id="scan-cards"></div>
-  <div class="two">
-    <figure><div class="viz" id="scan-roc"></div><figcaption id="scan-roc-cap"></figcaption></figure>
-    <figure><div class="viz" id="scan-confusion"></div><figcaption id="scan-confusion-cap"></figcaption></figure>
-  </div>
-
-  <h3>Operating-point comparison</h3>
-  <p class="small">The one-cell row is the prespecified baseline. The alternative cutoff was fitted on
-  validation by maximum Youden J and then applied unchanged to test; it is never selected on test.</p>
-  <div id="scan-comparison"></div>
-
-  <h2>Exploratory night-level migration presence</h2>
-  <p class="small" id="night-method"></p>
-  <div class="cards presence-metric-cards" id="night-cards"></div>
-  <div class="two">
-    <figure><div class="viz" id="night-dist"></div><figcaption id="night-dist-cap"></figcaption></figure>
-    <figure><div class="viz" id="night-roc"></div><figcaption id="night-roc-cap"></figcaption></figure>
-  </div>
-
-  <h3>Distribution comparison</h3>
-  <div id="night-mw"></div>
-
-  <h3>Night decision at the validation-selected cutoff</h3>
-  <div class="two presence-night-decision">
-    <figure><div class="viz" id="night-confusion"></div><figcaption id="night-confusion-cap"></figcaption></figure>
-    <div class="panel" id="night-cutoff"></div>
-  </div>
-
-  <h3>Exact night results</h3>
-  <p class="small">Coverage reports evaluated scans in the selected split divided by all labelled
-  manifest scans assigned to that operational night.</p>
-  <div id="night-table"></div>`;
+    </details>
+  </section>`;
 
   function comparisonTable(analysis) {
     const entries = [
       ['Any predicted cell', analysis.operating_points.any_cell],
       ['Validation-selected area', analysis.operating_points.validation_selected],
     ];
-    return `<div class="tscroll"><table><thead><tr><th>Presence rule</th><th>Cutoff (cells)</th>
+    return `<p class="presence-scroll-hint">Scroll horizontally to compare every metric.</p>
+      <div class="tscroll" tabindex="0" role="region" aria-label="Scan cutoff comparison table"><table><thead><tr><th>Presence rule</th><th>Cutoff (cells)</th>
       <th>Cutoff (km&sup2;)</th><th>TP</th><th>FP</th><th>FN</th><th>TN</th>
       <th>Accuracy</th><th>Sensitivity</th><th>Specificity</th><th>Precision</th><th>F1</th></tr></thead><tbody>
       ${entries.map(([label, metrics], i) => {
@@ -189,6 +241,15 @@ export async function render(mount) {
   }
 
   function draw() {
+    const scanView = state.level === 'scan';
+    mount.querySelector('#presence-panel-scan').hidden = !scanView;
+    mount.querySelector('#presence-panel-night').hidden = scanView;
+    mount.querySelectorAll('.presence-task-tab').forEach(tab => {
+      const active = tab.dataset.level === state.level;
+      tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
+    });
+
     const model = findModel(doc, state.model);
     const scans = scanAnalysis(model, state.split);
     const scanMetrics = operatingPoint(scans, state.scanOperating);
@@ -203,10 +264,17 @@ export async function render(mount) {
     const valTestOverlap = doc.cohort.night_overlap.validation_test;
     const splitWord = state.split === 'test' ? 'test' : 'validation';
 
-    mount.querySelector('#presence-status').textContent =
-      `${model.display_name}; ${splitLabel(state.split)}; pixel threshold ${model.pixel_probability_threshold}; ` +
-      `${aggLabel(state.nightAggregation)} nightly score.`;
-    mount.querySelector('#leakage-note').innerHTML = `<span class="tag">partial and non-independent nights</span><div class="bd">
+    mount.querySelector('#presence-status').textContent = scanView
+      ? `Showing scan detection for ${model.display_name} on ${splitLabel(state.split)}.`
+      : `Showing night migration for ${model.display_name} on ${splitLabel(state.split)}, using the ${aggLabel(state.nightAggregation)} nightly area.`;
+    mount.querySelector('#leakage-summary').textContent =
+      `${int(partialNights)}/${int(nights.n)} partial · median coverage ${(100 * medianCoverage).toFixed(0)}% · ` +
+      `${int(exposure.nights_seen_in_train)}/${int(exposure.nights_total)} seen during training` +
+      (state.split === 'test' ? ` · ${int(valTestOverlap)}/${int(nights.n)} also in validation` : '');
+    mount.querySelector('#leakage-score-warning').textContent = state.nightAggregation === 'max'
+      ? 'Maximum-area scores are especially sensitive to nights having different numbers of evaluated scans.'
+      : 'Mean-area scores still reflect incomplete and unequal scan coverage.';
+    mount.querySelector('#leakage-note').innerHTML = `<p>
       Maximum/mean scores use only scans assigned to the displayed split: <b>${int(partialNights)} of
       ${int(nights.n)} ${splitWord} nights are partial</b>, with median
       coverage <b>${(100 * medianCoverage).toFixed(0)}%</b> of their labelled manifest scans.
@@ -220,13 +288,17 @@ export async function render(mount) {
       In addition, ${int(exposure.nights_seen_in_train)} of ${int(exposure.nights_total)} occur in training.
       <b>This does not satisfy an all-scans or unseen-night evaluation.</b> That requires a night-disjoint
       retrain and predictions at a fixed cadence for every held-out night.
-    </div>`;
+    </p>`;
 
     const scanRule = state.scanOperating === 'any'
       ? `the prespecified any-cell cutoff (score ≥ 1 cell)`
       : `the validation-selected cutoff (score ≥ ${area(selectedScanCutoff.cells)} cells; ${km2(selectedScanCutoff.km2)} km²)`;
+    mount.querySelector('#scan-cutoff-option').textContent = `cutoff ≥ ${area(selectedScanCutoff.cells)} cells`;
     mount.querySelector('#scan-method').innerHTML = `${esc(model.display_name)} converts probabilities to
       predicted area at pixel threshold <b>${model.pixel_probability_threshold}</b>. Metrics below use ${scanRule}.`;
+    mount.querySelector('#scan-glance').innerHTML = `At this setting, the model finds
+      <b>${int(scanMetrics.confusion.tp)} of ${int(scanMetrics.n_positive)} SBW-present scans</b> and correctly rejects
+      <b>${int(scanMetrics.confusion.tn)} of ${int(scanMetrics.n_negative)} SBW-free scans</b>.`;
     mount.querySelector('#scan-cards').innerHTML = metricCards(scans, scanMetrics, 'scans');
     mount.querySelector('#scan-roc').innerHTML = rocSvg(scans, scanMetrics, 'Scan-level presence');
     mount.querySelector('#scan-roc-cap').innerHTML = `Varying the required predicted area gives ROC-AUC
@@ -242,7 +314,11 @@ export async function render(mount) {
 
     mount.querySelector('#night-method').innerHTML = `A night is truly present if <b>any full-manifest scan</b>
       in its noon-to-noon UTC window contains SBW. Its model score is the <b>${aggLabel(state.nightAggregation)}</b>
-      predicted area across evaluated ${splitWord} scans. The decision cutoff was selected on validation only.`;
+      predicted area across evaluated ${splitWord} scans. The validation-selected decision cutoff is
+      <b>${area(selectedNightCutoff.cells)} cells (${km2(selectedNightCutoff.km2)} km&sup2;)</b>.`;
+    mount.querySelector('#night-glance').innerHTML = `At the locked cutoff, the model finds
+      <b>${int(nightMetrics.confusion.tp)} of ${int(nightMetrics.n_positive)} migration nights</b> and correctly rejects
+      <b>${int(nightMetrics.confusion.tn)} of ${int(nightMetrics.n_negative)} non-migration nights</b>.`;
     mount.querySelector('#night-cards').innerHTML = metricCards(nights, nightMetrics, 'nights');
 
     const groups = distributionGroups(nights).map((group, i) => ({
@@ -266,7 +342,8 @@ export async function render(mount) {
       The orange point uses the unchanged validation-selected cutoff.`;
 
     const mw = nights.mann_whitney;
-    mount.querySelector('#night-mw').innerHTML = `<div class="tscroll"><table><thead><tr>
+    mount.querySelector('#night-mw').innerHTML = `<p class="presence-scroll-hint">Scroll horizontally to see every test statistic.</p>
+      <div class="tscroll" tabindex="0" role="region" aria-label="Night distribution test table"><table><thead><tr>
       <th>Night score</th><th>Present nights</th><th>Free nights</th><th>Present median (cells)</th>
       <th>Free median (cells)</th><th>Mann&ndash;Whitney U</th><th>Two-sided p</th>
       <th>Common-language effect</th></tr></thead><tbody><tr>
@@ -314,7 +391,33 @@ export async function render(mount) {
           ? '<span style="color:var(--warn)">yes</span>' : 'no'},
       ],
     });
+    const nightScroll = mount.querySelector('#night-table .tscroll');
+    if (nightScroll) {
+      nightScroll.tabIndex = 0;
+      nightScroll.setAttribute('role', 'region');
+      nightScroll.setAttribute('aria-label', 'Exact night presence results');
+    }
   }
+
+  const taskTabs = [...mount.querySelectorAll('.presence-task-tab')];
+  const chooseLevel = (level, focus = false) => {
+    state.level = level;
+    draw();
+    if (focus) mount.querySelector(`.presence-task-tab[data-level="${level}"]`)?.focus();
+  };
+  taskTabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => chooseLevel(tab.dataset.level));
+    tab.addEventListener('keydown', event => {
+      let next = null;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % taskTabs.length;
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index - 1 + taskTabs.length) % taskTabs.length;
+      if (event.key === 'Home') next = 0;
+      if (event.key === 'End') next = taskTabs.length - 1;
+      if (next == null) return;
+      event.preventDefault();
+      chooseLevel(taskTabs[next].dataset.level, true);
+    });
+  });
 
   mount.querySelectorAll('input[name="presence-model"]').forEach(input =>
     input.addEventListener('change', event => { state.model = event.target.value; draw(); }));
