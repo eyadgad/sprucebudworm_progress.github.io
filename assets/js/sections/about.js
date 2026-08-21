@@ -27,6 +27,21 @@ export async function render(mount) {
   true-negative pixels. P and G are the predicted and ground-truth masks, ∂P and ∂G their boundaries,
   and τ a tolerance in pixels. Σ sums over all pixels of all scenes.</p>
 
+  <h3>Presence-detection metrics</h3>
+  <div class="tscroll"><table>
+    <thead><tr><th>Term</th><th style="text-align:left">Definition for scans and nights</th></tr></thead><tbody>
+      <tr><td>SBW-present scan</td><td style="text-align:left" class="small">Ground-truth area is at least one full-resolution 500 m grid cell; exactly zero cells is SBW-free.</td></tr>
+      <tr><td>Scan score</td><td style="text-align:left" class="small">Count of cells predicted as SBW at the model's locked pixel-probability threshold.</td></tr>
+      <tr><td>Night truth</td><td style="text-align:left" class="small">Present when any labelled manifest scan in the noon-to-noon UTC operational night contains SBW.</td></tr>
+      <tr><td>Night score</td><td style="text-align:left" class="small">Maximum or mean predicted SBW-cell count over evaluated scans from that night and split.</td></tr>
+      <tr><td>ROC-AUC</td><td style="text-align:left" class="small">Probability that a randomly selected present unit ranks above a randomly selected free unit, with ties shared; 0.5 is chance and 1 is perfect ranking.</td></tr>
+      <tr><td>Mann–Whitney U</td><td style="text-align:left" class="small">Two-sided rank test comparing predicted night scores for truly present and truly free nights.</td></tr>
+      <tr><td>Area cutoff</td><td style="text-align:left" class="small">Selected on validation by maximum Youden J (sensitivity + specificity − 1), then applied unchanged to test.</td></tr>
+    </tbody></table></div>
+  <p class="small">Swarm-free scans are a sampled cohort rather than an operational-prevalence sample.
+  Their ground-truth masks are synthesized as all-zero arrays by dataset construction, not independently
+  annotated pixel by pixel. Presence accuracy and precision must be interpreted within that sampling design.</p>
+
   <h2>How the numbers are produced</h2>
   <ol class="small" style="padding-left:20px;line-height:1.85;max-width:82ch">
     <li><b>Training.</b> Each run is a YAML config resolved against <code>configs/base_config.yaml</code>,
@@ -34,10 +49,11 @@ export async function render(mount) {
       written to <code>outputs/experiments/</code>.</li>
     <li><b>Export.</b> <code>scripts/export_dashboard_data.py</code> reads those outputs, reloads the
       selected checkpoint, and runs full-scene sliding-window inference over every validation and test
-      scene at 960×960. It writes the JSON files this site reads.</li>
-    <li><b>Display.</b> The site loads only the JSON a section needs and computes summaries in the
-      browser from the per-scene records, so any table can be re-derived from
-      <code>data/samples.json</code>.</li>
+      scene at 960×960. Its GPU-free <code>presence</code> stage then derives scan/night curves,
+      validation-selected cutoffs and statistical tests from those stored predictions.</li>
+    <li><b>Display.</b> The site loads only the JSON a section needs. Pixel summaries are derived in the
+      browser from per-scene records; presence statistics are read from versioned
+      <code>data/presence.json</code> so the browser cannot accidentally tune a cutoff on test.</li>
   </ol>
 
   <h2>Data files</h2>
@@ -53,6 +69,8 @@ export async function render(mount) {
       <td class="n">${int(sm.samples.length)}</td><td class="small">stage <code>predict</code></td></tr>
     <tr><td><code>threshold.json</code></td><td style="text-align:left">Threshold sweeps, probability histograms, reliability bins, radial error profile</td>
       <td class="n">—</td><td class="small">stage <code>predict</code></td></tr>
+    <tr><td><code>presence.json</code></td><td style="text-align:left">Precomputed scan/night binary metrics, ROC curves, area cutoffs, distribution tests and exact night records for four viewer models</td>
+      <td class="n">4 models</td><td class="small">stage <code>presence</code></td></tr>
     <tr><td><code>samples/*.{sbw.gz,webp}</code></td><td style="text-align:left">One packed four-model/ground-truth/max-six-reflectivity asset and one thumbnail per evaluated scene</td>
       <td class="n">1,230</td><td class="small">stage <code>packs</code></td></tr>
   </tbody></table></div>
@@ -60,6 +78,7 @@ export async function render(mount) {
   <h2>Rebuilding the data</h2>
   <pre style="background:var(--panel);border:1px solid var(--hair);border-radius:9px;padding:13px;overflow-x:auto;font-size:12.5px"><code>. venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only experiments,dataset
 .venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only predict
+.venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only presence
 .venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only packs --data-root ..\\Data --site-dir ..\\sprucebudworm_progress.github.io</code></pre>
   <p class="small">The <code>predict</code> stage needs a GPU and takes roughly 40 minutes for 615 scenes
   with four models. <code>experiments</code> and <code>dataset</code> need no GPU and take under two minutes.
@@ -113,8 +132,8 @@ export async function render(mount) {
        'Extending stage images to the train split (~90 MB more).'],
       ['Annotator agreement / label noise', 'Each scene has exactly one annotation.',
        'A second independent annotation of a scene subset.'],
-      ['Night-level generalisation',
-       'Splits are assigned per scene, so most nights contribute to more than one split. Performance on a wholly unseen night has not been measured on its own.',
+      ['Generalisation to an unseen night',
+       'The presence page groups nights, but splits are assigned per scene, so most nights contribute to more than one split. Performance on a wholly unseen night has not been measured.',
        'A night-disjoint split and a retrain.'],
     ].map(([a, w, n]) => `<tr><td style="text-align:left"><b>${esc(a)}</b></td>
       <td style="text-align:left" class="small">${esc(w)}</td>

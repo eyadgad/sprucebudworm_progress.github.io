@@ -93,6 +93,7 @@ export async function render(mount) {
   <h2>Where to go next</h2>
   <div class="cards">
     ${nav('#/experiments','Compare all runs',`${rows.length} configurations, sortable and filterable`)}
+    ${nav('#/presence','Check presence detection',`Scan-level SBW and exploratory night-level migration detection`)}
     ${nav('#/samples','Inspect predictions',`Open any test scene and adjust the threshold`)}
     ${nav('#/errors','See the failures',`What breaks, and the evidence for why`)}
   </div>`;

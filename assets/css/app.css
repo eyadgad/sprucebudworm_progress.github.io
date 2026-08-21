@@ -134,6 +134,29 @@ button.ghost{border-color:transparent;background:none}
 .chip.on{background:var(--accent-soft);border-color:var(--accent2);color:var(--accent2);font-weight:600}
 .pill{font-family:var(--mono);font-size:10px;color:var(--muted);border:1px solid var(--hair);border-radius:5px;padding:1px 5px;margin-left:5px;white-space:nowrap}
 
+/* Presence evaluation keeps four related radio groups compact and visible;
+   fieldsets retain their native accessible group names. */
+.presence-controls{margin:14px 0;border:1px solid var(--hair);border-radius:11px;background:var(--panel);box-shadow:var(--sh);overflow:hidden}
+.presence-control-row{min-width:0;margin:0;padding:9px 13px;border:0;border-bottom:1px solid var(--hair);display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;align-items:center}
+.presence-control-row:last-child{border-bottom:0}
+.presence-control-row legend{float:left;width:150px;padding:2px 12px 2px 0;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.presence-control-row .model-choices{min-width:0}
+.presence-metric-cards{grid-template-columns:repeat(3,minmax(0,1fr))}
+.presence-cutoff{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;color:var(--ink2)}
+.presence-cutoff b{font-size:28px;line-height:1;font-variant-numeric:tabular-nums;color:var(--best)}
+.presence-cutoff span{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.presence-outcome{display:inline-flex;min-width:30px;justify-content:center;border:1px solid currentColor;border-radius:12px;padding:1px 7px;font:650 10.5px var(--mono)}
+.presence-outcome.tp{color:var(--tp)} .presence-outcome.fp{color:var(--fp)}
+.presence-outcome.fn{color:var(--fn)} .presence-outcome.tn{color:var(--tn)}
+tbody tr.presence-error td{background:rgba(179,55,47,.06)}
+@media(max-width:700px){
+  .note{flex-direction:column;gap:8px}
+  .presence-control-row{grid-template-columns:1fr;gap:5px}
+  .presence-control-row legend{float:none;width:auto;padding:0 0 3px}
+  .presence-metric-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:440px){.presence-metric-cards{grid-template-columns:1fr}}
+
 /* ---------- tables ---------- */
 .tscroll{overflow-x:auto;border:1px solid var(--hair);border-radius:10px;background:var(--panel);box-shadow:var(--sh)}
 table{border-collapse:collapse;width:100%;font-size:12.7px}

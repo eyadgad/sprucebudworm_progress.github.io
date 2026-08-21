@@ -25,6 +25,7 @@ const ROUTES = {
   experiments: {title: 'Experiment comparison',     mod: () => import('./sections/experiments.js' + V)},
   training:    {title: 'Training diagnostics',      mod: () => import('./sections/training.js' + V)},
   aggregate:   {title: 'Aggregate evaluation',      mod: () => import('./sections/aggregate.js' + V)},
+  presence:    {title: 'Presence detection',        mod: () => import('./sections/presence.js' + V)},
   segments:    {title: 'Performance breakdown',     mod: () => import('./sections/segments.js' + V)},
   samples:     {title: 'Sample explorer',           mod: () => import('./sections/samples.js' + V)},
   errors:      {title: 'Error & failure analysis',  mod: () => import('./sections/errors.js' + V)},

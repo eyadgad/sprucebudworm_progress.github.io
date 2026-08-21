@@ -30,6 +30,7 @@ Everything under `data/` is generated. From the project root:
 ```bash
 .venv\Scripts\python.exe scripts\export_dashboard_data.py --only experiments,dataset
 .venv\Scripts\python.exe scripts\export_dashboard_data.py --only predict
+.venv\Scripts\python.exe scripts\export_dashboard_data.py --only presence
 .venv\Scripts\python.exe scripts\export_dashboard_data.py --only packs --data-root ..\Data --site-dir ..\sprucebudworm_progress.github.io
 ```
 
@@ -38,6 +39,7 @@ Everything under `data/` is generated. From the project root:
 | `experiments` | no | seconds | `experiments.json`, `histories.json` |
 | `dataset` | no | ~90 s | `dataset.json`, `summary.json` |
 | `predict` | yes | ~40 min | `samples.json`, `threshold.json` |
+| `presence` | no | seconds | `presence.json` with scan/night detection metrics, ROC curves and exact night records |
 | `packs` | no | ~2 min | one `.sbw.gz` pack and one `.webp` thumbnail per test/validation scene |
 
 Verify a rebuild with:
@@ -45,6 +47,8 @@ Verify a rebuild with:
 ```bash
 .venv\Scripts\python.exe scripts\test_dashboard.py
 node assets/js/lib/metrics.test.js
+node assets/js/lib/presence.test.js
+node assets/js/lib/charts.test.js
 node assets/js/lib/scan-coverage.test.js
 ```
 
@@ -65,11 +69,13 @@ assets/js/lib/
                                direction), colour semantics, statistics helpers
   charts.js                    SVG chart primitives (bar, line, scatter, box,
                                histogram, confusion, parallel coordinates)
+  presence.js                  validates/adapts precomputed scan/night presence data
   table.js                     sortable / paginated DataTable component
   ui.js                        card, labelled select, and the accessible Modal
                                (owns focus, key handling and the scroll lock)
   data.js                      cached fetch + loading / error / empty / N-A states
   metrics.test.js, ui.test.js  node tests for the helpers and the modal
+  presence.test.js             presence schema, selectors, outcomes and unit conversions
   sample-pack.js               strict SBW1 decoder and three-scene LRU cache
   sample-pack.test.js          browser/Node tests for packed sample assets
   scan-coverage.js             exact date × half-hour split-assignment chart
@@ -89,11 +95,12 @@ data/samples/*.webp            generated lazy grid thumbnails
 | 03 | `#/experiments` | All 57 runs, and why one was selected |
 | 04 | `#/training` | Convergence, over/under-fitting, stability |
 | 05 | `#/aggregate` | Validation vs test metrics, confusion matrices, intervals |
-| 06 | `#/segments` | Performance by year, size, fragmentation, distance, difficulty |
-| 07 | `#/samples` | Every scene; open one to inspect layers and move the threshold |
-| 08 | `#/errors` | Failure taxonomy, size driver, model disagreement, clustering |
-| 09 | `#/stats` | Distributions, bootstrap intervals, paired tests, correlations |
-| 10 | `#/about` | Metric glossary, provenance, unsupported analyses |
+| 06 | `#/presence` | Scan-level SBW detection and night-level migration detection |
+| 07 | `#/segments` | Performance by year, size, fragmentation, distance, difficulty |
+| 08 | `#/samples` | Every scene; open one to inspect layers and move the threshold |
+| 09 | `#/errors` | Failure taxonomy, size driver, model disagreement, clustering |
+| 10 | `#/stats` | Distributions, bootstrap intervals, paired tests, correlations |
+| 11 | `#/about` | Metric glossary, provenance, unsupported analyses |
 
 ---
 
@@ -107,6 +114,7 @@ data/samples/*.webp            generated lazy grid thumbnails
 | `summary.json` | <1 KB | Headline counts only — keeps the first page load small |
 | `samples.json` | 296 KB | Per-scene metrics for 615 evaluated scenes and all four viewer models |
 | `threshold.json` | 9 KB | Threshold sweeps, probability histograms, reliability bins, radial profile |
+| `presence.json` | ~1.2 MB | Four-model scan/night metrics, ROC curves, Mann–Whitney tests, validation cutoffs and night records |
 | `data/samples/*.{sbw.gz,webp}` | ~20 MB | Four probability maps, bit-packed truth and categorical max-six reflectivity in 615 packs, plus 615 thumbnails |
 
 Each scene stores four 8-bit probability maps, bit-packed ground truth and the
@@ -166,8 +174,8 @@ always shown, and validation and test results are never pooled.
 1. **Night leakage.** All 170 positive test scenes come from nights that also
    appear in training, and 77 of 117 nights appear in all three splits. Every
    score on this site is therefore optimistic as a measure of generalisation to
-   an unseen night. This is surfaced on the overview, in data exploration, and in
-   the statistics section — it is the dominant caveat.
+   an unseen night. This is surfaced on the overview, in data exploration, on the
+   presence page, and in the statistics section — it is the dominant caveat.
 2. **Selection is weakly separated.** The selected run leads on test Dice only;
    sibling runs lead on boundary IoU, NSD, precision, recall and validation
    Dice. The defensible claim is "among the best few".
@@ -181,6 +189,10 @@ always shown, and validation and test results are never pooled.
 6. **No per-channel input statistics, weather variables, per-scene optimal
    thresholds, or second annotation.** Each is listed with what it would take in
    the "Methods and glossary" section.
+7. **Presence negatives are a curated sample.** Swarm-free scans do not reflect
+   operational prevalence, and their all-zero masks are synthesized by dataset
+   construction rather than independently annotated pixel by pixel. Presence
+   accuracy and precision therefore describe this cohort, not continuous operation.
 
 ## Relationship to the earlier PDF report
 

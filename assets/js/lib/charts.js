@@ -267,15 +267,35 @@ export function histogram({bins, counts, xlabel='', ylabel='count', W=560, H=280
 }
 
 /* ---------------- box plots (distribution per group) ---------------- */
-export function boxPlot({groups, ylo, yhi, ylabel='', xlabel='', W=860, H=330, aria='box plot'}) {
+export function boxPlot({groups, ylo, yhi, ylabel='', xlabel='', W=860, H=330, aria='box plot', logy=false}) {
   // reserve room for multi-line tick labels ("Dice\nval") plus the n= line
   const maxLines = Math.max(1, ...groups.map(gr => String(gr.label).split('\n').length));
   const labelBlock = 15 + maxLines * 12;                 // matches the tick label layout below
   const f = frame({W, H, padB: 40 + labelBlock + (xlabel ? 20 : 0)});
   const xLabelY = f.y0 + labelBlock + 15;
-  let g = yAxis(f, ylo, yhi, ylabel);
+  const ty = v => logy ? Math.log10(Math.max(0, v) + 1) : v;
+  const Y0 = ty(ylo), Y1 = ty(yhi);
+  // Presence-area distributions contain many exact zeros and a very long
+  // positive tail. log10(value + 1) keeps zero visible while the tick labels
+  // remain in real cells rather than opaque log units.
+  let g = '';
+  if (logy) {
+    const vals = [0];
+    for (let p = 0; p <= Math.ceil(Math.log10(Math.max(yhi, 1))); p++) {
+      const v = 10 ** p;
+      if (v <= yhi && !vals.includes(v)) vals.push(v);
+    }
+    vals.forEach(v => {
+      const Y = f.y0 - ((ty(v)-Y0)/(Y1-Y0))*(f.y0-f.y1);
+      g += `<line x1="${f.x0}" y1="${Y}" x2="${f.x1}" y2="${Y}" stroke="var(--grid)"/>`
+         + `<text x="${f.x0-7}" y="${Y}" text-anchor="end" dominant-baseline="middle" class="ax">${fmtTick(v)}</text>`;
+    });
+    if (ylabel) g += `<text transform="translate(12,${(f.y0+f.y1)/2}) rotate(-90)" text-anchor="middle" class="axlab">${esc(ylabel)} (log scale)</text>`;
+  } else {
+    g = yAxis(f, ylo, yhi, ylabel);
+  }
   const gw = (f.x1-f.x0)/groups.length;
-  const sy = v => f.y0 - ((v-ylo)/(yhi-ylo))*(f.y0-f.y1);
+  const sy = v => f.y0 - ((ty(v)-Y0)/(Y1-Y0))*(f.y0-f.y1);
   groups.forEach((gr, i) => {
     const cx = f.x0 + i*gw + gw/2;
     const bw = Math.min(38, gw*0.5);
@@ -309,28 +329,31 @@ export const BOXPLOT_KEY =
   'n under each box is the number of scenes it summarises.';
 
 /* ---------------- confusion matrix ---------------- */
-export function confusion({tp, fp, fn, tn, W=430, title=''}) {
+export function confusion({
+  tp, fp, fn, tn, W=430, title='', unit='pixels',
+  positiveLabel='swarm', negativeLabel='background',
+}) {
   const total = tp+fp+fn+tn;
   const cell = (x,y,v,lab,col,note) => {
     const share = total ? v/total : 0;
     return `<g><rect x="${x}" y="${y}" width="150" height="76" rx="8" fill="${col}" fill-opacity="${0.12+0.5*Math.min(share*2,1)}" stroke="${col}"/>`
       + `<text x="${x+10}" y="${y+19}" class="ax" style="fill:${col};font-weight:600">${esc(lab)}</text>`
       + `<text x="${x+10}" y="${y+45}" class="val" style="font-size:15px">${v.toLocaleString()}</text>`
-      + `<text x="${x+10}" y="${y+63}" class="ax">${(share*100).toFixed(share<0.1?2:1)}% of pixels</text>`
+      + `<text x="${x+10}" y="${y+63}" class="ax">${(share*100).toFixed(share<0.1?2:1)}% of ${esc(unit)}</text>`
       + (note?`<title>${esc(note)}</title>`:'') + `</g>`;
   };
   const H = 210;
   let g = `<text x="14" y="14" class="ax">predicted →</text>`;
   g += `<text transform="translate(12,${H/2}) rotate(-90)" text-anchor="middle" class="ax">truth →</text>`;
-  g += `<text x="96" y="34" text-anchor="middle" class="ax">swarm</text>`;
-  g += `<text x="255" y="34" text-anchor="middle" class="ax">background</text>`;
-  g += `<text x="22" y="82" class="ax">swarm</text>`;
-  g += `<text x="22" y="162" class="ax">bg</text>`;
-  g += cell(56, 44, tp, 'TP', 'var(--tp)', 'correctly predicted swarm pixels');
-  g += cell(214, 44, fn, 'FN', 'var(--fn)', 'missed swarm pixels');
-  g += cell(56, 126, fp, 'FP', 'var(--fp)', 'false alarms');
-  g += cell(214, 126, tn, 'TN', 'var(--tn)', 'correctly ignored background');
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title||'confusion matrix')}: TP ${tp}, FP ${fp}, FN ${fn}, TN ${tn}">${g}</svg>`;
+  g += `<text x="96" y="34" text-anchor="middle" class="ax">${esc(positiveLabel)}</text>`;
+  g += `<text x="255" y="34" text-anchor="middle" class="ax">${esc(negativeLabel)}</text>`;
+  g += `<text x="50" y="82" text-anchor="end" class="ax">${esc(positiveLabel)}</text>`;
+  g += `<text x="50" y="162" text-anchor="end" class="ax">${esc(negativeLabel === 'background' ? 'bg' : negativeLabel)}</text>`;
+  g += cell(56, 44, tp, 'TP', 'var(--tp)', `correctly predicted ${positiveLabel} ${unit}`);
+  g += cell(214, 44, fn, 'FN', 'var(--fn)', `missed ${positiveLabel} ${unit}`);
+  g += cell(56, 126, fp, 'FP', 'var(--fp)', `false-alarm ${unit}`);
+  g += cell(214, 126, tn, 'TN', 'var(--tn)', `correctly predicted ${negativeLabel} ${unit}`);
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title||'confusion matrix')} (${esc(unit)}): TP ${tp}, FP ${fp}, FN ${fn}, TN ${tn}">${g}</svg>`;
 }
 
 /* ---------------- parallel coordinates ---------------- */

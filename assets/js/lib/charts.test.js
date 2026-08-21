@@ -67,6 +67,13 @@ ok('boxPlot renders the x-axis label', box.includes('swarm area'));
 ok('boxPlot renders the y-axis label', hasYLabel(box));
 ok('boxPlot prints the group size', box.includes('n=54'));
 ok('a shared box-plot key exists', BOXPLOT_KEY.includes('interquartile') && BOXPLOT_KEY.includes('median'));
+const logBox = boxPlot({groups: [
+  {label: 'SBW free', n: 29, lo: 0, q1: 0, med: 12, q3: 900, hi: 10000, mean: 700, c: '#1'},
+  {label: 'SBW present', n: 84, lo: 1, q1: 1000, med: 18000, q3: 80000, hi: 300000, mean: 40000, c: '#2'},
+], ylo: 0, yhi: 300000, ylabel: 'predicted swarm area (cells)', xlabel: 'true night class', logy: true});
+ok('log box plot says that its scale is logarithmic', logBox.includes('predicted swarm area (cells) (log scale)'));
+ok('log box plot labels ticks in real units', logBox.includes('>10k<') && !logBox.includes('log10'));
+ok('log box plot keeps exact zero finite', clean(logBox));
 
 // a "\n" in a group label must become two <text> lines, never a literal newline
 const box2 = boxPlot({groups: [{label: 'Dice\nval', n: 317, lo: .2, q1: .5, med: .71, q3: .79, hi: .9, mean: .63, c: '#1'},
@@ -112,6 +119,13 @@ for (const [name, svg] of [['barChart', bar], ['boxPlot', box], ['hBarChart', hb
 }
 ok('confusion labels every quadrant in text',
    ['TP', 'FP', 'FN', 'TN'].every(k => confusion({tp: 1, fp: 1, fn: 1, tn: 1}).includes(`>${k}<`)));
+const scanConfusion = confusion({tp: 11, fp: 2, fn: 3, tn: 7, unit: 'scans',
+  positiveLabel: 'present', negativeLabel: 'free', title: 'Scan presence confusion matrix'});
+ok('confusion supports non-pixel units without changing its defaults',
+   scanConfusion.includes('% of scans') && scanConfusion.includes('>present<') &&
+   scanConfusion.includes('>free<') && confusion({tp: 1, fp: 1, fn: 1, tn: 1}).includes('% of pixels'));
+ok('generic confusion announces the unit and title accessibly',
+   scanConfusion.includes('aria-label="Scan presence confusion matrix (scans): TP 11, FP 2, FN 3, TN 7"'));
 ok('legend pairs each colour with a text label',
    /class="sw"[^>]*background:#1[^>]*><\/span>only/.test(legend([{c: '#1', label: 'only'}]).replace(/\s+/g, '')));
 
