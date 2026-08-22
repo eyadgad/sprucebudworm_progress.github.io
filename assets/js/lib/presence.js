@@ -120,7 +120,7 @@ export function distributionGroups(analysis) {
       mean: s.mean,
     };
   };
-  return [build('negative', 'SBW free'), build('positive', 'SBW present')];
+  return [build('negative', 'quiet night'), build('positive', 'migration night')];
 }
 
 export function cellsToKm2(doc, cells) {
