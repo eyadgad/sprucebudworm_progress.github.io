@@ -83,9 +83,6 @@ export async function render(mount) {
   mount.innerHTML = `
   <div class="presence-intro">
     <h1>Finding budworm: present or absent</h1>
-    <p class="lede">Two questions here: does a single radar scan contain budworm, and did a whole night
-    have a migration? How closely the model traces the exact shape of a swarm is measured separately in
-    <a href="#/aggregate">Aggregate evaluation</a>.</p>
   </div>
 
   <div class="presence-task-tabs" role="tablist" aria-label="Presence evaluation level">
@@ -117,22 +114,6 @@ export async function render(mount) {
       </div>
     </fieldset>
   </div>
-  <p class="presence-context" id="presence-status" role="status" aria-live="polite"></p>
-
-  <details class="presence-disclosure presence-definition">
-    <summary>What counts as budworm, and where these numbers come from</summary>
-    <div class="presence-details-body presence-detail-grid">
-      <div><h3>What counts as present</h3><p>A scan <b>has budworm</b> if the hand-drawn answer marks even
-      one grid cell (${int(doc.definitions.pixel_size_m)} m across, or ${km2(doc.definitions.pixel_area_km2)} km&sup2;).
-      The model's score for a scan is simply how many cells it predicts as budworm. To turn that count into
-      a yes-or-no answer we pick a cut-off; a score sitting exactly on the cut-off counts as yes.</p></div>
-      <div><h3>How the empty scans were chosen</h3><p>The budworm-free scans here were hand-picked to build
-      this dataset, so they do not appear as often as they would on a normal radar night. <b>That means the
-      accuracy and precision below describe this dataset, not how many false alarms you would get running the
-      radar continuously.</b> Budworm-free scans were also stored as blank masks rather than labelled cell by
-      cell.</p></div>
-    </div>
-  </details>
 
   <section class="presence-level" id="presence-panel-scan" role="tabpanel"
     aria-labelledby="presence-tab-scan" tabindex="0">
@@ -153,7 +134,7 @@ export async function render(mount) {
     <div class="cards presence-metric-cards" id="scan-cards"></div>
     <p class="presence-cohort-note"><b>Reading these numbers:</b> budworm-free scans are rarer in this
     dataset than on a real radar night, so accuracy and precision here do not tell you how often the model
-    would raise a false alarm in real use. See the note above.</p>
+    would raise a false alarm in real use.</p>
     <div class="two presence-chart-grid">
       <figure><div class="viz" id="scan-roc"></div><figcaption id="scan-roc-cap"></figcaption></figure>
       <figure><div class="viz" id="scan-confusion"></div><figcaption id="scan-confusion-cap"></figcaption></figure>
@@ -268,9 +249,6 @@ export async function render(mount) {
     const valTestOverlap = doc.cohort.night_overlap.validation_test;
     const splitWord = state.split === 'test' ? 'test' : 'validation';
 
-    mount.querySelector('#presence-status').textContent = scanView
-      ? `Showing scan-by-scan results for ${model.display_name} on ${splitLabel(state.split)}.`
-      : `Showing night-by-night results for ${model.display_name} on ${splitLabel(state.split)}, scoring each night by its ${aggLabel(state.nightAggregation)} predicted swarm.`;
     mount.querySelector('#leakage-summary').textContent =
       `${int(partialNights)} of ${int(nights.n)} nights are incomplete · usually ${(100 * medianCoverage).toFixed(0)}% of a night's scans are here · ` +
       `${int(exposure.nights_seen_in_train)} of ${int(exposure.nights_total)} nights were also used in training` +

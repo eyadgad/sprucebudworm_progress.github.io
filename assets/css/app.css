@@ -155,7 +155,6 @@ button.ghost{border-color:transparent;background:none}
 .presence-toolbar .model-choice:has(input:checked),.presence-level-control .model-choice:has(input:checked){border-color:var(--accent2);background:var(--accent-soft);color:var(--ink)}
 .presence-toolbar .model-choice input,.presence-level-control .model-choice input{flex:0 0 auto}
 .presence-option-note{display:block;margin-top:1px;font:500 9.5px var(--mono);color:var(--muted)}
-.presence-context{min-height:19px;margin:6px 2px 8px;font:11.5px var(--mono);color:var(--muted)}
 .presence-disclosure{margin:12px 0;border:1px solid var(--hair);border-radius:10px;background:var(--panel);box-shadow:var(--sh);overflow:hidden}
 .presence-disclosure>summary{list-style:none;min-height:44px;display:flex;align-items:center;gap:9px;padding:9px 13px;cursor:pointer;color:var(--ink2);font-size:13px;font-weight:600}
 .presence-disclosure>summary::-webkit-details-marker{display:none}
@@ -163,8 +162,6 @@ button.ghost{border-color:transparent;background:none}
 .presence-disclosure[open]>summary::before{content:'−'}
 .presence-disclosure>summary:hover{background:var(--panel2)}
 .presence-details-body{padding:12px 14px 14px;border-top:1px solid var(--hair)}
-.presence-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
-.presence-detail-grid h3{margin:0 0 4px}.presence-detail-grid p{margin:0;font-size:13px}
 .presence-level[hidden]{display:none}
 .presence-level{margin-top:20px}
 .presence-level-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:22px;align-items:end;padding-bottom:10px;border-bottom:1px solid var(--hair)}
@@ -209,7 +206,6 @@ tbody tr.presence-error td{background:rgba(179,55,47,.06)}
   .presence-model-control .model-choice{flex:0 0 auto;scroll-snap-align:start}
   .presence-level-head{grid-template-columns:1fr;gap:8px;align-items:start}
   .presence-level-control{width:100%;max-width:none}
-  .presence-detail-grid{grid-template-columns:1fr;gap:14px}
   .presence-metric-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
   .presence-scroll-hint{display:block;margin:4px 0 7px;font:11px var(--mono);color:var(--muted)}
 }
