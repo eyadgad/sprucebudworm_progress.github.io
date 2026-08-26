@@ -5,13 +5,13 @@
    and renders it; in particular, it never optimises a cutoff on test data. */
 
 import { load } from '../lib/data.js';
-import { esc, int } from '../lib/metrics.js';
+import { esc, int, tip } from '../lib/metrics.js';
 import { card } from '../lib/ui.js';
 import { lineChart, boxPlot, confusion } from '../lib/charts.js';
 import { DataTable } from '../lib/table.js';
 import {
   validatePresence, findModel, scanAnalysis, nightAnalysis, operatingPoint,
-  rocPoints, distributionGroups, cellsToKm2, nightTableRows,
+  rocPoints, distributionGroups, cellsToKm2, nightTableRows, scoreCeiling,
 } from '../lib/presence.js';
 
 const rate = value => value == null ? '&mdash;' : Number(value).toFixed(3);
@@ -23,28 +23,76 @@ const km2 = value => value == null ? '&mdash;' : Number(value).toLocaleString('e
   maximumFractionDigits: Number(value) < 10 ? 2 : 1,
 });
 const pValue = value => value == null ? '&mdash;' : value < .001 ? '&lt; 0.001' : value.toFixed(3);
-const splitLabel = split => split === 'test' ? 'Test (unseen data)' : 'Validation';
+const COHORT = 'combined';   // validation and test pooled
 const aggLabel = aggregation => aggregation === 'max' ? 'biggest' : 'average';
+const SLIDER_STEPS = 1000;
+const toSlider = (cells, ceiling) =>
+  Math.round(SLIDER_STEPS * Math.log10(cells + 1) / Math.log10(ceiling + 1));
+const fromSlider = (position, ceiling) =>
+  Math.round(10 ** (position / SLIDER_STEPS * Math.log10(ceiling + 1)) - 1);
+
 const median = values => {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 };
 
-function metricCards(analysis, metrics, unit) {
+function metricCards(analysis, metrics) {
+  const c = metrics.confusion;
   return [
-    card('ROC-AUC', rate(analysis.roc.auc), '1.0 is perfect, 0.5 is guessing'),
-    card('Sensitivity', rate(metrics.sensitivity), `found ${metrics.confusion.tp} of ${metrics.n_positive} ${unit} with budworm`),
-    card('Specificity', rate(metrics.specificity), `cleared ${metrics.confusion.tn} of ${metrics.n_negative} ${unit} without budworm`),
-    card('Precision', rate(metrics.precision), 'when it says budworm, how often it is right'),
-    card('F1 score', rate(metrics.f1), 'one number balancing the two above'),
-    card('Accuracy', rate(metrics.accuracy), `right answers out of ${metrics.n} ${unit}`),
+    card('ROC-AUC', rate(analysis.roc.auc), `n = ${int(metrics.n)}`),
+    card('Sensitivity', rate(metrics.sensitivity), `${int(c.tp)} / ${int(metrics.n_positive)}`, 'recall'),
+    card('Specificity', rate(metrics.specificity), `${int(c.tn)} / ${int(metrics.n_negative)}`, 'specificity'),
+    card('Precision', rate(metrics.precision), `${int(c.tp)} / ${int(c.tp + c.fp)}`, 'precision'),
+    card('F1', rate(metrics.f1), '', 'f1'),
+    card('Accuracy', rate(metrics.accuracy), `${int(c.tp + c.tn)} / ${int(metrics.n)}`, 'accuracy'),
   ].join('');
+}
+
+/* Parameter strip: every setting this page's numbers depend on. */
+function paramList(pairs) {
+  return pairs.map(([term, value]) =>
+    `<div><dt>${term}</dt><dd>${value}</dd></div>`).join('');
+}
+
+/* Two balanced columns of statistic/value rows. Definitions come from the
+   shared metric registry as hover tips rather than as text on the page. */
+const STAT_TIP = {
+  TP: 'tp', FP: 'fp', FN: 'fn', TN: 'tn', Accuracy: 'accuracy',
+  'Balanced acc.': 'balanced_acc', Sensitivity: 'recall',
+  Specificity: 'specificity', Precision: 'precision', F1: 'f1',
+};
+function statList(rows) {
+  const half = Math.ceil(rows.length / 2);
+  const column = list => `<table><tbody>${list.map(([term, value]) =>
+    `<tr><td>${STAT_TIP[term] ? tip(STAT_TIP[term], term) : esc(term)}</td>
+      <td class="n">${value}</td></tr>`).join('')}</tbody></table>`;
+  return column(rows.slice(0, half)) + column(rows.slice(half));
+}
+
+function confusionRows(metrics) {
+  const c = metrics.confusion;
+  return [['TP', int(c.tp)], ['FP', int(c.fp)], ['FN', int(c.fn)], ['TN', int(c.tn)]];
+}
+
+function metricRows(analysis, metrics) {
+  return [
+    ['ROC-AUC', rate(analysis.roc.auc)],
+    ['Accuracy', rate(metrics.accuracy)],
+    ['Balanced acc.', rate(metrics.balanced_accuracy)],
+    ['Sensitivity', rate(metrics.sensitivity)],
+    ['Specificity', rate(metrics.specificity)],
+    ['Precision', rate(metrics.precision)],
+    ['NPV', rate(metrics.negative_predictive_value)],
+    ['F1', rate(metrics.f1)],
+    ['MCC', rate(metrics.mcc)],
+    ['Youden J', rate(metrics.youden_j)],
+  ];
 }
 
 function rocSvg(analysis, metrics, label, W = 520) {
   const marker = (metrics.specificity == null || metrics.sensitivity == null) ? [] : [{
-    label: 'The cut-off shown above', c: 'var(--best)', w: 0,
+    label: 'cut-off in use', c: 'var(--best)', w: 0,
     points: [[1 - metrics.specificity, metrics.sensitivity]],
   }];
   return lineChart({
@@ -58,7 +106,7 @@ function rocSvg(analysis, metrics, label, W = 520) {
     W, H: 330, aria: `${label} ROC curve, AUC ${analysis.roc.auc?.toFixed(3) ?? 'not available'}`,
     legend: [
       {c: 'var(--accent2)', label: `ROC · AUC ${analysis.roc.auc?.toFixed(3) ?? '—'}`},
-      {c: 'var(--best)', label: 'The cut-off shown above'},
+      {c: 'var(--best)', label: 'cut-off in use'},
       {c: 'var(--muted)', label: 'Chance'},
     ],
   });
@@ -74,11 +122,11 @@ function nightRange(id) {
 export async function render(mount) {
   const doc = validatePresence(await load('presence'));
   const selectedKey = doc.selected_model_key;
-  const defaultSplit = doc.defaults?.split === 'val' ? 'val' : 'test';
   const defaultOperating = doc.defaults?.scan_operating_point === 'any_cell' ? 'any' : 'selected';
   const defaultAggregation = doc.defaults?.night_aggregation === 'mean' ? 'mean' : 'max';
-  const state = {level: 'scan', model: selectedKey, split: defaultSplit,
-    scanOperating: defaultOperating, nightAggregation: defaultAggregation};
+  const state = {level: 'scan', model: selectedKey,
+    scanOperating: defaultOperating, nightAggregation: defaultAggregation,
+    nightOperating: 'selected', scanCustom: null, nightCustom: null};
 
   mount.innerHTML = `
   <div class="presence-intro">
@@ -89,12 +137,12 @@ export async function render(mount) {
     <button type="button" class="presence-task-tab" id="presence-tab-scan" data-level="scan"
       role="tab" aria-selected="true" aria-controls="presence-panel-scan" tabindex="0">
       <span class="presence-task-number" aria-hidden="true">01</span>
-      <span><b>One scan</b><small>Does this radar scan contain budworm?</small></span>
+      <span><b>One scan</b></span>
     </button>
     <button type="button" class="presence-task-tab" id="presence-tab-night" data-level="night"
       role="tab" aria-selected="false" aria-controls="presence-panel-night" tabindex="-1">
       <span class="presence-task-number" aria-hidden="true">02</span>
-      <span><b>One night</b><small>Was there a migration this night?</small></span>
+      <span><b>One night</b></span>
     </button>
   </div>
 
@@ -107,45 +155,40 @@ export async function render(mount) {
         </label>`).join('')}
       </div>
     </fieldset>
-    <fieldset class="presence-compact-control presence-split-control"><legend>Dataset</legend>
-      <div class="model-choices" role="radiogroup" aria-label="Evaluation split">
-        <label class="model-choice"><input type="radio" name="presence-split" value="test"${defaultSplit === 'test' ? ' checked' : ''}> Test (unseen data)</label>
-        <label class="model-choice"><input type="radio" name="presence-split" value="val"${defaultSplit === 'val' ? ' checked' : ''}> Validation</label>
-      </div>
-    </fieldset>
   </div>
 
   <section class="presence-level" id="presence-panel-scan" role="tabpanel"
     aria-labelledby="presence-tab-scan" tabindex="0">
     <div class="presence-level-head">
-      <div><p class="presence-eyebrow">A single radar scan</p><h2>Does this scan contain budworm?</h2>
-        <p>Can the model tell scans that contain budworm apart from scans that do not?</p></div>
-      <fieldset class="presence-level-control"><legend>How much is enough to say yes?</legend>
+      <div><h2>Scan presence</h2></div>
+      <fieldset class="presence-level-control"><legend>Area cut-off</legend>
         <div class="model-choices" role="radiogroup" aria-label="Scan operating point">
           <label class="model-choice"><input type="radio" name="scan-operating" value="any"${defaultOperating === 'any' ? ' checked' : ''}>
-            <span>Any cell at all <span class="presence-option-note">1 cell or more</span></span></label>
+            <span>&ge; 1 cell</span></label>
           <label class="model-choice"><input type="radio" name="scan-operating" value="selected"${defaultOperating === 'selected' ? ' checked' : ''}>
-            <span>An amount tuned on validation <span class="presence-option-note" id="scan-cutoff-option"></span></span></label>
+            <span id="scan-cutoff-option"></span></label>
+          <label class="model-choice"><input type="radio" name="scan-operating" value="custom">
+            <span>Custom<span class="presence-option-note">set below</span></span></label>
+        </div>
+        <div class="presence-slider" id="scan-slider" hidden>
+          <input type="range" id="scan-range" min="0" max="${SLIDER_STEPS}" step="1"
+            aria-label="Custom scan area cut-off in cells">
+          <output id="scan-range-out"></output>
         </div>
       </fieldset>
     </div>
-    <p class="presence-method" id="scan-method"></p>
-    <p class="presence-glance" id="scan-glance" role="note"></p>
+    <dl class="presence-params" id="scan-params"></dl>
     <div class="cards presence-metric-cards" id="scan-cards"></div>
-    <p class="presence-cohort-note"><b>Reading these numbers:</b> budworm-free scans are rarer in this
-    dataset than on a real radar night, so accuracy and precision here do not tell you how often the model
-    would raise a false alarm in real use.</p>
+    <div class="presence-stats" id="scan-stats"></div>
+    <p class="presence-cohort-note" id="scan-caveat"></p>
     <div class="two presence-chart-grid">
       <figure><div class="viz" id="scan-roc"></div><figcaption id="scan-roc-cap"></figcaption></figure>
       <figure><div class="viz" id="scan-confusion"></div><figcaption id="scan-confusion-cap"></figcaption></figure>
     </div>
 
     <details class="presence-disclosure presence-results-detail">
-      <summary>Compare the two cut-offs side by side</summary>
+      <summary>Both cut-offs</summary>
       <div class="presence-details-body">
-        <p class="small">The one-cell row is the plain baseline, fixed in advance. The other cut-off was
-        tuned on the validation data and then used on the test data without any further changes, so the test
-        numbers were never tuned to themselves.</p>
         <div id="scan-comparison"></div>
       </div>
     </details>
@@ -154,51 +197,45 @@ export async function render(mount) {
   <section class="presence-level" id="presence-panel-night" role="tabpanel"
     aria-labelledby="presence-tab-night" tabindex="0" hidden>
     <div class="presence-level-head">
-      <div><p class="presence-eyebrow">One night, noon to noon UTC</p><h2>Was there a migration this night?</h2>
-        <p>Each night is boiled down to one number: how big the predicted swarm was. Does that number tell
-        migration nights apart from quiet ones?</p></div>
-      <fieldset class="presence-level-control"><legend>Number to use for each night</legend>
+      <div><h2>Night migration</h2></div>
+      <fieldset class="presence-level-control"><legend>Night score</legend>
         <div class="model-choices" role="radiogroup" aria-label="Night score summary">
-          <label class="model-choice"><input type="radio" name="night-aggregation" value="max"${defaultAggregation === 'max' ? ' checked' : ''}> Biggest swarm that night</label>
-          <label class="model-choice"><input type="radio" name="night-aggregation" value="mean"${defaultAggregation === 'mean' ? ' checked' : ''}> Average swarm that night</label>
+          <label class="model-choice"><input type="radio" name="night-aggregation" value="max"${defaultAggregation === 'max' ? ' checked' : ''}> Biggest scan</label>
+          <label class="model-choice"><input type="radio" name="night-aggregation" value="mean"${defaultAggregation === 'mean' ? ' checked' : ''}> Mean of scans</label>
+        </div>
+      </fieldset>
+      <fieldset class="presence-level-control"><legend>Area cut-off</legend>
+        <div class="model-choices" role="radiogroup" aria-label="Night operating point">
+          <label class="model-choice"><input type="radio" name="night-operating" value="selected" checked>
+            <span id="night-cutoff-option"></span></label>
+          <label class="model-choice"><input type="radio" name="night-operating" value="custom">
+            <span>Custom<span class="presence-option-note">set below</span></span></label>
+        </div>
+        <div class="presence-slider" id="night-slider" hidden>
+          <input type="range" id="night-range" min="0" max="${SLIDER_STEPS}" step="1"
+            aria-label="Custom night area cut-off in cells">
+          <output id="night-range-out"></output>
         </div>
       </fieldset>
     </div>
 
-    <details class="presence-limit" id="night-limitations">
-      <summary><span class="presence-limit-tag">Rough guide</span><span>
-        <b>Read the night results with care</b><small id="leakage-summary"></small>
-        <small class="presence-limit-warning" id="leakage-score-warning"></small>
-      </span></summary>
-      <div id="leakage-note"></div>
-    </details>
-
-    <p class="presence-method" id="night-method"></p>
-    <p class="presence-glance" id="night-glance" role="note"></p>
+    <dl class="presence-params" id="night-params"></dl>
+    <p class="presence-cohort-note" id="night-caveat"></p>
     <div class="cards presence-metric-cards" id="night-cards"></div>
+    <div class="presence-stats" id="night-stats"></div>
     <div class="two presence-chart-grid">
       <figure><div class="viz" id="night-dist"></div><figcaption id="night-dist-cap"></figcaption></figure>
       <figure><div class="viz" id="night-roc"></div><figcaption id="night-roc-cap"></figcaption></figure>
     </div>
 
-    <details class="presence-disclosure presence-results-detail">
-      <summary>See the statistical test in full</summary>
-      <div class="presence-details-body" id="night-mw"></div>
-    </details>
-
-    <div class="presence-section-heading"><h3>Yes-or-no answers at the tuned cut-off</h3>
-      <p>The cut-off was chosen using the validation nights, then left untouched for the test nights.</p></div>
     <div class="two presence-night-decision">
       <figure><div class="viz" id="night-confusion"></div><figcaption id="night-confusion-cap"></figcaption></figure>
       <div class="panel" id="night-cutoff"></div>
     </div>
 
     <details class="presence-disclosure presence-results-detail">
-      <summary>See every night, one by one</summary>
+      <summary>All nights</summary>
       <div class="presence-details-body">
-        <p class="small">Coverage shows how many of a night's scans were actually available here, out of
-        all the labelled scans belonging to that night.</p>
-        <p class="presence-scroll-hint">Scroll sideways to see every column.</p>
         <div id="night-table"></div>
       </div>
     </details>
@@ -206,11 +243,11 @@ export async function render(mount) {
 
   function comparisonTable(analysis) {
     const entries = [
-      ['Any cell at all', analysis.operating_points.any_cell],
-      ['Tuned on validation', analysis.operating_points.validation_selected],
+      ['≥ 1 cell', analysis.operating_points.any_cell],
+      ['Validation-tuned', analysis.operating_points.validation_selected],
     ];
-    return `<p class="presence-scroll-hint">Scroll sideways to compare every number.</p>
-      <div class="tscroll" tabindex="0" role="region" aria-label="Scan cutoff comparison table"><table><thead><tr><th>Rule for saying yes</th><th>Cut-off (cells)</th>
+    return `<p class="presence-scroll-hint">Scroll sideways to see every column.</p>
+      <div class="tscroll" tabindex="0" role="region" aria-label="Scan cutoff comparison table"><table><thead><tr><th>Rule</th><th>Cut-off (cells)</th>
       <th>Cut-off (km&sup2;)</th><th>TP</th><th>FP</th><th>FN</th><th>TN</th>
       <th>Accuracy</th><th>Sensitivity</th><th>Specificity</th><th>Precision</th><th>F1</th></tr></thead><tbody>
       ${entries.map(([label, metrics], i) => {
@@ -236,76 +273,89 @@ export async function render(mount) {
     });
 
     const model = findModel(doc, state.model);
-    const scans = scanAnalysis(model, state.split);
-    const scanMetrics = operatingPoint(scans, state.scanOperating);
-    const nights = nightAnalysis(model, state.nightAggregation, state.split);
-    const nightMetrics = operatingPoint(nights, 'selected');
-    const selectedScanCutoff = model.scan.selected_cutoff;
-    const selectedNightCutoff = model.night[state.nightAggregation].selected_cutoff;
-    const exposure = doc.cohort.training_exposure[state.split];
+    const scans = scanAnalysis(model, COHORT);
+    const nights = nightAnalysis(model, state.nightAggregation, COHORT);
+    const selectedScanCutoff = model.scan.combined_cutoff;
+    const selectedNightCutoff = model.night[state.nightAggregation].combined_cutoff;
+
+    const scanCeiling = scoreCeiling(scans);
+    const nightCeiling = scoreCeiling(nights);
+    if (state.scanCustom == null) state.scanCustom = selectedScanCutoff.cells;
+    if (state.nightCustom == null) state.nightCustom = selectedNightCutoff.cells;
+    state.scanCustom = Math.min(Math.max(0, state.scanCustom), scanCeiling);
+    state.nightCustom = Math.min(Math.max(0, state.nightCustom), nightCeiling);
+
+    const scanMetrics = operatingPoint(scans, state.scanOperating, state.scanCustom);
+    const nightMetrics = operatingPoint(nights, state.nightOperating, state.nightCustom);
+
+    const syncSlider = (id, custom, value, ceiling) => {
+      const box = mount.querySelector(`#${id}-slider`);
+      box.hidden = !custom;
+      const range = mount.querySelector(`#${id}-range`);
+      range.value = String(toSlider(value, ceiling));
+      mount.querySelector(`#${id}-range-out`).textContent =
+        `${area(value)} cells · ${km2(cellsToKm2(doc, value))} km²`;
+    };
+    syncSlider('scan', state.scanOperating === 'custom', state.scanCustom, scanCeiling);
+    syncSlider('night', state.nightOperating === 'custom', state.nightCustom, nightCeiling);
+    const exposure = doc.cohort.training_exposure[COHORT];
     const partialNights = nights.records.filter(record =>
       record.evaluated_scan_count < record.manifest_scan_count).length;
     const medianCoverage = median(nights.records.map(record => record.coverage_fraction));
     const valTestOverlap = doc.cohort.night_overlap.validation_test;
-    const splitWord = state.split === 'test' ? 'test' : 'validation';
 
-    mount.querySelector('#leakage-summary').textContent =
-      `${int(partialNights)} of ${int(nights.n)} nights are incomplete · usually ${(100 * medianCoverage).toFixed(0)}% of a night's scans are here · ` +
-      `${int(exposure.nights_seen_in_train)} of ${int(exposure.nights_total)} nights were also used in training` +
-      (state.split === 'test' ? ` · ${int(valTestOverlap)} of ${int(nights.n)} also appear in validation` : '');
-    mount.querySelector('#leakage-score-warning').textContent = state.nightAggregation === 'max'
-      ? 'Using the biggest swarm is especially unfair between nights, because some nights have far more scans than others.'
-      : 'Using the average still depends on which scans happen to be missing.';
-    mount.querySelector('#leakage-note').innerHTML = `<p>
-      Each night's score only uses the scans that landed in the group you are viewing, and most nights are
-      missing some: <b>${int(partialNights)} of ${int(nights.n)} ${splitWord} nights are incomplete</b>, with a
-      typical night keeping <b>${(100 * medianCoverage).toFixed(0)}%</b> of its labelled scans. Taking the biggest
-      swarm is especially unfair when nights have different numbers of scans; taking the average still depends
-      on which scans are missing.
-      ${state.split === 'test'
-        ? `On top of that, <b>${int(valTestOverlap)} of ${int(nights.n)} test nights also show up in validation</b>,
-           so the cut-off and the test results share the same nights.`
-        : `These are also the nights the cut-off was chosen on, and ${int(valTestOverlap)} of them show up in the
-           test group as well.`}
-      And ${int(exposure.nights_seen_in_train)} of ${int(exposure.nights_total)} were seen during training.
-      <b>So this is not a test on genuinely new nights.</b> To do that properly, the data would have to be
-      re-split so no night appears in more than one group, the model retrained, and every held-out night
-      predicted at a steady cadence.
-    </p>`;
-
-    const scanRule = state.scanOperating === 'any'
-      ? `the simple rule "1 predicted cell or more"`
-      : `the tuned rule "${area(selectedScanCutoff.cells)} predicted cells or more" (${km2(selectedScanCutoff.km2)} km²)`;
-    mount.querySelector('#scan-cutoff-option').textContent = `${area(selectedScanCutoff.cells)} cells or more`;
-    mount.querySelector('#scan-method').innerHTML = `${esc(model.display_name)} calls a cell budworm when it is
-      at least <b>${model.pixel_probability_threshold}</b> sure, then counts those cells. The numbers below say
-      yes using ${scanRule}.`;
-    mount.querySelector('#scan-glance').innerHTML = `With that rule, the model catches
-      <b>${int(scanMetrics.confusion.tp)} of the ${int(scanMetrics.n_positive)} scans that do have budworm</b>, and correctly
-      clears <b>${int(scanMetrics.confusion.tn)} of the ${int(scanMetrics.n_negative)} that do not</b>.`;
-    mount.querySelector('#scan-cards').innerHTML = metricCards(scans, scanMetrics, 'scans');
+    const scanRule = `≥ ${area(scanMetrics.cutoff)} cell${scanMetrics.cutoff === 1 ? '' : 's'}`;
+    mount.querySelector('#scan-cutoff-option').innerHTML =
+      `&ge; ${area(selectedScanCutoff.cells)} cells<span class="presence-option-note">in-sample</span>`;
+    mount.querySelector('#scan-params').innerHTML = paramList([
+      ['Model', esc(model.display_name)],
+      ['Cohort', 'validation + test'],
+      ['Pixel threshold', model.pixel_probability_threshold],
+      ['Grid cell', `${int(doc.definitions.pixel_size_m)} m · ${km2(doc.definitions.pixel_area_km2)} km²`],
+      ['Truth rule', `≥ ${int(doc.definitions.ground_truth_min_cells)} labelled cell`],
+      ['Area cut-off', `${scanRule} · ${km2(cellsToKm2(doc, scanMetrics.cutoff))} km²`],
+      ['Cut-off from', state.scanOperating === 'any' ? 'fixed'
+        : state.scanOperating === 'custom' ? 'you (not fitted)' : 'this cohort (in-sample)'],
+      ['Scans', `${int(scanMetrics.n)} · ${int(scanMetrics.n_positive)} budworm / ${int(scanMetrics.n_negative)} none`],
+    ]);
+    mount.querySelector('#scan-cards').innerHTML = metricCards(scans, scanMetrics);
+    mount.querySelector('#scan-stats').innerHTML = statList([
+      ...confusionRows(scanMetrics), ...metricRows(scans, scanMetrics),
+    ]);
     mount.querySelector('#scan-roc').innerHTML = rocSvg(scans, scanMetrics, 'Scan-level presence');
-    mount.querySelector('#scan-roc-cap').innerHTML = `Sliding the cut-off from strict to loose traces this
-      curve; the area under it is <b>${rate(scans.roc.auc)}</b> over ${int(scans.n)} ${splitWord} scans. It shows how well
-      the model ranks scans, not which cut-off to use.`;
+    mount.querySelector('#scan-roc-cap').textContent = `All area cut-offs · n = ${int(scans.n)} scans.`;
+    mount.querySelector('#scan-caveat').textContent = state.scanOperating === 'any'
+      ? 'Curated cohort: budworm-free scans over-represented.'
+      : state.scanOperating === 'custom'
+      ? 'Curated cohort. Cut-off set by hand on this cohort, so it carries no selection guarantee.'
+      : 'Curated cohort. Cut-off fitted on these same scans, so rates below are optimistic.';
     mount.querySelector('#scan-confusion').innerHTML = confusion({
       ...scanMetrics.confusion, unit: 'scans', positiveLabel: 'budworm', negativeLabel: 'none',
-      title: `${splitLabel(state.split)} scans: what the model said vs. the truth`,
+      title: 'Scan presence, validation + test',
     });
-    mount.querySelector('#scan-confusion-cap').innerHTML = `${splitLabel(state.split)}, using ${scanRule}:
-      ${int(scanMetrics.n_positive)} scans with budworm and ${int(scanMetrics.n_negative)} without.`;
+    mount.querySelector('#scan-confusion-cap').textContent = `Cut-off ${scanRule}.`;
     mount.querySelector('#scan-comparison').innerHTML = comparisonTable(scans);
 
-    mount.querySelector('#night-method').innerHTML = `A night really had budworm if <b>any</b> of its labelled
-      scans, noon to noon UTC, contains some. The model's number for that night is its
-      <b>${aggLabel(state.nightAggregation)}</b> predicted swarm across the ${splitWord} scans available. The night is
-      called a migration when that number reaches
-      <b>${area(selectedNightCutoff.cells)} cells (${km2(selectedNightCutoff.km2)} km&sup2;)</b>, a cut-off chosen on the
-      validation nights.`;
-    mount.querySelector('#night-glance').innerHTML = `With that cut-off, the model catches
-      <b>${int(nightMetrics.confusion.tp)} of the ${int(nightMetrics.n_positive)} migration nights</b>, and correctly clears
-      <b>${int(nightMetrics.confusion.tn)} of the ${int(nightMetrics.n_negative)} quiet nights</b>.`;
-    mount.querySelector('#night-cards').innerHTML = metricCards(nights, nightMetrics, 'nights');
+    const mwStat = nights.mann_whitney;
+    mount.querySelector('#night-params').innerHTML = paramList([
+      ['Model', esc(model.display_name)],
+      ['Cohort', 'validation + test'],
+      ['Night window', 'noon → noon UTC'],
+      ['Night score', `${aggLabel(state.nightAggregation)} predicted cells`],
+      ['Truth rule', '≥ 1 labelled scan with budworm'],
+      ['Area cut-off', `≥ ${area(nightMetrics.cutoff)} cells · ${km2(cellsToKm2(doc, nightMetrics.cutoff))} km²`],
+      ['Nights', `${int(nights.n)} · ${int(nights.n_positive)} migration / ${int(nights.n_negative)} quiet`],
+      ['Scans per night', `median ${int(median(nights.records.map(r => r.evaluated_scan_count)))} of
+        ${int(median(nights.records.map(r => r.manifest_scan_count)))} · ${(100 * medianCoverage).toFixed(0)}%`],
+      ['Incomplete nights', `${int(partialNights)} / ${int(nights.n)}`],
+      ['Cut-off from', state.nightOperating === 'custom' ? 'you (not fitted)' : 'this cohort (in-sample)'],
+      ['Also in training', `${int(exposure.nights_seen_in_train)} / ${int(exposure.nights_total)}`],
+      ['In both splits', `${int(valTestOverlap)} nights merged`],
+    ]);
+    mount.querySelector('#night-caveat').textContent = state.nightOperating === 'custom'
+      ? 'Exploratory: cut-off set by hand on this cohort, and most nights were seen in training.'
+      : 'Exploratory: cut-off fitted on these same nights, and most were seen in training.';
+    mount.querySelector('#night-cards').innerHTML = metricCards(nights, nightMetrics);
 
     const groups = distributionGroups(nights).map((group, i) => ({
       ...group, c: i === 0 ? 'var(--tn)' : 'var(--accent2)',
@@ -313,52 +363,44 @@ export async function render(mount) {
     const yhi = Math.max(1, ...groups.flatMap(group => [group.hi ?? 0, group.mean ?? 0])) * 1.05;
     mount.querySelector('#night-dist').innerHTML = boxPlot({
       groups, ylo: 0, yhi, logy: true,
-      ylabel: `${aggLabel(state.nightAggregation)} predicted swarm (cells)`,
-      xlabel: 'what actually happened that night', W: 520, H: 330,
+      ylabel: 'predicted swarm (cells)',
+      xlabel: 'night truth', W: 520, H: 330,
       aria: `${aggLabel(state.nightAggregation)} predicted swarm size for quiet and migration nights, on a logarithmic scale`,
     });
     const neg = nights.score_summary.negative, pos = nights.score_summary.positive;
-    mount.querySelector('#night-dist-cap').innerHTML = `A typical quiet night scores
-      <b>${area(neg.median)} cells (${km2(cellsToKm2(doc, neg.median))} km&sup2;)</b>; a typical migration night scores
-      <b>${area(pos.median)} cells (${km2(cellsToKm2(doc, pos.median))} km&sup2;)</b>. The further apart the two boxes sit,
-      the easier the two kinds of night are to tell apart. The vertical axis is squashed logarithmically so
-      that nights scoring zero still show up.`;
+    mount.querySelector('#night-stats').innerHTML = statList([
+      ...confusionRows(nightMetrics), ...metricRows(nights, nightMetrics),
+      ['Mann–Whitney U', area(mwStat.u)],
+      ['Mann–Whitney p', pValue(mwStat.p_value)],
+      ['Common-language effect', rate(mwStat.common_language_auc)],
+      ['Rank-biserial', rate(mwStat.rank_biserial)],
+      ['Median, migration', area(pos.median)],
+      ['Median, quiet', area(neg.median)],
+      ['IQR, migration', `${area(pos.q1)} – ${area(pos.q3)}`],
+      ['IQR, quiet', `${area(neg.q1)} – ${area(neg.q3)}`],
+    ]);
+    mount.querySelector('#night-dist-cap').innerHTML =
+      `log<sub>10</sub>(cells + 1) &middot; box = quartiles &middot; whiskers = 5th/95th percentile.`;
     mount.querySelector('#night-roc').innerHTML = rocSvg(nights, nightMetrics, 'Night-level migration presence');
-    mount.querySelector('#night-roc-cap').innerHTML = `Area under the night curve is <b>${rate(nights.roc.auc)}</b>
-      (${int(nights.n_positive)} migration and ${int(nights.n_negative)} quiet ${splitWord} nights). The orange dot marks where the
-      tuned cut-off actually lands.`;
-
-    const mw = nights.mann_whitney;
-    mount.querySelector('#night-mw').innerHTML = `<p class="presence-scroll-hint">Scroll sideways to see every number.</p>
-      <div class="tscroll" tabindex="0" role="region" aria-label="Night distribution test table"><table><thead><tr>
-      <th>Night score</th><th>Migration nights</th><th>Quiet nights</th><th>Typical migration night (cells)</th>
-      <th>Typical quiet night (cells)</th><th>Mann&ndash;Whitney U</th><th>p-value</th>
-      <th>Chance of ranking correctly</th></tr></thead><tbody><tr>
-      <td>${esc(aggLabel(state.nightAggregation))} predicted swarm</td>
-      <td class="n">${int(mw.n_positive)}</td><td class="n">${int(mw.n_negative)}</td>
-      <td class="n">${area(pos.median)}</td><td class="n">${area(neg.median)}</td>
-      <td class="n">${area(mw.u)}</td><td class="n">${pValue(mw.p_value)}</td>
-      <td class="n">${rate(mw.common_language_auc)}</td></tr></tbody></table></div>
-      <p class="small">The Mann&ndash;Whitney test asks whether migration nights really score higher than quiet
-      ones, without assuming the scores follow a bell curve. A small p-value means the gap is unlikely to be luck.
-      The last column is the chance that a randomly picked migration night scores higher than a randomly picked
-      quiet one. Because many nights overlap and are incomplete, treat this as a guide rather than proof.</p>`;
+    mount.querySelector('#night-roc-cap').textContent = `All area cut-offs · n = ${int(nights.n)} nights.`;
 
     mount.querySelector('#night-confusion').innerHTML = confusion({
       ...nightMetrics.confusion, unit: 'nights', positiveLabel: 'migration', negativeLabel: 'quiet',
-      title: `${splitLabel(state.split)} nights: what the model said vs. the truth`,
+      title: 'Night migration, validation + test',
     });
-    mount.querySelector('#night-confusion-cap').innerHTML = `${splitLabel(state.split)}: how ${int(nightMetrics.n)} nights
-      were called, scoring each by its ${aggLabel(state.nightAggregation)} predicted swarm and using the tuned cut-off.`;
-    mount.querySelector('#night-cutoff').innerHTML = `<h3 style="margin-top:0">The cut-off being used</h3>
-      <div class="presence-cutoff"><b>${area(selectedNightCutoff.cells)}</b> cells
-        <span>${km2(selectedNightCutoff.km2)} km&sup2;</span></div>
-      <p class="small">Score this much or more and the night is called a migration. This value was picked on the
-      validation nights as the one that catches the most migrations while raising the fewest false alarms
-      (it caught ${rate(selectedNightCutoff.validation_sensitivity)} of migration nights and cleared
-      ${rate(selectedNightCutoff.validation_specificity)} of quiet ones there).</p>
-      <p class="small">This is a different setting from how sure the model must be about a single cell,
-      which stays at ${model.pixel_probability_threshold}.</p>`;
+    mount.querySelector('#night-confusion-cap').innerHTML =
+      `${int(nightMetrics.n)} nights &middot; cut-off &ge; ${area(nightMetrics.cutoff)} cells.`;
+    mount.querySelector('#night-cutoff-option').innerHTML =
+      `&ge; ${area(selectedNightCutoff.cells)} cells<span class="presence-option-note">in-sample fit</span>`;
+    mount.querySelector('#night-cutoff').innerHTML = `<h3 style="margin-top:0">Cut-off in use</h3>
+      <div class="presence-cutoff"><b>${area(nightMetrics.cutoff)}</b> cells
+        <span>${km2(cellsToKm2(doc, nightMetrics.cutoff))} km&sup2;</span></div>
+      <div class="presence-stats">${statList([
+        ['Source', state.nightOperating === 'custom' ? 'set by hand' : 'max Youden J, in-sample'],
+        ['Sensitivity', rate(nightMetrics.sensitivity)],
+        ['Specificity', rate(nightMetrics.specificity)],
+        ['Youden J', rate(nightMetrics.youden_j)],
+      ])}</div>`;
 
     const rows = nightTableRows(nights, nightMetrics.cutoff).map(row => ({
       ...row, score_km2: cellsToKm2(doc, row.score),
@@ -367,16 +409,16 @@ export async function render(mount) {
       rows, pageSize: 25, sort: 'night_id', dir: -1,
       rowClass: row => row.outcome === 'FP' || row.outcome === 'FN' ? 'presence-error' : '',
       columns: [
-        {key: 'night_id', label: 'Night (UTC, noon to noon)', fmt: value => `<code>${esc(nightRange(value))}</code>`},
-        {key: 'truth', label: 'What really happened', fmt: value => value ? 'migration' : 'quiet'},
-        {key: 'coverage_fraction', label: 'Scans available', fmt: (value, row) =>
-          `${int(row.evaluated_scan_count)} of ${int(row.manifest_scan_count)} <span class="small">(${(100 * value).toFixed(0)}%)</span>`},
-        {key: 'score', label: `${aggLabel(state.nightAggregation)} predicted swarm`, fmt: (value, row) =>
+        {key: 'night_id', label: 'Night (UTC)', fmt: value => `<code>${esc(nightRange(value))}</code>`},
+        {key: 'truth', label: 'Truth', fmt: value => value ? 'migration' : 'quiet'},
+        {key: 'coverage_fraction', label: 'Scans', fmt: (value, row) =>
+          `${int(row.evaluated_scan_count)} / ${int(row.manifest_scan_count)} <span class="small">(${(100 * value).toFixed(0)}%)</span>`},
+        {key: 'score', label: 'Score', fmt: (value, row) =>
           `${area(value)} <span class="small">cells · ${km2(row.score_km2)} km&sup2;</span>`},
-        {key: 'predicted', label: 'What the model said', fmt: value => value ? 'migration' : 'quiet'},
-        {key: 'outcome', label: 'Right or wrong', fmt: value =>
+        {key: 'predicted', label: 'Predicted', fmt: value => value ? 'migration' : 'quiet'},
+        {key: 'outcome', label: 'Outcome', fmt: value =>
           `<span class="presence-outcome ${value.toLowerCase()}">${esc(value)}</span>`},
-        {key: 'seen_in_train', label: 'Also used in training', fmt: value => value
+        {key: 'seen_in_train', label: 'In training', fmt: value => value
           ? '<span style="color:var(--warn)">yes</span>' : 'no'},
       ],
     });
@@ -410,12 +452,22 @@ export async function render(mount) {
 
   mount.querySelectorAll('input[name="presence-model"]').forEach(input =>
     input.addEventListener('change', event => { state.model = event.target.value; draw(); }));
-  mount.querySelectorAll('input[name="presence-split"]').forEach(input =>
-    input.addEventListener('change', event => { state.split = event.target.value; draw(); }));
   mount.querySelectorAll('input[name="scan-operating"]').forEach(input =>
     input.addEventListener('change', event => { state.scanOperating = event.target.value; draw(); }));
   mount.querySelectorAll('input[name="night-aggregation"]').forEach(input =>
     input.addEventListener('change', event => { state.nightAggregation = event.target.value; draw(); }));
+  mount.querySelectorAll('input[name="night-operating"]').forEach(input =>
+    input.addEventListener('change', event => { state.nightOperating = event.target.value; draw(); }));
+  mount.querySelector('#scan-range').addEventListener('input', event => {
+    state.scanCustom = fromSlider(Number(event.target.value), scoreCeiling(
+      scanAnalysis(findModel(doc, state.model), COHORT)));
+    draw();
+  });
+  mount.querySelector('#night-range').addEventListener('input', event => {
+    state.nightCustom = fromSlider(Number(event.target.value), scoreCeiling(
+      nightAnalysis(findModel(doc, state.model), state.nightAggregation, COHORT)));
+    draw();
+  });
 
   draw();
 }

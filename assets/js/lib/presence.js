@@ -20,6 +20,11 @@ function requireAnalysis(value, path, {records = false, mannWhitney = false} = {
   if (mannWhitney && !object(value.mann_whitney)) fail(`${path}.mann_whitney is missing`);
   if (!object(value.score_summary?.positive) || !object(value.score_summary?.negative))
     fail(`${path}.score_summary is missing`);
+  if (!Array.isArray(value.distributions?.positive) || !Array.isArray(value.distributions?.negative))
+    fail(`${path}.distributions is missing`);
+  if (value.distributions.positive.length !== value.n_positive ||
+      value.distributions.negative.length !== value.n_negative)
+    fail(`${path}.distributions do not match the class counts`);
   for (const op of ['any_cell', 'validation_selected']) {
     const metrics = value.operating_points?.[op];
     if (!object(metrics) || !object(metrics.confusion) || !finite(metrics.cutoff))
@@ -37,12 +42,14 @@ export function validatePresence(doc) {
       doc.definitions.pixel_area_km2 <= 0) fail('pixel dimensions are invalid');
   if (!object(doc.cohort) || !object(doc.cohort.training_exposure) ||
       !object(doc.cohort.training_exposure.val) || !object(doc.cohort.training_exposure.test) ||
+      !object(doc.cohort.training_exposure.combined) ||
+      !object(doc.cohort.night_coverage?.combined) ||
       !Number.isInteger(doc.cohort.night_overlap?.validation_test) ||
       doc.cohort.night_overlap.validation_test < 0) fail('cohort metadata is missing');
   if (!Array.isArray(doc.caveats) || !doc.caveats.length) fail('caveats are missing');
   if (!Array.isArray(doc.models) || !doc.models.length) fail('models are missing');
   if (!doc.selected_model_key) fail('selected_model_key is missing');
-  if (!object(doc.defaults) || !['test', 'val'].includes(doc.defaults.split) ||
+  if (!object(doc.defaults) || !['combined', 'test', 'val'].includes(doc.defaults.split) ||
       !['max', 'mean'].includes(doc.defaults.night_aggregation) ||
       !['any_cell', 'validation_selected'].includes(doc.defaults.scan_operating_point) ||
       doc.defaults.night_operating_point !== 'validation_selected')
@@ -55,15 +62,17 @@ export function validatePresence(doc) {
     seen.add(model.key);
     if (!model.display_name || !finite(model.pixel_probability_threshold))
       fail(`${path} display name or pixel threshold is invalid`);
-    if (!object(model.scan?.selected_cutoff) || !finite(model.scan.selected_cutoff.cells))
-      fail(`${path}.scan.selected_cutoff is invalid`);
-    for (const split of ['validation', 'test'])
+    for (const cut of ['selected_cutoff', 'combined_cutoff'])
+      if (!object(model.scan?.[cut]) || !finite(model.scan[cut].cells))
+        fail(`${path}.scan.${cut} is invalid`);
+    for (const split of ['validation', 'test', 'combined'])
       requireAnalysis(model.scan?.splits?.[split], `${path}.scan.splits.${split}`);
     for (const aggregation of ['max', 'mean']) {
       const night = model.night?.[aggregation];
-      if (!object(night?.selected_cutoff) || !finite(night.selected_cutoff.cells))
-        fail(`${path}.night.${aggregation}.selected_cutoff is invalid`);
-      for (const split of ['validation', 'test'])
+      for (const cut of ['selected_cutoff', 'combined_cutoff'])
+        if (!object(night?.[cut]) || !finite(night[cut].cells))
+          fail(`${path}.night.${aggregation}.${cut} is invalid`);
+      for (const split of ['validation', 'test', 'combined'])
         requireAnalysis(night.splits?.[split], `${path}.night.${aggregation}.splits.${split}`,
           {records: true, mannWhitney: true});
     }
@@ -92,11 +101,61 @@ export function nightAnalysis(model, aggregation, split) {
   return value;
 }
 
-export function operatingPoint(analysis, mode) {
+export function operatingPoint(analysis, mode, cutoff = null) {
+  if (mode === 'custom') return metricsAtCutoff(analysis, cutoff);
   const key = mode === 'any' ? 'any_cell' : 'validation_selected';
   const value = analysis.operating_points[key];
   if (!value) fail(`operating point ${key} is not present`);
   return value;
+}
+
+const ratio = (num, den) => den ? num / den : null;
+
+/**
+ * Exact confusion and rates for `score >= cutoff`, computed from the per-item
+ * scores the exporter already ships.  This re-scores an existing cohort; it
+ * never re-fits a cutoff, so an operating point chosen here carries no
+ * selection guarantee.  Formulas and the null-for-undefined convention mirror
+ * `classification_metrics` in src/presence.py so a custom cutoff set to a
+ * precomputed one reproduces it exactly.
+ */
+export function metricsAtCutoff(analysis, cutoff) {
+  const positive = analysis.distributions?.positive;
+  const negative = analysis.distributions?.negative;
+  if (!Array.isArray(positive) || !Array.isArray(negative))
+    fail('distributions are required to score a custom cutoff');
+  if (!finite(cutoff)) fail('custom cutoff must be a finite number');
+
+  const tp = positive.reduce((acc, v) => acc + (v >= cutoff ? 1 : 0), 0);
+  const fp = negative.reduce((acc, v) => acc + (v >= cutoff ? 1 : 0), 0);
+  const fn = positive.length - tp;
+  const tn = negative.length - fp;
+  const n = positive.length + negative.length;
+
+  const sensitivity = ratio(tp, tp + fn);
+  const specificity = ratio(tn, tn + fp);
+  const mccDen = (tp + fp) * (tp + fn) * (tn + fp) * (tn + fn);
+  return {
+    cutoff, n, n_positive: positive.length, n_negative: negative.length,
+    confusion: {tp, fp, tn, fn},
+    accuracy: ratio(tp + tn, n),
+    sensitivity, recall: sensitivity, specificity,
+    precision: ratio(tp, tp + fp),
+    negative_predictive_value: ratio(tn, tn + fn),
+    f1: ratio(2 * tp, 2 * tp + fp + fn),
+    balanced_accuracy: (sensitivity != null && specificity != null)
+      ? (sensitivity + specificity) / 2 : null,
+    mcc: mccDen ? (tp * tn - fp * fn) / Math.sqrt(mccDen) : null,
+    youden_j: (sensitivity != null && specificity != null)
+      ? sensitivity + specificity - 1 : null,
+  };
+}
+
+/** Highest score in a cohort, used to bound the custom-cutoff control. */
+export function scoreCeiling(analysis) {
+  const all = [...(analysis.distributions?.positive ?? []),
+               ...(analysis.distributions?.negative ?? [])];
+  return all.length ? Math.max(...all) : 0;
 }
 
 /** Points are already tie-collapsed and ordered by the exporter. */
