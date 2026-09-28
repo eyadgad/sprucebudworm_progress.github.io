@@ -101,6 +101,7 @@ data/samples/*.webp            generated lazy grid thumbnails
 | 09 | `#/errors` | Failure taxonomy, size driver, model disagreement, clustering |
 | 10 | `#/stats` | Distributions, bootstrap intervals, paired tests, correlations |
 | 11 | `#/about` | Metric glossary, provenance, unsupported analyses |
+| 12 | `#/publication` | Frozen night-split test results, paired intervals, seed and year robustness |
 
 ---
 

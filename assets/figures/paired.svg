@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 360" role="img">
+<rect width="760" height="360" fill="#fff"/>
+<text x="20" y="28" font-family="Georgia,serif" font-size="16" fill="#0f1824">Attention U-Net minus U-Net, matched seed, test set</text>
+<text x="48" y="52" font-family="Segoe UI,sans-serif" font-size="12" fill="#657688">Dice (night-clustered 95% interval)</text>
+<line x1="168.0" y1="62" x2="168.0" y2="280" stroke="#657688" stroke-dasharray="3 3"/>
+<line x1="134.4" y1="70" x2="235.8" y2="70" stroke="#14479a" stroke-width="2"/>
+<circle cx="182.9" cy="70" r="4.5" fill="#14479a"/>
+<text x="40" y="74" text-anchor="end" font-family="Consolas,monospace" font-size="11" fill="#0f1824">s42</text>
+<text x="336" y="74" font-family="Consolas,monospace" font-size="11" fill="#657688">+0.004</text>
+<line x1="142.5" y1="108" x2="201.4" y2="108" stroke="#14479a" stroke-width="2"/>
+<circle cx="171.6" cy="108" r="4.5" fill="#14479a"/>
+<text x="40" y="112" text-anchor="end" font-family="Consolas,monospace" font-size="11" fill="#0f1824">s43</text>
+<text x="336" y="112" font-family="Consolas,monospace" font-size="11" fill="#657688">+0.001</text>
+<line x1="176.7" y1="146" x2="241.7" y2="146" stroke="#1f7a54" stroke-width="2"/>
+<circle cx="206.7" cy="146" r="4.5" fill="#1f7a54"/>
+<text x="40" y="150" text-anchor="end" font-family="Consolas,monospace" font-size="11" fill="#0f1824">s44</text>
+<text x="336" y="150" font-family="Consolas,monospace" font-size="11" fill="#657688">+0.010</text>
+<line x1="182.8" y1="184" x2="359.3" y2="184" stroke="#1f7a54" stroke-width="2"/>
+<circle cx="258.8" cy="184" r="4.5" fill="#1f7a54"/>
+<text x="40" y="188" text-anchor="end" font-family="Consolas,monospace" font-size="11" fill="#0f1824">s45</text>
+<text x="336" y="188" font-family="Consolas,monospace" font-size="11" fill="#657688">+0.023</text>
+<line x1="174.2" y1="222" x2="259.6" y2="222" stroke="#1f7a54" stroke-width="2"/>
+<circle cx="215.2" cy="222" r="4.5" fill="#1f7a54"/>
+<text x="40" y="226" text-anchor="end" font-family="Consolas,monospace" font-size="11" fill="#0f1824">s46</text>
+<text x="336" y="226" font-family="Consolas,monospace" font-size="11" fill="#657688">+0.012</text>
+<text x="48.0" y="302" text-anchor="middle" font-family="Consolas,monospace" font-size="10" fill="#657688">-0.03</text>
+<text x="168.0" y="302" text-anchor="middle" font-family="Consolas,monospace" font-size="10" fill="#657688">+0.00</text>
+<text x="328.0" y="302" text-anchor="middle" font-family="Consolas,monospace" font-size="10" fill="#657688">+0.04</text>
+<text x="408" y="52" font-family="Segoe UI,sans-serif" font-size="12" fill="#657688">NSD (night-clustered 95% interval)</text>
+<line x1="454.7" y1="62" x2="454.7" y2="280" stroke="#657688" stroke-dasharray="3 3"/>
+<line x1="493.0" y1="70" x2="603.8" y2="70" stroke="#1f7a54" stroke-width="2"/>
+<circle cx="550.8" cy="70" r="4.5" fill="#1f7a54"/>
+<text x="400" y="74" text-anchor="end" font-family="Consolas,monospace" font-size="11" fill="#0f1824">s42</text>
+<text x="696" y="74" font-family="Consolas,monospace" font-size="11" fill="#657688">+0.021</text>
+<line x1="392.6" y1="108" x2="445.2" y2="108" stroke="#1f7a54" stroke-width="2"/>
+<circle cx="417.6" cy="108" r="4.5" fill="#1f7a54"/>
+<text x="400" y="112" text-anchor="end" font-family="Consolas,monospace" font-size="11" fill="#0f1824">s43</text>
+<text x="696" y="112" font-family="Consolas,monospace" font-size="11" fill="#657688">-0.008</text>
+<line x1="510.2" y1="146" x2="597.2" y2="146" stroke="#1f7a54" stroke-width="2"/>
+<circle cx="553.5" cy="146" r="4.5" fill="#1f7a54"/>
+<text x="400" y="150" text-anchor="end" font-family="Consolas,monospace" font-size="11" fill="#0f1824">s44</text>
+<text x="696" y="150" font-family="Consolas,monospace" font-size="11" fill="#657688">+0.021</text>
+<line x1="627.9" y1="184" x2="771.5" y2="184" stroke="#1f7a54" stroke-width="2"/>
+<circle cx="693.4" cy="184" r="4.5" fill="#1f7a54"/>
+<text x="400" y="188" text-anchor="end" font-family="Consolas,monospace" font-size="11" fill="#0f1824">s45</text>
+<text x="696" y="188" font-family="Consolas,monospace" font-size="11" fill="#657688">+0.051</text>
+<line x1="445.5" y1="222" x2="533.2" y2="222" stroke="#14479a" stroke-width="2"/>
+<circle cx="483.6" cy="222" r="4.5" fill="#14479a"/>
+<text x="400" y="226" text-anchor="end" font-family="Consolas,monospace" font-size="11" fill="#0f1824">s46</text>
+<text x="696" y="226" font-family="Consolas,monospace" font-size="11" fill="#657688">+0.006</text>
+<text x="408.0" y="302" text-anchor="middle" font-family="Consolas,monospace" font-size="10" fill="#657688">-0.01</text>
+<text x="454.7" y="302" text-anchor="middle" font-family="Consolas,monospace" font-size="10" fill="#657688">+0.00</text>
+<text x="688.0" y="302" text-anchor="middle" font-family="Consolas,monospace" font-size="10" fill="#657688">+0.05</text>
+<text x="20" y="346" font-family="Segoe UI,sans-serif" font-size="11" fill="#657688">Green marks an interval that excludes zero. Resampling is over nights, 2000 draws, seed 0.</text>
+</svg>

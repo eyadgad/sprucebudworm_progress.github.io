@@ -33,6 +33,7 @@ const ROUTES = {
   errors:      {title: 'Error & failure analysis',  mod: () => import('./sections/errors.js' + V)},
   stats:       {title: 'Statistical analysis',      mod: () => import('./sections/stats.js' + V)},
   about:       {title: 'Methods & glossary',        mod: () => import('./sections/about.js' + V)},
+  publication: {title: 'Publication results',      mod: () => import('./sections/publication.js' + V)},
 };
 
 const main  = document.getElementById('main');
