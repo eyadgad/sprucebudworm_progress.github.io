@@ -9,42 +9,45 @@
   body{background:#f4f1ea}
   .paper{max-width:46rem;margin:0 auto;padding:36px 26px 88px;color:#1c1c1c}
   .back{font-family:var(--sans);font-size:13px;margin:0 0 22px}
-  .paper h1{font-family:"Palatino Linotype",Palatino,Georgia,serif;font-size:30px;font-weight:600;margin:0 0 6px;letter-spacing:0}
-  .kicker{font-family:"Palatino Linotype",Palatino,Georgia,serif;font-style:italic;color:#444;margin:0 0 8px;font-size:16px}
-  .meta{font-family:"Palatino Linotype",Palatino,Georgia,serif;font-size:14px;color:#555;margin:0 0 26px}
-  .paper h2{font-family:"Palatino Linotype",Palatino,Georgia,serif;font-size:22px;font-weight:600;margin:34px 0 10px}
+  .paper h1{font-family:"Palatino Linotype",Palatino,Georgia,serif;font-size:30px;font-weight:600;margin:0 0 6px}
+  .kicker,.meta,.paper p,.paper figcaption,.cap,.refs{font-family:"Palatino Linotype",Palatino,Georgia,serif}
+  .kicker{font-style:italic;color:#333;margin:0 0 6px;font-size:16.5px}
+  .meta{font-size:14.5px;color:#444;margin:0 0 22px}
+  .paper h2{font-family:"Palatino Linotype",Palatino,Georgia,serif;font-size:22px;font-weight:600;margin:32px 0 10px}
   .paper h3{font-family:"Palatino Linotype",Palatino,Georgia,serif;font-size:18px;font-weight:600;margin:22px 0 8px;letter-spacing:0;text-transform:none;color:#1c1c1c}
-  .paper p{font-family:"Palatino Linotype",Palatino,Georgia,serif;font-size:17.5px;line-height:1.58;color:#1c1c1c;max-width:none;margin:0 0 13px}
-  .paper figure{margin:16px 0 6px;background:#fff;border:1px solid #ddd;padding:10px 10px 2px}
+  .paper p{font-size:17.5px;line-height:1.58;color:#1c1c1c;max-width:none;margin:0 0 13px}
+  .paper figure{margin:16px 0 4px;background:#fff;border:1px solid #ddd;padding:8px}
   .paper figure img{width:100%;height:auto;display:block}
-  .paper figcaption,.cap{font-family:"Palatino Linotype",Palatino,Georgia,serif;font-size:14.5px;line-height:1.45;color:#333;margin:8px 2px 18px}
+  .paper figcaption,.cap{font-size:14.5px;line-height:1.45;color:#222;margin:8px 2px 16px}
   .paper table{width:100%;border-collapse:collapse;font-family:"Palatino Linotype",Palatino,Georgia,serif;font-size:14.5px;margin:6px 0 4px;background:#fff}
   .paper th,.paper td{padding:5px 7px;text-align:right;border-bottom:1px solid #ccc}
   .paper th{font-weight:600;border-top:1.5px solid #1c1c1c;border-bottom:1px solid #1c1c1c}
   .paper td:first-child,.paper th:first-child{text-align:left}
   .paper tr:last-child td{border-bottom:1.5px solid #1c1c1c}
-  code{font-size:0.9em}
+  .refs{font-size:14.5px;line-height:1.45;padding-left:1.2em}
+  .refs li{margin:0 0 6px}
 </style>
 </head>
 <body>
 <article class="paper">
   <p class="back"><a href="./#/overview">Evaluation dashboard</a></p>
   <h1>Results and discussion</h1>
-  <p class="kicker">Segmentation of spruce-budworm dispersal on the frozen, night-disjoint split.</p>
-  <p class="meta">Test set scored once, after the threshold and the model comparison had been locked. Manifest <code>170c442d1dd7b878…</code>. Five seeds of an Attention U-Net and five seeds of a U-Net. Threshold 0.15.</p>
+  <p class="kicker">Segmentation of spruce-budworm dispersal in single-polarisation weather radar, on a night-disjoint test set.</p>
+  <p class="meta">XAM, Val-d’Irène, Quebec. Manifest <code>170c442d1dd7b878cdb4157139f7b4dc178f6d0e078534b6dc291d3c7091222f</code>. Threshold locked at 0.15 before the test set was read.</p>
+
+  <h2>2. Data and experimental design</h2>
+  <p>The radar is the XAM C-band installation at Val-d’Irène. Each scan is a 960 × 960 plan-position image at 500 m pixel spacing. The network sees nine elevations of reflectivity together with a mask of gates where the lowest tilt is finite. The target is the cleaned dispersal product, retained where reflectivity is at least 0 dBZ. A scan is a migration scan when that mask is non-empty and a quiet scan otherwise. Nights are operational nights bounded at UTC noon. Whole nights are assigned to train, validation or test, so no night contributes scans to more than one split. The frozen manifest has 3,078 scans and 267 nights: 1,108 / 1,050 positive and negative scans in training, 310 / 302 in validation, and 161 / 147 in the test set. Negatives were sampled to a ratio of one quiet scan per migration scan, so precision and average precision describe this cohort and not the raw archive.</p>
+  <p>The segmenters are a U-Net (Ronneberger et al., 2015) and the same U-Net with attention gates on the skip connections (Oktay et al., 2018). Both use 32 base filters, a focal-Tversky loss (α = 0.3, β = 0.7, γ = 1.333), AdamW, and 100 epochs with patience 50. Five initialisation seeds, 42 through 46, were trained for each architecture. The decision threshold was chosen on validation Dice and came out at 0.15 for every run. Test scenes were not read until that choice, and the seed list, had been written down. Reported intervals are night-clustered percentile intervals from 2,000 resamples.</p>
+  <p>A Swin-Tiny classifier (Liu et al., 2021), 384 px input, was trained on the same split to score scan presence. Seeds 43–46 are evaluated here on the test set at the threshold each seed selected on validation. The seed-42 classifier weights are not in the checkpoint store, so that one seed is omitted rather than replaced. A cascade blanks the segmentation wherever the classifier score falls below its validation threshold. Two thresholds are reported: Youden’s J, and the highest-specificity cutoff that keeps validation scan sensitivity at or above 0.98.</p>
 
   <h2>3. Results</h2>
-
-  <h3>3.1 Comparative performance</h3>
-  <p>The two architectures were trained under one protocol. Both receive the same ten channels, nine elevations of reflectivity and a validity mask, and both are optimised with the same focal-Tversky loss, the same patch sampler, and a 100-epoch schedule with patience 50. Seeds 42–46 change the initialisation and the sequence of random crops. The test split contains 161 positive scans and 147 negative scans, drawn from 21 migration nights and 19 quiet nights, and shares no night with training or validation. Every run selected the probability threshold 0.15 on validation. That cutoff was not touched again.</p>
-  <p>Table 1 and Figure 1 summarise the test set. Macro Dice, the unweighted mean of per-scene Dice on the positive scans, is 0.526 ± 0.005 for the Attention U-Net and 0.517 ± 0.009 for the U-Net. Pixel-pooled Dice on those scans is 0.654 ± 0.006 and 0.651 ± 0.003. The Attention U-Net recalls more of the plume (0.594 ± 0.033 against 0.569 ± 0.030) and scores higher on both boundary measures. The U-Net is the more precise of the two (0.553 ± 0.020 against 0.538 ± 0.021). None of these gaps is large beside the spread across seeds, and none is large beside the shift from validation to test reported below.</p>
-
+  <h3>3.1 Comparative segmentation skill</h3>
+  <p>Table 1 and Figure 1 give the test set. Macro Dice on the 161 positive scans is 0.526 ± 0.005 for the Attention U-Net and 0.517 ± 0.009 for the U-Net. Pooled Dice on the same pixels is 0.654 ± 0.006 and 0.651 ± 0.003. The Attention U-Net has higher recall (0.594 ± 0.033 against 0.569 ± 0.030) and higher boundary scores. The U-Net has higher precision (0.553 ± 0.020 against 0.538 ± 0.021). The gaps are smaller than the spread among U-Net seeds and much smaller than the range across years.</p>
   <figure>
-    <img src="assets/figures/fig1_seeds.png" alt="Bar chart of six test metrics for Attention U-Net and U-Net, with standard-deviation whiskers over five seeds.">
-    <figcaption><b>Figure 1.</b> Test scores, mean of five seeds. Whiskers are the sample standard deviation. Dice is the mean of per-scene scores on positive scans. Pooled Dice combines the pixels of those scans. NSD and fuzzy boundary F1 use a tolerance of 2 px.</figcaption>
+    <img src="assets/figures/fig1_seeds.png" alt="Test metrics for both architectures, mean and standard deviation over five seeds.">
+    <figcaption><b>Figure 1.</b> Test scores. Bars are the mean of five seeds and whiskers the sample standard deviation. Dice is the mean of per-scene scores on positive scans. NSD and fuzzy boundary F1 use a 2 px tolerance.</figcaption>
   </figure>
-
-  <p class="cap"><b>Table 1.</b> Test set, positive scans. Entries are mean ± standard deviation over five seeds.</p>
+  <p class="cap"><b>Table 1.</b> Test set, positive scans. Mean ± standard deviation, five seeds.</p>
   <table>
     <thead><tr><th>Model</th><th>Dice</th><th>Pooled Dice</th><th>Precision</th><th>Recall</th><th>NSD</th><th>Fuzzy BF1</th></tr></thead>
     <tbody>
@@ -54,21 +57,16 @@
   </table>
 
   <h3>3.2 Ablation of the attention gates</h3>
-  <p>The Attention U-Net is the U-Net with attention gates on the skip connections and nowhere else. The paired contrast is therefore an ablation of that module. It is evaluated on the same scans, at the same threshold, and the uncertainty is a night-clustered percentile interval (2,000 resamples of the 21 positive-test nights, seed 0). The pre-specified pair is seed 42.</p>
-  <p>On that pair the gates change Dice by +0.0037 (95% interval −0.0084 to +0.0170). IoU, precision and recall likewise have intervals that include zero. NSD changes by +0.0206 (0.0082 to 0.0319) and fuzzy boundary F1 by +0.0179 (0.0062 to 0.0290). Adding the gates does not produce a resolved gain in overlap. It does produce a resolved gain in the two boundary scores, for this one seed (Figure 2).</p>
-  <p>Repeating the ablation at the other four seeds shows that the overlap result is stable in sign and unstable in significance, and that the boundary result is not stable in sign (Figure 3, Table 2). Dice is positive at every seed. The interval excludes zero at three seeds and includes it at two, including the pre-specified seed. The mean of the five Dice differences is about +0.010. NSD is positive at four seeds and negative at seed 43, where the interval (−0.0133 to −0.0020) excludes zero in the plain U-Net’s favour. A module that helps the boundary at one seed and hurts it at another is not a module one would carry forward on the strength of a single paired test.</p>
-
+  <p>Because the two networks differ only by the gates, the paired contrast is an ablation of that module. On the pre-specified seed the gates change Dice by +0.0037, with a night-clustered interval of −0.0084 to +0.0170 (Figure 2). IoU, precision and recall also include zero. NSD changes by +0.0206 (0.0082 to 0.0319) and fuzzy boundary F1 by +0.0179 (0.0062 to 0.0290). Across the five seeds (Figure 3, Table 2) Dice stays positive, and its interval excludes zero for three seeds, not including seed 42. NSD changes sign: at seed 43 the difference is −0.0079 and the interval excludes zero in the plain U-Net’s favour.</p>
   <figure>
-    <img src="assets/figures/fig2_paired.png" alt="Forest plot of the seed-42 difference between Attention U-Net and U-Net.">
-    <figcaption><b>Figure 2.</b> Ablation of the attention gates at the pre-specified seed. Points are the mean scene-wise difference on the test positives. Bars are night-clustered 95% intervals. The dashed line is a difference of zero.</figcaption>
+    <img src="assets/figures/fig2_paired.png" alt="Forest plot of the seed-42 paired difference.">
+    <figcaption><b>Figure 2.</b> Ablation at seed 42. Points are mean scene-wise differences on the test positives. Bars are night-clustered 95% intervals.</figcaption>
   </figure>
-
   <figure>
-    <img src="assets/figures/fig3_robustness.png" alt="Forest plots of Dice and NSD differences at each of five seeds.">
-    <figcaption><b>Figure 3.</b> The same ablation at every matched seed. Dice stays positive. NSD changes sign at seed 43.</figcaption>
+    <img src="assets/figures/fig3_robustness.png" alt="Dice and NSD differences at each seed.">
+    <figcaption><b>Figure 3.</b> The same ablation at seeds 42–46. Dice does not change sign. NSD does.</figcaption>
   </figure>
-
-  <p class="cap"><b>Table 2.</b> Attention U-Net minus U-Net on the test positives. Intervals are night-clustered.</p>
+  <p class="cap"><b>Table 2.</b> Attention U-Net minus U-Net. Night-clustered 95% intervals, test positives.</p>
   <table>
     <thead><tr><th>Seed</th><th>Δ Dice</th><th>95% interval</th><th>Δ NSD</th><th>95% interval</th></tr></thead>
     <tbody>
@@ -80,48 +78,68 @@
     </tbody>
   </table>
 
-  <h3>3.3 Robustness</h3>
-  <p>Three checks ask whether the comparison depends on the seed, the year, or the tolerance at which a boundary is counted as correct. The threshold stays at 0.15 throughout.</p>
-  <p>Across years the two models move together (Figure 6). Both are weak in 2013 (14 positive test scans; mean Dice 0.37 and 0.33) and stronger in 2014 and 2019 (about 0.66 and 0.63, then 0.66 and 0.65). The Attention U-Net is ahead in six of the seven years. In 2018, on 16 scans, the U-Net is ahead by 0.002. The year-to-year range is nearly 0.3 Dice. The architecture gap inside any one year is a few hundredths at most. A model that has learned the plume does so in every year; the years themselves are not interchangeable.</p>
-  <p>The boundary score depends smoothly on tolerance, and the ordering at 2 px is not an artefact of that particular choice (Figure 5). For seed 42 the Attention U-Net lies above the U-Net from 1 px to 20 px. The night-clustered bands overlap, so the curves should be read as a small and persistent offset, not as a separation that is resolved at every distance. That reading agrees with Figure 3: the offset is real at some seeds and reversed at another.</p>
-  <p>Validation macro Dice lies between 0.553 and 0.571. Test macro Dice lies between 0.504 and 0.532. The mean drop is 0.041 for the Attention U-Net and 0.042 for the U-Net. The drop is a property of the split, not of the decoder. Selecting the architecture on validation would have preferred the Attention U-Net, and the test set agrees with the sign of that preference, but either validation number overstates the corresponding test number by about four points.</p>
-
+  <h3>3.3 Robustness to year and to boundary tolerance</h3>
+  <p>Figure 4 is not a leave-one-year-out test. Every year appears in training. It asks whether, inside the night-disjoint test set, one decoder is carried by a single season. The two curves move together. Both are weak in 2013 (14 positive scans; Dice 0.37 and 0.33) and stronger in 2014 and 2019. The Attention U-Net leads in six years. In 2018, 16 scans, the U-Net leads by 0.002. The year range is nearly 0.3 Dice. The architecture gap inside a year is a few hundredths.</p>
+  <p>Figure 5 asks whether the boundary result is an artefact of the 2 px tolerance. For seed 42 the Attention U-Net lies above the U-Net from 1 px to 20 px. The night-clustered bands overlap, so the offset is small relative to night-to-night variation. That is consistent with the sign change in Figure 3.</p>
+  <p>Validation macro Dice lies between 0.553 and 0.571. Test macro Dice lies between 0.504 and 0.532. The mean drop is 0.041 and 0.042 for the two families. The shift belongs to the split, not to the decoder.</p>
   <figure>
-    <img src="assets/figures/fig6_year.png" alt="Line chart of test macro Dice against year for both models, with a band for the seed standard deviation.">
-    <figcaption><b>Figure 4.</b> Test macro Dice by year. Lines are the mean of five seeds. The band is the seed standard deviation. Counts under the axis are positive test scans and are the same for both models.</figcaption>
+    <img src="assets/figures/fig6_year.png" alt="Test Dice by year for both models.">
+    <figcaption><b>Figure 4.</b> Test macro Dice by calendar year, mean of five seeds. The band is the seed standard deviation. Counts are positive test scans. Years are not held out of training.</figcaption>
+  </figure>
+  <figure>
+    <img src="assets/figures/fig4_nsd.png" alt="NSD against boundary tolerance.">
+    <figcaption><b>Figure 5.</b> Normalised surface distance against tolerance, seed 42. The band is a night-clustered 95% interval.</figcaption>
   </figure>
 
+  <h3>3.4 What the masks look like</h3>
+  <p>Figure 6 shows three test scans at the locked threshold, chosen as the highest mean Dice, the lowest mean Dice, and the quiet scan with the largest predicted area. On the clear plume of 22 July 2017 both decoders recover the body of the label and both add a fringe the label does not contain. On 14 July 2013 the label is a small fragment inside a much larger echo, and both models miss it. On the quiet scan of 10 July 2018 both models paint a coherent false plume in a region of organised reflectivity. The failure modes are shared. The gates do not create a different kind of error.</p>
   <figure>
-    <img src="assets/figures/fig4_nsd.png" alt="NSD against boundary tolerance for seed 42, with night-clustered bands.">
-    <figcaption><b>Figure 5.</b> Normalised surface distance against boundary tolerance, seed 42, test set. The band is a night-clustered 95% interval.</figcaption>
+    <img src="assets/figures/fig7_cases.png" alt="Reflectivity, label, and both predictions for three test scans.">
+    <figcaption><b>Figure 6.</b> Test cases, seed 42, threshold 0.15. Columns are the lowest-tilt reflectivity (dBZ), the label, the Attention U-Net, and the U-Net. Rows are the strongest agreement, the weakest positive scan, and the quiet scan with the largest false area. Each row is windowed on reflectivity above 5 dBZ together with the label and either prediction.</figcaption>
   </figure>
 
-  <h3>3.4 Detection, and the ceiling from a perfect presence gate</h3>
-  <p>A second reading of the same masks treats the problem as detection rather than overlap. A scan score is the area of the mask at the locked threshold. A night score is either the maximum or the mean of the scan scores inside that operational night. Figure 6 shows the test ROC and the precision–recall curve for seed 42. Scan ROC area is 0.83 for the Attention U-Net and 0.84 for the U-Net. The night maximum gives 0.81 and 0.82. The night mean gives 0.86 and 0.86. Average precision ranks the three scores in the same order. The two decoders are not separable. The horizontal line on the precision–recall panel is the prevalence of positive scans in this cohort. Negatives were subsampled to match the positives, so that average precision is not the rate an operator would see in the raw archive.</p>
-  <p>An oracle that knows which scans are quiet, and blanks them, leaves every positive scan unchanged. Macro Dice therefore cannot move. The measured change is 0.0000 for both seed-42 models. Global Dice, which charges false pixels on quiet scans against the score, rises by 0.051 (0.6047 to 0.6562 for the Attention U-Net, and 0.5955 to 0.6467 for the U-Net). Knowing presence is worth about five points of integrated overlap and nothing on the per-plume Dice. The false-alarm rate at a minimum area of 25 km² remains 0.56 ± 0.05 and 0.55 ± 0.05: a little over half of the quiet test scans still contain a false region of that size, in both families. Sensitivity retained at the same area is 0.94 and 0.93.</p>
-
+  <h3>3.5 Detection and the cascade</h3>
+  <p>Reading presence from segmented area, seed 42 has a test ROC area of 0.83 (Attention U-Net) and 0.84 (U-Net) at scan level, 0.81 and 0.82 when a night is scored by its maximum area, and 0.86 for both when a night is scored by its mean area (Figure 7). Average precision ranks the three definitions the same way. The horizontal line is the prevalence of positive scans in the balanced cohort, not the operational prevalence.</p>
+  <p>The Swin-Tiny classifiers, seeds 43–46, reach test ROC areas of 0.918, 0.906, 0.885 and 0.918, and average precisions of 0.927, 0.923, 0.865 and 0.920 (Table 3). Validation areas for the same four seeds are 0.948, 0.927, 0.919 and 0.932, matching the values stored at training, so the test scores are not a different calibration. The drop from validation to test is about 0.02 to 0.03 in ROC area. Seed 42 of the classifier could not be scored: its weights are absent.</p>
+  <p class="cap"><b>Table 3.</b> Swin-Tiny scan classifier. Thresholds were fixed on validation.</p>
+  <table>
+    <thead><tr><th>Seed</th><th>Val ROC</th><th>Test ROC</th><th>Test AP</th><th>Youden threshold</th></tr></thead>
+    <tbody>
+      <tr><td>43</td><td>0.948</td><td>0.918</td><td>0.927</td><td>0.10</td></tr>
+      <tr><td>44</td><td>0.927</td><td>0.906</td><td>0.923</td><td>0.05</td></tr>
+      <tr><td>45</td><td>0.919</td><td>0.885</td><td>0.865</td><td>0.55</td></tr>
+      <tr><td>46</td><td>0.932</td><td>0.918</td><td>0.920</td><td>0.15</td></tr>
+    </tbody>
+  </table>
+  <p>Gating the seed-42 segmenter with these classifiers does not reproduce a perfect presence oracle. At the Youden threshold the gate rejects 36 to 57 of the 161 positive test scans and macro Dice falls from 0.518 to between 0.376 and 0.438. At the high-sensitivity threshold (validation sensitivity at least 0.98) the gate rejects 8 to 21 positive scans. Macro Dice falls to between 0.478 and 0.509, and global Dice rises from 0.605 to between 0.622 and 0.635. The same pattern holds for the U-Net. A usable gate buys a few points of integrated overlap by discarding a minority of true plumes. It does not repair the plume that remains, and the Youden operating point discards too many of them.</p>
+  <p>An oracle that blanks every quiet scan and keeps every migration scan leaves macro Dice unchanged, at 0.5175 and 0.5138, and raises global Dice by 0.051, to 0.656 and 0.647. The best high-sensitivity classifier recovers roughly half of that global-Dice gain and gives back some of the macro Dice the oracle is not allowed to touch.</p>
   <figure>
-    <img src="assets/figures/fig5_presence.png" alt="ROC and precision-recall curves for scan area, night maximum and night mean.">
-    <figcaption><b>Figure 6.</b> Test-set detection from segmented area, seed 42. Solid lines are scans, dashed lines the night maximum, and dotted lines the night mean. AUC is the ROC area and AP is average precision. The diagonal is chance. The horizontal line is the positive prevalence of the scan cohort.</figcaption>
+    <img src="assets/figures/fig5_presence.png" alt="ROC and precision-recall from segmented area.">
+    <figcaption><b>Figure 7.</b> Detection from segmented area, seed 42, test set. Solid lines are scans, dashed lines the night maximum, dotted lines the night mean. The diagonal is chance. The horizontal line is the positive prevalence of this cohort.</figcaption>
   </figure>
 
   <h2>4. Discussion</h2>
+  <h3>4.1 Spatial context is already in both models</h3>
+  <p>On weather-radar echoes, the large gain is usually the step from a pointwise rule to a model that sees spatial structure (Lin et al., 2019; Yang et al., 2026). Both networks here already take that step. They receive the same nine elevations. The ablation therefore measures a second-order change: whether skip connections are gated. That change moves test Dice by about one point. The year-to-year range inside the test set is about thirty points, and the validation-to-test drop is about four points, in both families. Attention gates are not the dominant factor in this experiment. A paper written from seed 42 alone would have reported a resolved boundary improvement. The other four seeds withdraw it.</p>
+  <h3>4.2 The error is the contour, and it is shared</h3>
+  <p>The case plate shows why the Dice sits near one half while pooled Dice sits near two thirds. Large, coherent plumes are recovered by both models, with a fringe beyond the label. Small fragments inside ordinary weather echo are missed by both. Quiet scans that contain organised reflectivity are painted as plumes by both. Those three behaviours are the error budget. Gating the skips does not exchange one of them for another. The higher recall and lower precision of the Attention U-Net are a slightly wider contour, which can raise a boundary score without raising Dice. Seed 43 shows that this wider contour is not a reliable property of the module.</p>
+  <h3>4.3 A presence classifier can hide false nights, not redraw the plume</h3>
+  <p>The oracle separates the two jobs. Knowing which scans are quiet is worth 0.05 of global Dice and 0.00 of macro Dice. The Swin-Tiny model is a strong scan classifier on the test set, with ROC area about 0.89 to 0.92, but the operating point matters more than the area. Youden’s J, which is the usual reporting point, rejects a large fraction of true plumes and damages macro Dice. The high-sensitivity point specified before the test set was opened (sensitivity at least 0.98 on validation) is the one that belongs in a cascade: it returns part of the oracle’s global-Dice gain and costs less than two points of macro Dice for the milder seeds. Even then, the Dice of the plumes that are kept is the Dice of the segmenter. A cascade is not a substitute for a better contour.</p>
+  <h3>4.4 Limits</h3>
+  <p>The labels are a cleaned reflectivity product, not an independent biological survey, so the scores measure agreement with that product. One radar and seven seasons are not a geographic test. Figure 4 stratifies the test set by year; it does not retrain with a year removed. Night-level areas rest on about forty nights. Average precision is inflated relative to operations because quiet scans were subsampled to equal the migration scans. Seed 42 of the classifier is missing, so the cascade uses seeds 43–46. No channel ablation and no temporal encoder were trained on this frozen split; earlier runs of those ideas used a different assignment of nights and are not cited as results here.</p>
 
-  <h3>4.1 The decoder is not the dominant factor</h3>
-  <p>Studies that compare a pointwise classifier with a spatial network on weather-radar echoes usually find that spatial context is the largest single gain, and that extra inputs help the weaker architecture more than the stronger one. Both models in the present comparison are already spatial networks. They see the same nine elevations and the same validity mask. The only designed difference is whether the skip connections are gated. Under that control, the gates move test Dice by about one point, a shift smaller than the seed range of the U-Net and an order of magnitude smaller than the range across years. The result is not that attention is useless. It is that, once a U-Net is given the full elevation volume, gating the skips is a second-order change. Carrying the heavier decoder forward would have to be justified by the boundary scores, and those scores do not keep a consistent sign.</p>
+  <h2>5. Conclusion</h2>
+  <p>On a night-disjoint test set, an Attention U-Net and a U-Net segment spruce-budworm dispersal at macro Dice 0.526 ± 0.005 and 0.517 ± 0.009. The attention gates are not a resolved improvement in overlap. Their effect on the boundary changes sign across seeds. Both models succeed on coherent plumes, miss small fragments, and invent plumes on some quiet scans. A Swin-Tiny presence model separates those scans with test ROC area 0.89–0.92. Used as a high-sensitivity gate it improves global Dice by about 0.02 and lowers macro Dice by a smaller amount. Used at Youden’s J it discards too many true plumes. The remaining error is the outline of the plume, and it is shared by both decoders.</p>
 
-  <h3>4.2 Overlap and boundary answer different questions</h3>
-  <p>Dice treats a plume as a set of pixels and is dominated by the interior of large plumes. NSD and fuzzy boundary F1 treat it as a contour. The Attention U-Net’s higher recall and lower precision are the signature of a contour drawn slightly wider, which can raise a boundary score even when the overlap score barely moves. That is what seed 42 shows, and what three of the five seeds show for NSD. Seed 43 shows the opposite contour error, with an interval that excludes zero. A paper that reported only seed 42 would have concluded that the gates improve the boundary. The five-seed check withdraws that conclusion. The honest statement is that the gates reshuffle the contour error from seed to seed, and that the reshuffling is large enough to change the sign.</p>
-
-  <h3>4.3 Where the remaining error sits</h3>
-  <p>The oracle makes the location of the error quantitative. Blanking every quiet scan, which is the best a presence classifier can do for the segmenter, does not improve the Dice of the plumes that are present. It improves only the score that penalises false pixels on quiet nights, and only by about 0.05. The per-plume Dice near 0.52 is therefore not a detection failure. It is a failure to draw the plume at the right width and in the right place, and it is shared by both decoders. The false-alarm rate near 0.56 at 25 km² says the same thing from the quiet nights: both models still paint a substantial false region on more than half of them. A presence model can hide those regions. It cannot repair the plume.</p>
-  <p>The night-mean score detects migration nights more reliably than the night-maximum score (ROC area 0.86 against 0.81–0.82). The maximum is set by a single scan and is sensitive to one false blob. The mean asks whether the elevated area persists through the night. For an archive in which a migration night contains many scans, the mean is the more stable reduction. Neither reduction distinguishes the two decoders.</p>
-
-  <h3>4.4 What this experiment does not support</h3>
-  <p>The five Swin-Tiny classifiers have validation ROC areas of 0.941, 0.948, 0.927, 0.919 and 0.932. The seed-42 weights required to score those probabilities on the test set are not available, so Figure 6 does not include a classifier curve, and no claim is made about test-set detection from the Swin model. No cascade was evaluated. No ablation of the input channels, the loss, or a temporal encoder was run on this frozen split; earlier screening runs used a different assignment of nights and are not comparable to Table 1. The historical model trained on a scan-level split, in which most nights appeared in more than one of train, validation and test, is omitted for the same reason. A Dice lower than that model’s published figure is the expected result of removing the leakage, not evidence that the retrain failed.</p>
-  <p>Night-level ROC areas rest on about forty nights. They are reported as a ranking of score definitions, not as a precise operational rate. The intervals in Figures 2 and 3 resample nights, not scans, because scans inside a night are not independent. They remain intervals for one radar and seven seasons.</p>
-
-  <p>Figures were produced by <code>scripts/plot_publication.py</code> from the per-scene records of the frozen test evaluation. Intervals use 2,000 night-clustered draws and seed 0.</p>
+  <h2>References</h2>
+  <ol class="refs">
+    <li>Lin, T.-Y., Winner, K., Lenis, G., et al. (2019). MistNet: measuring historical bird migration using weather radar and convolutional neural networks. <em>Methods in Ecology and Evolution</em>, 10, 1906–1916.</li>
+    <li>Liu, Z., Lin, Y., Cao, Y., et al. (2021). Swin Transformer: hierarchical vision transformer using shifted windows. <em>Proceedings of the IEEE/CVF International Conference on Computer Vision</em>, 10012–10022.</li>
+    <li>Oktay, O., Schlemper, J., Folgoc, L. L., et al. (2018). Attention U-Net: learning where to look for the pancreas. <em>Medical Imaging with Deep Learning</em>.</li>
+    <li>Ronneberger, O., Fischer, P., and Brox, T. (2015). U-Net: convolutional networks for biomedical image segmentation. <em>Medical Image Computing and Computer-Assisted Intervention</em>, 234–241.</li>
+    <li>Yang, R., Wei, C., Pan, X., et al. (2026). Deep learning for non-precipitation radar echo identification. <em>EGUsphere</em>, preprint, doi:10.5194/egusphere-2026-590.</li>
+  </ol>
+  <p>Code: <code>scripts/plot_publication.py</code> and <code>scripts/publication_finish.py</code>. Segmenter checkpoints and the frozen manifest are in the private dataset <code>eyadgad/budworm-checkpoints</code>. The radar volumes are not redistributed with the code.</p>
 </article>
 </body>
 </html>
