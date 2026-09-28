@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Results — Spruce budworm radar segmentation</title>
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  body{background:var(--paper)}
+  .paper{max-width:44rem;margin:0 auto;padding:28px 22px 80px}
+  .paper h1{font-family:var(--serif);font-size:28px;font-weight:600;letter-spacing:0;margin:0 0 4px}
+  .kicker{font-family:var(--serif);font-style:italic;color:var(--muted);margin:0 0 22px}
+  .paper h2{font-family:var(--serif);font-size:20px;font-weight:600;margin:32px 0 8px;letter-spacing:0;text-transform:none}
+  .paper p{font-family:var(--serif);font-size:17px;line-height:1.55;color:var(--ink);max-width:none;margin:0 0 12px}
+  .paper figure{margin:18px 0 8px;background:var(--panel);border:1px solid var(--hair);padding:12px 12px 4px}
+  .paper figure img{width:100%;height:auto;display:block;background:#fff}
+  .paper figcaption{font-family:var(--serif);font-size:14px;line-height:1.45;color:var(--ink2);margin:8px 2px 6px}
+  .paper figcaption b{font-style:normal;color:var(--ink)}
+  .paper table{width:100%;border-collapse:collapse;font-family:var(--serif);font-size:14.5px;margin:8px 0 4px}
+  .paper th,.paper td{padding:5px 8px;text-align:right;border-bottom:1px solid var(--hair)}
+  .paper th{font-weight:600;border-top:1.5px solid var(--ink);border-bottom:1px solid var(--ink)}
+  .paper td:first-child,.paper th:first-child{text-align:left}
+  .paper tr:last-child td{border-bottom:1.5px solid var(--ink)}
+  .cap{font-family:var(--serif);font-size:14px;color:var(--ink2);margin:4px 0 16px}
+  .back{font-family:var(--sans);font-size:13px;margin-bottom:18px}
+</style>
+</head>
+<body>
+<article class="paper">
+  <p class="back"><a href="./#/overview">Evaluation dashboard</a></p>
+  <h1>Results</h1>
+  <p class="kicker">Frozen night-split retrain. Test scored once, at a threshold locked on validation.</p>
+
+  <h2>3.1 Segmentation</h2>
+  <p>Both families were trained on the same frozen night split (manifest <code>170c442d…</code>), with the same ten channels, focal-Tversky loss, patch sampling and 100-epoch schedule. The designed difference is the decoder. Seeds 42–46 change only the initialisation and the random crops. The test set holds 161 positive and 147 negative scans and shares no night with training or validation. Every run had already selected a probability threshold of 0.15 on validation; that cutoff was not refit.</p>
+  <p>Macro Dice on the positive test scans is 0.526 ± 0.005 for the Attention U-Net and 0.517 ± 0.009 for the U-Net (mean ± standard deviation over five seeds). Pixel-pooled Dice on the same scans is 0.654 ± 0.006 and 0.651 ± 0.003. The gap is about one macro-Dice point. It is smaller than the range among the five U-Net seeds, and much smaller than the drop from validation to test.</p>
+
+  <figure>
+    <img src="assets/figures/fig1_seeds.png" alt="Grouped bars of test Dice, pooled Dice, precision, recall, NSD and fuzzy boundary F1, with standard-deviation whiskers, for Attention U-Net and U-Net.">
+    <figcaption><b>Figure 1.</b> Test performance, mean of five seeds. Whiskers are the sample standard deviation. Dice is the mean of per-scene scores on positive scans. Pooled Dice pools those scans’ pixels. NSD and fuzzy boundary F1 use a tolerance of 2 px.</figcaption>
+  </figure>
+
+  <p class="cap"><b>Table 1.</b> Test set, positive scans. Mean ± standard deviation, five seeds.</p>
+  <table>
+    <thead><tr><th>Family</th><th>Dice</th><th>Pooled Dice</th><th>Precision</th><th>Recall</th><th>NSD</th><th>Fuzzy BF1</th></tr></thead>
+    <tbody>
+      <tr><td>Attention U-Net</td><td>0.526 ± 0.005</td><td>0.654 ± 0.006</td><td>0.538 ± 0.021</td><td>0.594 ± 0.033</td><td>0.323 ± 0.008</td><td>0.334 ± 0.006</td></tr>
+      <tr><td>U-Net</td><td>0.517 ± 0.009</td><td>0.651 ± 0.003</td><td>0.553 ± 0.020</td><td>0.569 ± 0.030</td><td>0.305 ± 0.019</td><td>0.318 ± 0.017</td></tr>
+    </tbody>
+  </table>
+
+  <h2>3.2 Paired comparison</h2>
+  <p>The contrast named before the test set was opened is seed 42 against seed 42, on the same 161 positive scans. Nights are the resampling unit: 2,000 draws, 21 nights, percentile interval. Attention U-Net minus U-Net is +0.0037 Dice, with interval −0.0084 to +0.0170. The interval includes zero. IoU, precision and recall likewise include zero. Normalised surface distance does not: +0.0206 (0.0082 to 0.0319). Fuzzy boundary F1 does not either: +0.0179 (0.0062 to 0.0290). On the overlap metrics, the pre-specified seed does not establish a difference. On the boundary metrics, it does.</p>
+
+  <figure>
+    <img src="assets/figures/fig2_paired.png" alt="Forest plot of the seed-42 difference between Attention U-Net and U-Net for six test metrics, with night-clustered intervals.">
+    <figcaption><b>Figure 2.</b> Pre-specified paired test, seed 42, test set. Points are the mean scene-wise difference. Intervals are night-clustered 95% percentile intervals. The dashed line is no difference.</figcaption>
+  </figure>
+
+  <h2>3.3 Robustness</h2>
+  <p>The same paired contrast was repeated at each matched seed, without retuning the threshold. Dice remains positive at all five seeds. Its interval excludes zero at seeds 44, 45 and 46, and includes zero at seeds 42 and 43. The boundary advantage does not survive the repetition. At seed 43 the NSD difference is −0.0079, and the interval (−0.0133 to −0.0020) excludes zero in the U-Net’s favour. At seed 46 the NSD interval includes zero.</p>
+
+  <figure>
+    <img src="assets/figures/fig3_robustness.png" alt="Forest plots of the Dice and NSD differences at each of the five matched seeds.">
+    <figcaption><b>Figure 3.</b> Robustness of the paired contrast across initialisation seeds. Same estimator and night-clustered interval as Figure 2.</figcaption>
+  </figure>
+
+  <p>Figure 4 asks whether the boundary result depends on the 2 px tolerance at which NSD is reported. For the pre-specified seed the Attention U-Net curve lies above the U-Net curve from 1 px through 20 px. The night-clustered bands overlap, so the separation at a single tolerance should not be read as a gap that is resolved at every distance.</p>
+
+  <figure>
+    <img src="assets/figures/fig4_nsd.png" alt="NSD against boundary tolerance in pixels, with shaded night-clustered bands for seed 42 and faint lines for the other seeds.">
+    <figcaption><b>Figure 4.</b> Normalised surface distance against boundary tolerance on the test set, seed 42. The band is a night-clustered 95% percentile interval.</figcaption>
+  </figure>
+
+  <p>A perfect presence gate, which blanks every quiet scan and leaves positive scans untouched, cannot change macro Dice. The measured change is 0.0000 for both seed-42 models (0.5175 and 0.5138). Global Dice, which counts false pixels on quiet scans, rises by 0.0514 for the Attention U-Net (0.6047 to 0.6562) and by 0.0512 for the U-Net (0.5955 to 0.6467). The overlap score on positive scans is invariant to knowing which scans are quiet. The integrated score is not.</p>
+  <p>Validation macro Dice lies between 0.553 and 0.571. Test macro Dice lies between 0.504 and 0.532. The mean drop is 0.041 for the Attention U-Net and 0.042 for the U-Net. The architecture gap is small beside that shift, and the shift has the same size in both families.</p>
+
+  <h2>3.4 Presence</h2>
+  <p>Scan presence is read from the segmented area at the locked pixel threshold. A night score is either the maximum or the mean of those areas inside the night. Figure 5 shows the test ROC and the precision–recall curve for seed 42. Scan ROC area is 0.83 and 0.84. Night-maximum area gives 0.81 and 0.82. Night-mean area gives 0.86 and 0.86. Average precision follows the same order. The two decoders are not separable on these curves. The horizontal line on the precision–recall panel is the prevalence of positive scans in this cohort; negatives were subsampled, so that average precision is not an operational rate. The protocol also calls for the same curves on the Swin-Tiny scan probability. Those curves are absent: the seed-42 classifier weights are not on disk and not on the checkpoint mirror.</p>
+
+  <figure>
+    <img src="assets/figures/fig5_presence.png" alt="ROC and precision-recall curves for scan area, night maximum and night mean, for both seed-42 models.">
+    <figcaption><b>Figure 5.</b> Test-set detection from segmented area, seed 42. Solid lines are scans, dashed lines are the night maximum, and dotted lines are the night mean. AUC is the ROC area; AP is average precision. The dashed diagonal is chance. The horizontal line is the positive prevalence of the scan cohort.</figcaption>
+  </figure>
+
+  <h2>3.5 What is not estimated</h2>
+  <p>The five Swin-Tiny seeds have validation ROC areas 0.941, 0.948, 0.927, 0.919 and 0.932. They were not scored on the test set. The cascade was not run. Development runs on the earlier, unbalanced split are omitted, because their nights are not these nights. The historical dashboard model is omitted for the same reason: it was trained where most nights appeared in more than one split. A lower Dice than that model’s published figure is the expected consequence of removing the leakage.</p>
+  <p>Intervals are night-clustered percentile intervals, 2,000 draws, seed 0 (<code>src.stats</code>). Figures were written by <code>scripts/plot_publication.py</code> from the per-scene records of <code>scripts/export_variant_comparison.py</code>.</p>
+</article>
+</body>
+</html>
