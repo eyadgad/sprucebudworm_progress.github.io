@@ -111,7 +111,7 @@ export async function render(mount) {
     a plain U-Net with Focal loss on six channels including an ETA intensity channel, over 341 scans from
     2013–2016, split by night, with a 0.5 threshold. This dashboard covers the current pipeline:
     ${MODEL_NAME[sel.model]}, ${sel.n_elev} reflectivity elevations, no ETA channel (it does not exist in
-    the local files), ${int(ds.n_scenes)} scenes from 2013–2019, stratified by year, threshold
+    the local files), ${int(ds.n_scenes)} scenes from 2013–2019, night-disjoint split, threshold
     ${sel.threshold}. <b>The two sets of numbers are not comparable</b> and are never mixed here. The
     report's structure is used as the baseline this dashboard extends, and one of its findings —
     performance rising with target area — is independently reproduced in

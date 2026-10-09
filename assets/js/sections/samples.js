@@ -30,18 +30,20 @@ const REFL_CSS = `linear-gradient(90deg,
 
 export async function render(mount, query) {
   const sm = await load('samples');
-  const assets = validateSampleAssets(sm.sample_assets);
   const all = sm.samples;
+  let assets = null;
+  try {
+    if (sm.sample_assets) assets = validateSampleAssets(sm.sample_assets);
+  } catch (err) {
+    assets = null;
+  }
   // Splits whose pixel layers were exported by stage `images`. Scenes outside
   // these splits still list their metrics but open without imagery.
-  const IMG_SPLITS = new Set(sm.image_splits || ['test', 'val']);
-  const withImg = new Set(all.filter(s => IMG_SPLITS.has(s.split)).map(s => s.ts));
+  const IMG_SPLITS = new Set(sm.image_splits || []);
+  const withImg = assets ? new Set(all.filter(s => IMG_SPLITS.has(s.split)).map(s => s.ts)) : new Set();
   const YEARS = [...new Set(all.map(s => s.year))].sort();
-  // The best four models, each scored per scene in `s.models[key]` ({dice} for
-  // scenes with a swarm, {bg_fp_rate} for swarm-free scenes). Their probability
-  // maps share one scene pack in the order declared by sample_assets.model_order.
   const MLIST = sm.models || [{key: 'sel', disp: sm.model_name_sel || 'Attention UNet'}];
-  if (MLIST.map(m => m.key).join('\0') !== assets.model_order.join('\0')) {
+  if (assets && MLIST.map(m => m.key).join('\0') !== assets.model_order.join('\0')) {
     throw new Error('samples.json models do not match sample_assets.model_order.');
   }
   const MKEY0 = MLIST[0].key;
@@ -56,8 +58,9 @@ export async function render(mount, query) {
   mount.innerHTML = `
   <h1>Sample explorer</h1>
   <p class="lede">Every evaluated scene. Open one to inspect the layers and move the threshold.</p>
-  <p class="small">Previews are ${assets.width}x${assets.height}px (block-max downsampled from 960), so the interactive readout
-  runs a few hundredths of Dice optimistic; the side-panel and full-section numbers are 960×960.</p>
+  <p class="small">${assets
+    ? `Previews are ${assets.width}x${assets.height}px (block-max downsampled from 960).`
+    : 'Per-scene metrics for the frozen night-disjoint split. Probability-map packs are rebuilt after GPU inference; open a row for numbers without imagery.'}</p>
 
   <div class="ctrls" id="ctrls"></div>
   <div class="chips" id="presets"></div>

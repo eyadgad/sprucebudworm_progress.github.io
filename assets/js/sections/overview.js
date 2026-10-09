@@ -64,7 +64,7 @@ export async function render(mount) {
     <div><div class="l">Scenes with a swarm</div><div class="d">${int(totalPos)}</div></div>
     <div><div class="l">Swarm-free scenes</div><div class="d">${int(totalNeg)}</div></div>
     <div><div class="l">Years</div><div class="d">2013 to 2019, July and August</div></div>
-    <div><div class="l">Split</div><div class="d">Stratified by year, 70 / 20 / 10</div></div>
+    <div><div class="l">Split</div><div class="d">${esc(ds.split_summary?.mode || 'night')} disjoint, 70 / 20 / 10</div></div>
   </div>
 
   <h2>Strengths, weaknesses and cautions</h2>
@@ -104,7 +104,8 @@ export async function render(mount) {
       value: r.dice, hl: r.selected,
       c: r.selected ? 'var(--best)' : 'var(--accent2)',
     })),
-    lo: 0.60, hi: 0.645, labelW: 210, aria: 'Test Dice for the six best runs',
+    lo: Math.max(0, Math.min(...runners.map(r => r.dice)) - 0.04),
+    hi: Math.min(1, Math.max(...runners.map(r => r.dice)) + 0.02), labelW: 210, aria: 'Test Dice for the six best runs',
     xlabel: 'test Dice (macro) — higher is better',
     legend: [{c: 'var(--best)', label: 'Selected configuration'}, {c: 'var(--accent2)', label: 'Other runs'}],
   });
