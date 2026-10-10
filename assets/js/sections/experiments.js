@@ -190,7 +190,7 @@ export async function render(mount) {
     const pts = f.filter(r => r.precision != null && r.recall != null).map(r => ({
       x:r.precision, y:r.recall, c:MODEL_C[r.model] || 'var(--accent2)',
       r:r.selected ? 7 : 3.6, o:r.selected ? 1 : .62,
-      t:`${r.name} — precision ${r.precision}, recall ${r.recall}, Dice ${r.dice}`,
+      t:`${r.name} — precision ${fmtOr(r.precision,'precision')}, recall ${fmtOr(r.recall,'recall')}, Dice ${fmtOr(r.dice,'dice')}`,
     }));
     mount.querySelector('#c-pr').innerHTML = scatter({
       points: pts, xlo:.40, xhi:.70, ylo:.40, yhi:.80,

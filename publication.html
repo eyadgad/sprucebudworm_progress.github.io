@@ -86,7 +86,7 @@
   </table>
 
   <h3>3.3 Robustness to year and to boundary tolerance</h3>
-  <p>Figure 5 is not a leave-one-year-out test. Every year appears in training. It asks whether, inside the night-disjoint test set, one decoder is carried by a single season. The two curves move together. Both are weak in 2013 (14 positive scans; Dice 0.37 and 0.33) and stronger in 2014 and 2019. The Attention U-Net leads in six years. In 2018, 16 scans, the U-Net leads by 0.002. The year range is nearly 0.3 Dice. The architecture gap inside a year is a few hundredths.</p>
+  <p>Figure 5 is not a leave-one-year-out test. Every year appears in training. It asks whether, inside the night-disjoint test set, one decoder is carried by a single season. The two curves move together. Both are weak in 2013 (14 positive scans; Dice 0.37 and 0.32) and stronger in 2014 and 2019. The Attention U-Net leads in six years. In 2018, 16 scans, the U-Net leads by 0.003. The year range is nearly 0.3 Dice. The architecture gap inside a year is a few hundredths.</p>
   <p>Figure 6 asks whether the boundary result is an artefact of the 2 px tolerance. For seed 42 the Attention U-Net lies above the U-Net from 1 px to 20 px. The night-clustered bands overlap, so the offset is small relative to night-to-night variation. That is consistent with the sign change in Figure 4.</p>
   <p>Validation macro Dice lies between 0.553 and 0.571. Test macro Dice lies between 0.504 and 0.532. The mean drop is 0.041 and 0.042 for the two families. The shift belongs to the split, not to the decoder.</p>
   <figure>
@@ -133,9 +133,9 @@
   <table>
     <thead><tr><th>Run</th><th>Threshold</th><th>Val Dice</th><th>Test Dice</th><th>Δ Dice</th><th>Δ NSD</th><th>Quiet ≥ 25 km²</th></tr></thead>
     <tbody>
-      <tr><td>S0 Attention U-Net</td><td>0.15</td><td>0.564</td><td>0.518</td><td>—</td><td>—</td><td>0.50</td></tr>
-      <tr><td>S1 night-balanced</td><td>0.15</td><td>0.564</td><td>0.526</td><td>+0.008 (−0.002, +0.021)</td><td>+0.009 (−0.003, +0.025)</td><td>0.55</td></tr>
-      <tr><td>S2 + presence head</td><td>0.15</td><td>0.553</td><td>0.495</td><td><b>−0.023 (−0.043, −0.005)</b></td><td><b>−0.037 (−0.054, −0.019)</b></td><td>0.48</td></tr>
+      <tr><td>S0 Attention U-Net</td><td>0.15</td><td>0.563</td><td>0.518</td><td>—</td><td>—</td><td>0.50</td></tr>
+      <tr><td>S1 night-balanced</td><td>0.15</td><td>0.563</td><td>0.526</td><td>+0.008 (−0.002, +0.021)</td><td>+0.009 (−0.002, +0.025)</td><td>0.55</td></tr>
+      <tr><td>S2 + presence head</td><td>0.15</td><td>0.553</td><td>0.495</td><td><b>−0.023 (−0.043, −0.005)</b></td><td><b>−0.037 (−0.054, −0.018)</b></td><td>0.48</td></tr>
       <tr><td>S3a + temporal stack</td><td>0.20</td><td>0.566</td><td>0.519</td><td>+0.002 (−0.019, +0.025)</td><td><b>+0.038 (+0.017, +0.065)</b></td><td>0.86</td></tr>
       <tr><td>S3b + L-TAE</td><td>0.15</td><td>0.542</td><td>0.498</td><td><b>−0.020 (−0.041, −0.002)</b></td><td><b>−0.041 (−0.063, −0.019)</b></td><td>0.56</td></tr>
       <tr><td>Gated Attention U-Net</td><td>0.15, gate 10⁻⁶</td><td>0.519</td><td>0.440</td><td><b>−0.077 (−0.130, −0.040)</b></td><td><b>−0.038 (−0.067, −0.014)</b></td><td>0.16</td></tr>
