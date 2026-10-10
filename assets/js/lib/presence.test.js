@@ -42,39 +42,37 @@ const analysis = (records = false) => ({
   ]} : {}),
 });
 const cutoff = {cells: 7, km2: 1.75, criterion: 'maximum_youden_j_on_validation'};
-const inSample = {cells: 9, km2: 2.25, criterion: 'maximum_youden_j_in_sample'};
-const bothCuts = {selected_cutoff: cutoff, combined_cutoff: inSample};
+const highSens = {cutoff: 3, criterion: 'max_specificity_subject_to_sensitivity_ge_0.98'};
+const cuts = {selected_cutoff: cutoff, high_sensitivity_cutoff: highSens};
 const model = {
   key: 'm1', name: 'model-one', display_name: 'Model one', pixel_probability_threshold: .15,
-  scan: {...bothCuts,
-    splits: {validation: analysis(), test: analysis(), combined: analysis()}},
+  scan: {...cuts, splits: {validation: analysis(), test: analysis()}},
   night: {
-    max: {...bothCuts, splits: {validation: analysis(true), test: analysis(true),
-      combined: analysis(true)}},
-    mean: {...bothCuts, splits: {validation: analysis(true), test: analysis(true),
-      combined: analysis(true)}},
+    max: {...cuts, splits: {validation: analysis(true), test: analysis(true)}},
+    mean: {...cuts, splits: {validation: analysis(true), test: analysis(true)}},
   },
 };
 const doc = {
-  schema_version: 1,
-  selected_model_key: 'm1', defaults: {model_key: 'm1', split: 'combined', night_aggregation: 'max',
+  schema_version: 2,
+  selected_model_key: 'm1', defaults: {model_key: 'm1', split: 'test', night_aggregation: 'max',
     scan_operating_point: 'any_cell', night_operating_point: 'validation_selected'},
   definitions: {pixel_size_m: 500, pixel_area_km2: .25},
   cohort: {
     training_exposure: {
-      val: {nights_total: 2, nights_seen_in_train: 1},
-      test: {nights_total: 2, nights_seen_in_train: 1},
-      combined: {nights_total: 3, nights_seen_in_train: 2},
+      val: {nights_total: 2, nights_seen_in_train: 0},
+      test: {nights_total: 2, nights_seen_in_train: 0},
     },
-    night_coverage: {combined: {nights_total: 3}},
-    night_overlap: {validation_test: 1},
+    night_coverage: {val: {partial_nights: 0}, test: {partial_nights: 0}},
+    night_overlap: {validation_test: 0},
   },
-  caveats: ['scene split'], models: [model],
+  caveats: ['night-disjoint split'], models: [model],
 };
 
 console.log('presence helpers');
 ok('valid schema is accepted', validatePresence(doc) === doc);
-ok('unsupported schema is rejected', throws(() => validatePresence({...doc, schema_version: 2})));
+ok('unsupported schema is rejected', throws(() => validatePresence({...doc, schema_version: 1})));
+ok('a pooled default split is rejected: cut-offs are fitted on validation only',
+  throws(() => validatePresence({...doc, defaults: {...doc.defaults, split: 'combined'}})));
 ok('unsupported defaults are rejected',
   throws(() => validatePresence({...doc, defaults: {...doc.defaults, scan_operating_point: 'test-tuned'}})));
 ok('selected model must be explicit and valid',
@@ -84,7 +82,7 @@ ok('duplicate model keys are rejected', throws(() => validatePresence({...doc, m
 ok('cohort uses the val key consumed by the Validation control',
   validatePresence(doc).cohort.training_exposure.val.nights_total === 2 &&
   throws(() => validatePresence({...doc, cohort: {
-    ...doc.cohort, training_exposure: {validation: {}, test: {}, combined: {}},
+    ...doc.cohort, training_exposure: {validation: {}, test: {}},
   }})));
 ok('broken class counts are rejected', throws(() => validatePresence({...doc, models: [{...model,
   scan: {...model.scan, splits: {...model.scan.splits, test: {...analysis(), n_positive: 3}}}}]})));
@@ -107,12 +105,10 @@ const groups = distributionGroups(analysis());
 ok('distribution adapter uses exported 5th/95th percentiles',
   groups[0].lo === 0 && groups[0].hi === 3 && groups[1].med === 15);
 ok('cell area conversion stays in real units', cellsToKm2(doc, 7) === 1.75);
-ok('pooled cohort is exposed to the page',
-  scanAnalysis(model, 'combined') === model.scan.splits.combined &&
-  nightAnalysis(model, 'mean', 'combined') === model.night.mean.splits.combined);
-ok('pooled cohort must carry its own in-sample cutoff',
-  model.scan.combined_cutoff.criterion === 'maximum_youden_j_in_sample' &&
-  throws(() => { const d = structuredClone(doc); delete d.models[0].scan.combined_cutoff;
+ok('the validation-selected cutoff is required',
+  throws(() => { const d = structuredClone(doc); delete d.models[0].scan.selected_cutoff;
+    return validatePresence(d); }) &&
+  throws(() => { const d = structuredClone(doc); delete d.models[0].night.mean.selected_cutoff;
     return validatePresence(d); }));
 ok('custom cutoff re-scores the shipped distributions exactly',
   (() => {
@@ -136,10 +132,10 @@ ok('a custom cutoff needs the per-item scores',
 ok('score ceiling bounds the custom control', scoreCeiling(analysis()) === 20);
 ok('distributions must match the class counts',
   throws(() => { const d = structuredClone(doc);
-    d.models[0].scan.splits.combined.distributions.positive = [1];
+    d.models[0].scan.splits.test.distributions.positive = [1];
     return validatePresence(d); }));
-ok('a missing pooled analysis is rejected',
-  throws(() => { const d = structuredClone(doc); delete d.models[0].night.max.splits.combined;
+ok('a missing test analysis is rejected',
+  throws(() => { const d = structuredClone(doc); delete d.models[0].night.max.splits.test;
     return validatePresence(d); }));
 ok('all four outcomes are labelled',
   outcome(true, 7, 7) === 'TP' && outcome(true, 6, 7) === 'FN' &&

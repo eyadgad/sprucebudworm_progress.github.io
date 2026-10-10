@@ -12,6 +12,9 @@ import { DataTable } from '../lib/table.js';
 
 export async function render(mount) {
   const sm = await load('samples');
+  const nameSel = sm.models?.[0]?.disp || sm.selected;
+  const nameCmp = sm.models?.[1]?.disp || sm.compare;
+  const FAR_CELLS = 100;   // 25 km² at 0.25 km² per 500 m cell, the frozen false-alarm area
 
   mount.innerHTML = `
   <h1>Error and failure analysis</h1>
@@ -133,6 +136,7 @@ export async function render(mount) {
     if (NEG.length) {
       const rates = NEG.map(s => s.bg_fp_rate).filter(v => v != null);
       const worst = [...NEG].sort((a, b) => b.bg_fp_rate - a.bg_fp_rate).slice(0, 8);
+      const farHits = NEG.filter(s => (s.pred_area ?? 0) >= FAR_CELLS).length;
       mount.querySelector('#fa').innerHTML = `
         <div class="cards">
           ${card('Swarm-free scenes', NEG.length, `${split} split`)}
@@ -143,15 +147,17 @@ export async function render(mount) {
         </div>
         <div class="tscroll"><table>
           <thead><tr><th>Scene</th><th>Year</th><th>FP rate</th><th>Predicted px</th>
-          <th>Max probability</th><th>UNet++ FP rate</th></tr></thead><tbody>
+          <th>Max probability</th><th>${esc(nameCmp)} FP rate</th></tr></thead><tbody>
           ${worst.map(s => `<tr><td><code>${s.ts}</code></td><td class="n">${s.year}</td>
             <td class="n">${fmtOr(s.bg_fp_rate, 'bg_fp_rate')}</td><td class="n">${int(s.pred_area)}</td>
             <td class="n">${fmtOr(s.prob_max, 'dice')}</td>
             <td class="n">${fmtOr(s.bg_fp_rate_cmp, 'bg_fp_rate')}</td></tr>`).join('')}
         </tbody></table></div>
         <p class="small">Even the worst swarm-free scene puts under
-        ${pct(Math.max(...rates), 1)} of its pixels into the swarm class. False alarms on empty skies are
-        not a significant failure mode for this model.</p>`;
+        ${pct(Math.max(...rates), 1)} of its pixels into the swarm class, but
+        <b>${farHits} of ${NEG.length}</b> swarm-free scenes (${pct(farHits / NEG.length, 0)}) contain at least
+        25 km² of predicted swarm. False alarms are small in pixel terms and common in scene terms: a
+        coherent false plume in organised reflectivity is one of the model's main failure modes.</p>`;
     } else {
       mount.querySelector('#fa').innerHTML = `<div class="state"><div class="big">No swarm-free scenes in this split</div></div>`;
     }
@@ -162,8 +168,8 @@ export async function render(mount) {
     const disagree = both.filter(s => Math.abs(s.dice - s.dice_cmp) > 0.2).length;
     const rhoM = spearman(both.map(s => s.dice), both.map(s => s.dice_cmp));
     mount.querySelector('#cmptable').innerHTML = `
-      <p class="small">Scored on the same ${both.length} scenes, the selected Attention UNet and the
-      UNet++ comparison agree at rank correlation <b>${rhoM == null ? '—' : rhoM.toFixed(3)}</b>: only
+      <p class="small">Scored on the same ${both.length} scenes, the selected ${esc(nameSel)} and the
+      ${esc(nameCmp)} comparison agree at rank correlation <b>${rhoM == null ? '—' : rhoM.toFixed(3)}</b>: only
       <b>${disagree}</b> scenes differ by more than 0.2 Dice, and <b>${bothZero}</b> score zero for both.</p>`;
 
     /* ---- worst table ---- */
@@ -177,7 +183,7 @@ export async function render(mount) {
         {key: 'gt_area', label: 'Truth px', fmt: v => int(v)},
         {key: 'pred_area', label: 'Pred px', fmt: v => int(v)},
         {key: 'prob_max', label: 'Max prob', fmt: v => fmtOr(v, 'dice')},
-        {key: 'dice_cmp', label: 'UNet++ Dice', fmt: v => fmtOr(v, 'dice')},
+        {key: 'dice_cmp', label: `${nameCmp} Dice`, fmt: v => fmtOr(v, 'dice')},
       ],
       rows: [...S].sort((a, b) => a.dice - b.dice).slice(0, 40),
       sort: 'dice', dir: 1, pageSize: 12,

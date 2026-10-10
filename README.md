@@ -25,36 +25,43 @@ Opening `index.html` from the filesystem will **not** work: ES modules and
 
 ## Rebuilding the data
 
-Everything under `data/` is generated. From the project root:
+Everything under `data/` is generated from the frozen night-disjoint split
+(`artifacts_night/`, manifest SHA-256 `170c442d…`) and the runs in
+`outputs/night_split/`, `outputs/night_cascade/` and `outputs/night_gated/`.
+The exporter refuses to run if the manifest does not match its pinned hash,
+and skips any run trained on a superseded split. From the project root:
 
 ```bash
-.venv\Scripts\python.exe scripts\export_dashboard_data.py --only experiments,dataset
-.venv\Scripts\python.exe scripts\export_dashboard_data.py --only predict
-.venv\Scripts\python.exe scripts\export_dashboard_data.py --only presence
-.venv\Scripts\python.exe scripts\export_dashboard_data.py --only packs --data-root ..\Data --site-dir ..\sprucebudworm_progress.github.io
+.venv\Scripts\python.exe scripts\export_dashboard_data.py --only experiments,dataset,predict,images,presence,packs
+.venv\Scripts\python.exe scripts\plot_publication.py
+.venv\Scripts\python.exe scripts\publication_finish.py
 ```
 
 | Stage | Needs GPU | Time | Produces |
 |---|---|---|---|
 | `experiments` | no | seconds | `experiments.json`, `histories.json` |
 | `dataset` | no | ~90 s | `dataset.json`, `summary.json` |
-| `predict` | yes | ~40 min | `samples.json`, `threshold.json` |
+| `predict` (+ `images`) | yes | ~25–60 min | `samples.json`, `threshold.json`, PNG layers for `packs` |
 | `presence` | no | seconds | `presence.json` with scan/night detection metrics, ROC curves and exact night records |
-| `packs` | no | ~2 min | one `.sbw.gz` pack and one `.webp` thumbnail per test/validation scene |
+| `packs` | no | ~2 min | one `.sbw.gz` pack and one `.webp` thumbnail per validation/test scene; deletes packs for scenes no longer listed |
 
-Verify a rebuild with:
+Delete the `data/samples/*.png` layers after `test_packed_samples.py` passes;
+they are intermediates and are not deployed. Verify a rebuild with:
 
 ```bash
 .venv\Scripts\python.exe scripts\test_dashboard.py
-node assets/js/lib/metrics.test.js
-node assets/js/lib/presence.test.js
-node assets/js/lib/charts.test.js
-node assets/js/lib/scan-coverage.test.js
+.venv\Scripts\python.exe scripts\test_presence.py
+.venv\Scripts\python.exe scripts\test_packed_samples.py --skip-legacy
+.venv\Scripts\python.exe scripts\era_guard.py
+node --experimental-default-type=module assets/js/lib/metrics.test.js   # and the other *.test.js
 ```
 
-The Python suite cross-checks every generated file against
-`outputs/experiments/*_result.json` and asserts per-scene arithmetic. The Node
-suites test the shared statistics helpers and the exact scan-coverage chart.
+The Python suites cross-check every generated file against the frozen
+`*_final_result.json` test records and `outputs/night_split/comparison/`,
+and assert per-scene arithmetic. The Node suites test the shared statistics
+helpers, the pack decoder and the exact scan-coverage chart. Bump
+`assets/js/build.txt` on every deploy so returning visitors load the new
+modules and data.
 
 ---
 
@@ -92,7 +99,7 @@ data/samples/*.webp            generated lazy grid thumbnails
 |---|---|---|
 | 01 | `#/overview` | What was built, how well it works, what to distrust |
 | 02 | `#/data` | Exact scan assignments, date/time coverage, target sizes, split integrity |
-| 03 | `#/experiments` | All 57 runs, and why one was selected |
+| 03 | `#/experiments` | Every frozen-split segmenter: the pre-specified five-seed pair, the ablation and the single-seed decoders |
 | 04 | `#/training` | Convergence, over/under-fitting, stability |
 | 05 | `#/aggregate` | Validation vs test metrics, confusion matrices, intervals |
 | 06 | `#/presence` | Scan-level SBW detection and night-level migration detection |
@@ -109,14 +116,17 @@ data/samples/*.webp            generated lazy grid thumbnails
 
 | File | Size | Contents |
 |---|---|---|
-| `experiments.json` | 43 KB | Config, metrics, best epoch, timing for all 57 runs |
-| `histories.json` | 248 KB | Per-epoch loss / LR / validation metrics per run |
-| `dataset.json` | 415 KB | 2,052 scene records, target areas under 3 label definitions, leakage audit |
-| `summary.json` | <1 KB | Headline counts only — keeps the first page load small |
-| `samples.json` | 296 KB | Per-scene metrics for 615 evaluated scenes and all four viewer models |
+| `experiments.json` | 19 KB | Config, metrics (with the split they were scored on), best epoch and timing for the 24 frozen-split runs |
+| `histories.json` | 118 KB | Per-epoch loss / LR / validation metrics per run |
+| `dataset.json` | 615 KB | 3,078 scene records, target areas under 3 label definitions, night-split audit |
+| `summary.json` | 2 KB | Headline counts only — keeps the first page load small |
+| `samples.json` | 907 KB | Per-scene metrics for the 920 validation and test scenes and all four viewer models |
 | `threshold.json` | 9 KB | Threshold sweeps, probability histograms, reliability bins, radial profile |
-| `presence.json` | ~1.2 MB | Four-model scan/night metrics, ROC curves, Mann–Whitney tests, validation cutoffs and night records |
-| `data/samples/*.{sbw.gz,webp}` | ~20 MB | Four probability maps, bit-packed truth and categorical max-six reflectivity in 615 packs, plus 615 thumbnails |
+| `presence.json` | 949 KB | Four-model scan/night metrics, ROC curves, Mann–Whitney tests, validation cutoffs and night records |
+| `data/samples/*.{sbw.gz,webp}` | 26.6 MiB | Four probability maps, bit-packed truth and categorical max-six reflectivity in 920 packs, plus 920 thumbnails |
+
+The four viewer models are Attention U-Net and U-Net at seeds 42 and 43; the
+SBW1 pack format stores exactly four probability planes.
 
 Each scene stores four 8-bit probability maps, bit-packed ground truth and the
 categorical maximum reflectivity across elevations 0-5 in one gzip-compressed
@@ -172,18 +182,19 @@ always shown, and validation and test results are never pooled.
 
 ## Known limitations
 
-1. **Night leakage.** All 170 positive test scenes come from nights that also
-   appear in training, and 77 of 117 nights appear in all three splits. Every
-   score on this site is therefore optimistic as a measure of generalisation to
-   an unseen night. This is surfaced on the overview, in data exploration, on the
-   presence page, and in the statistics section — it is the dominant caveat.
-2. **Selection is weakly separated.** The selected run leads on test Dice only;
-   sibling runs lead on boundary IoU, NSD, precision, recall and validation
-   Dice. The defensible claim is "among the best few".
+1. **Unseen nights, not unseen years.** Whole operational nights are assigned
+   to one split, so no test night was seen in training. Every year 2013–2019
+   appears in training and all scans come from one radar, so transfer to a new
+   season or radar is untested. Scans within a night are still correlated, so
+   the publication intervals resample nights.
+2. **The selected run is pre-specified, not the test leader.** Attention U-Net
+   seed 42 was named as the confirmatory model before the test set was opened.
+   Other seeds and single-seed decoders lead some test metrics; the seed range
+   within one architecture is as large as the gaps between architectures.
 3. **Preview images are optimistic.** Layers are downsampled 960 → 480 with a
    block maximum, which thickens masks. The interactive readout in the sample
    explorer is labelled as approximate; all reported metrics are full resolution.
-4. **Imagery covers the test and validation splits** (all 615 evaluated scenes).
+4. **Imagery covers the test and validation splits** (all 920 evaluated scenes).
    Training scenes have no stored layers; `samples.json` declares which splits are
    covered so the UI never advertises imagery it cannot load.
 5. **Probabilities are not calibrated** — usable as a ranking, not as likelihoods.
@@ -200,8 +211,8 @@ always shown, and validation and test results are never pooled.
 The project's earlier report evaluates a **different** model (plain U-Net, Focal
 loss, six channels including an ETA intensity channel, 341 scans from 2013–2016,
 night-based split, threshold 0.5). This dashboard covers the current pipeline
-(Attention UNet, nine reflectivity elevations, no ETA channel, 2,052 scenes from
-2013–2019, year-stratified split, threshold 0.15). The two sets of numbers are
+(Attention UNet, nine reflectivity elevations, no ETA channel, 3,078 scenes from
+2013–2019, night-disjoint split, threshold 0.15). The two sets of numbers are
 not comparable and are never mixed. The report's structure is the baseline this
 dashboard extends, and one of its findings — performance rising with target
 area — is independently reproduced here.

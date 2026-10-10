@@ -1,11 +1,11 @@
 ﻿/* Training diagnostics.
 
-   Histories for all 57 runs are ~250 KB, so the file is fetched once and curves
-   are drawn only for runs the user switches on. Nothing but the selected run is
-   plotted initially. */
+   Histories for every frozen-split run are fetched once and curves are drawn
+   only for runs the user switches on. Nothing but the selected run is plotted
+   initially. */
 
 import { load } from '../lib/data.js';
-import { M, fmtOr, esc, MODEL_NAME, LOSS_NAME, mean, std } from '../lib/metrics.js';
+import { M, fmtOr, esc, mean, std } from '../lib/metrics.js';
 import { lineChart } from '../lib/charts.js';
 
 const PALETTE = ['#3a6fce','#2f9d8c','#e2a33d','#cf6a5c','#b07aa1','#6a3ea1','#1f7a54','#98a6b6'];
@@ -54,7 +54,7 @@ export async function render(mount) {
     </div>
   </div>`;
 
-  const rlabel = r => `${MODEL_NAME[r.model] || r.model} ${r.n_elev}e`;
+  const rlabel = r => r.name;
 
   /* ---- metric toggle buttons ---- */
   const METRICS = [['val_dice', 'Val Dice'], ['train_loss', 'Train loss'], ['val_iou', 'Val IoU'],
@@ -98,7 +98,7 @@ export async function render(mount) {
     const others = [...rows].filter(r => r.dice != null && r.name !== sel.name && !quickNames.has(r.name))
       .sort((a, b) => b.dice - a.dice);
     panel.innerHTML = others.map(r =>
-      `<button class="chip${active.has(r.name) ? ' on' : ''}" data-n="${esc(r.name)}" style="font-size:11px">${active.has(r.name) ? '✓ ' : ''}${esc(rlabel(r))} · ${esc(LOSS_NAME[r.loss] || r.loss)} · ${fmtOr(r.dice, 'dice')}</button>`).join('');
+      `<button class="chip${active.has(r.name) ? ' on' : ''}" data-n="${esc(r.name)}" style="font-size:11px">${active.has(r.name) ? '✓ ' : ''}${esc(rlabel(r))} · ${fmtOr(r.dice, 'dice')}</button>`).join('');
     panel.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => toggleRun(b.dataset.n)));
   }
 
@@ -120,7 +120,7 @@ export async function render(mount) {
     const series = [...active].map(([n,c]) => {
       const hh = hist[n]; if (!hh || !hh[metric]) return null;
       const r = rows.find(x=>x.name===n);
-      return {label:`${MODEL_NAME[r.model]||r.model} ${r.n_elev} elev`, c,
+      return {label:r.name, c,
               points: hh[metric].map((v,i)=>[i, v]), dots:false,
               best: r.best_epoch};
     }).filter(Boolean);
@@ -142,8 +142,10 @@ export async function render(mount) {
       legend: series.map(s=>({c:s.c, label:s.label})),
     });
     mount.querySelector('#cap').textContent = metric==='lr'
-      ? 'Learning rate schedule: 3 warm-up epochs then cosine decay.'
-      : `${series.length} run${series.length>1?'s':''} shown. The dashed line marks the epoch whose checkpoint was evaluated.`;
+      ? 'Learning rate schedule: 3 warm-up epochs then cosine decay. Runs extended from 50 to 100 epochs restart the schedule at epoch 50.'
+      : `${series.length} run${series.length>1?'s':''} shown. The dashed line marks the epoch whose checkpoint was evaluated. ` +
+        'Validation curves are patch-level scores at a 0.5 probability threshold, used only to pick that epoch; ' +
+        'an epoch near zero means probabilities fell below 0.5, not that the model at its locked threshold failed.';
   }
 
   mount.querySelector('#clear').addEventListener('click', () => {

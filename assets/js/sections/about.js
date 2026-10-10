@@ -44,11 +44,16 @@ export async function render(mount) {
 
   <h2>How the numbers are produced</h2>
   <ol class="small" style="padding-left:20px;line-height:1.85;max-width:82ch">
-    <li><b>Training.</b> Each run is a YAML config resolved against <code>configs/base_config.yaml</code>,
-      trained by <code>src/experiment.py</code>. Results, per-epoch history and a timestamped log are
-      written to <code>outputs/experiments/</code>.</li>
-    <li><b>Export.</b> <code>scripts/export_dashboard_data.py</code> reads those outputs, reloads the
-      selected checkpoint, and runs full-scene sliding-window inference over every validation and test
+    <li><b>Training.</b> Each run is a YAML config resolved against <code>configs/base_config_night.yaml</code>
+      (or the cascade and gated base configs) and trained by <code>src/experiment.py</code> on the frozen,
+      SHA-256-pinned manifest in <code>artifacts_night/</code>. Results, per-epoch history and a timestamped
+      log are written to <code>outputs/night_split/</code>, <code>outputs/night_cascade/</code> or
+      <code>outputs/night_gated/</code>. Training never reads the test split.</li>
+    <li><b>Freeze, then test.</b> Every run, threshold and analysis setting is recorded in
+      <code>outputs/night_split/FROZEN.md</code> before <code>src/finalize.py</code> scores the test split
+      once, at the threshold already calibrated on validation.</li>
+    <li><b>Export.</b> <code>scripts/export_dashboard_data.py</code> reads those outputs, reloads the four
+      viewer checkpoints, and runs full-scene sliding-window inference over every validation and test
       scene at 960×960. Its GPU-free <code>presence</code> stage then derives scan/night curves,
       validation-selected cutoffs and statistical tests from those stored predictions.</li>
     <li><b>Display.</b> The site loads only the JSON a section needs. Pixel summaries are derived in the
@@ -72,16 +77,16 @@ export async function render(mount) {
     <tr><td><code>presence.json</code></td><td style="text-align:left">Precomputed scan/night binary metrics, ROC curves, area cutoffs, distribution tests and exact night records for four viewer models</td>
       <td class="n">4 models</td><td class="small">stage <code>presence</code></td></tr>
     <tr><td><code>samples/*.{sbw.gz,webp}</code></td><td style="text-align:left">One packed four-model/ground-truth/max-six-reflectivity asset and one thumbnail per evaluated scene</td>
-      <td class="n">1,230</td><td class="small">stage <code>packs</code></td></tr>
+      <td class="n">${int(2 * sm.samples.length)}</td><td class="small">stage <code>packs</code></td></tr>
   </tbody></table></div>
 
   <h2>Rebuilding the data</h2>
-  <pre style="background:var(--panel);border:1px solid var(--hair);border-radius:9px;padding:13px;overflow-x:auto;font-size:12.5px"><code>. venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only experiments,dataset
-.venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only predict
-.venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only presence
-.venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only packs --data-root ..\\Data --site-dir ..\\sprucebudworm_progress.github.io</code></pre>
-  <p class="small">The <code>predict</code> stage needs a GPU and takes roughly 40 minutes for 615 scenes
-  with four models. <code>experiments</code> and <code>dataset</code> need no GPU and take under two minutes.
+  <pre style="background:var(--panel);border:1px solid var(--hair);border-radius:9px;padding:13px;overflow-x:auto;font-size:12.5px"><code>.venv\\Scripts\\python.exe scripts/export_dashboard_data.py --only experiments,dataset,predict,images,presence,packs</code></pre>
+  <p class="small">The <code>predict</code> stage needs a GPU and takes about an hour for the
+  ${int(sm.samples.length)} validation and test scenes with four models; with <code>images</code> it also
+  writes the layers that <code>packs</code> compresses. The exporter refuses to run if
+  <code>artifacts_night/manifest.csv</code> does not match its pinned SHA-256. <code>experiments</code>
+  and <code>dataset</code> need no GPU and take under two minutes.
   To serve the site locally: <code>python -m http.server 8899</code> from this folder, then open
   <code>http://127.0.0.1:8899</code>. Opening <code>index.html</code> directly from disk will not work,
   because ES modules and <code>fetch</code> require an HTTP origin.</p>
@@ -132,9 +137,9 @@ export async function render(mount) {
        'Extending stage images to the train split (~90 MB more).'],
       ['Annotator agreement / label noise', 'Each scene has exactly one annotation.',
        'A second independent annotation of a scene subset.'],
-      ['Generalisation to an unseen night',
-       'The presence page groups nights, but splits are assigned per scene, so most nights contribute to more than one split. Performance on a wholly unseen night has not been measured.',
-       'A night-disjoint split and a retrain.'],
+      ['Generalisation to an unseen year or radar',
+       'Every year 2013–2019 appears in training, and all scans come from one radar. Test nights are unseen, but test years are not.',
+       'A leave-one-year-out retrain, or data from a second radar.'],
     ].map(([a, w, n]) => `<tr><td style="text-align:left"><b>${esc(a)}</b></td>
       <td style="text-align:left" class="small">${esc(w)}</td>
       <td style="text-align:left" class="small">${n}</td></tr>`).join('')}

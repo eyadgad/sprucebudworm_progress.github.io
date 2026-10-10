@@ -36,20 +36,19 @@ function requireAnalysis(value, path, {records = false, mannWhitney = false} = {
 /** Validate and return a supported presence document. */
 export function validatePresence(doc) {
   if (!object(doc)) fail('root must be an object');
-  if (doc.schema_version !== 1) fail(`unsupported schema_version ${doc.schema_version ?? 'missing'}`);
+  if (doc.schema_version !== 2) fail(`unsupported schema_version ${doc.schema_version ?? 'missing'}`);
   if (!object(doc.definitions) || !finite(doc.definitions.pixel_size_m) || doc.definitions.pixel_size_m <= 0 ||
       !finite(doc.definitions.pixel_area_km2) ||
       doc.definitions.pixel_area_km2 <= 0) fail('pixel dimensions are invalid');
   if (!object(doc.cohort) || !object(doc.cohort.training_exposure) ||
       !object(doc.cohort.training_exposure.val) || !object(doc.cohort.training_exposure.test) ||
-      !object(doc.cohort.training_exposure.combined) ||
-      !object(doc.cohort.night_coverage?.combined) ||
+      !object(doc.cohort.night_coverage?.val) || !object(doc.cohort.night_coverage?.test) ||
       !Number.isInteger(doc.cohort.night_overlap?.validation_test) ||
       doc.cohort.night_overlap.validation_test < 0) fail('cohort metadata is missing');
   if (!Array.isArray(doc.caveats) || !doc.caveats.length) fail('caveats are missing');
   if (!Array.isArray(doc.models) || !doc.models.length) fail('models are missing');
   if (!doc.selected_model_key) fail('selected_model_key is missing');
-  if (!object(doc.defaults) || !['combined', 'test', 'val'].includes(doc.defaults.split) ||
+  if (!object(doc.defaults) || !['test', 'val'].includes(doc.defaults.split) ||
       !['max', 'mean'].includes(doc.defaults.night_aggregation) ||
       !['any_cell', 'validation_selected'].includes(doc.defaults.scan_operating_point) ||
       doc.defaults.night_operating_point !== 'validation_selected')
@@ -62,17 +61,15 @@ export function validatePresence(doc) {
     seen.add(model.key);
     if (!model.display_name || !finite(model.pixel_probability_threshold))
       fail(`${path} display name or pixel threshold is invalid`);
-    for (const cut of ['selected_cutoff', 'combined_cutoff'])
-      if (!object(model.scan?.[cut]) || !finite(model.scan[cut].cells))
-        fail(`${path}.scan.${cut} is invalid`);
-    for (const split of ['validation', 'test', 'combined'])
+    if (!object(model.scan?.selected_cutoff) || !finite(model.scan.selected_cutoff.cells))
+      fail(`${path}.scan.selected_cutoff is invalid`);
+    for (const split of ['validation', 'test'])
       requireAnalysis(model.scan?.splits?.[split], `${path}.scan.splits.${split}`);
     for (const aggregation of ['max', 'mean']) {
       const night = model.night?.[aggregation];
-      for (const cut of ['selected_cutoff', 'combined_cutoff'])
-        if (!object(night?.[cut]) || !finite(night[cut].cells))
-          fail(`${path}.night.${aggregation}.${cut} is invalid`);
-      for (const split of ['validation', 'test', 'combined'])
+      if (!object(night?.selected_cutoff) || !finite(night.selected_cutoff.cells))
+        fail(`${path}.night.${aggregation}.selected_cutoff is invalid`);
+      for (const split of ['validation', 'test'])
         requireAnalysis(night.splits?.[split], `${path}.night.${aggregation}.splits.${split}`,
           {records: true, mannWhitney: true});
     }

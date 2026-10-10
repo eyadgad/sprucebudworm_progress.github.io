@@ -1,5 +1,5 @@
-/* Data exploration: what the model was trained and judged on, and the
-   split-integrity problem that shapes how every later number should be read. */
+/* Data exploration: what the model was trained and judged on, and how the
+   night-disjoint split keeps every test night unseen during training. */
 
 import { load } from '../lib/data.js';
 import { int, pct, SPLIT_COLOR, quantile, mean, esc, tsLabel } from '../lib/metrics.js';
@@ -10,9 +10,12 @@ import { scanCoverageChart, SCENE_TYPE_COLOR, SPLIT_MARKER_COLOR } from '../lib/
 const SPLITS = ['train', 'val', 'test'];
 
 export async function render(mount) {
-  const [ds, mem] = await Promise.all([load('dataset'), load('memorization').catch(() => null)]);
+  const ds = await load('dataset');
   const scenes = ds.scenes;
   const lk = ds.leakage;
+  const ns = ds.split_summary.night_split;
+  const fr = ds.split_summary.fractions;
+  const pctFrac = f => Math.round(f * 100);
 
   const years = [...new Set(scenes.map(s => s.year))].sort();
   let coverageYear = years.at(-1);
@@ -24,9 +27,12 @@ export async function render(mount) {
   ${ds.grid.h} × ${ds.grid.w} grid at ${ds.grid.pixel_m} m resolution.</p>
 
   <div class="note"><span class="tag">how the split works</span><div class="bd">
-    Scenes are split train / validation / test <b>stratified by year</b> (~70 / 20 / 10). Because
-    assignment is per scene, not per night, <b>${lk.nights_all_three} of ${lk.n_nights}</b> nights
-    contribute to all three splits; the generalisation check below tests what that means.
+    Whole <b>operational nights</b> (${esc(ns.night_boundary)}) are assigned to train / validation / test
+    (${pctFrac(fr.train)} / ${pctFrac(fr.val)} / ${pctFrac(fr.test)} of scans), so every scan of a night lands in
+    the same split. <b>${int(ns.overlap_nights)} of ${int(ns.total_nights)}</b> nights contribute to more than one
+    split, and <b>${int(lk.test_scenes_night_in_train)} of ${int(lk.test_scenes_total)}</b> positive test scans come
+    from a night seen in training. The manifest is frozen and pinned by its SHA-256, so every run on this
+    site was trained and scored on the same assignment.
   </div></div>
 
   <h2>Scan dates and split assignments</h2>
@@ -52,8 +58,8 @@ export async function render(mount) {
     <div class="coverage-scroll" id="coverage-chart" tabindex="0" role="region"
       aria-label="Scrollable scan assignment chart; green and blue boxes show scene type, circles show data split"></div>
     <figcaption>Box colour shows scene type; circle colour shows split. Blank cells may be a missing scan or
-    an unused negative scene; this view describes the selected 2,052-scene ML manifest, not all raw PPI files.
-    Some biological nights cross midnight and therefore occupy two calendar-date rows.</figcaption>
+    an unused negative scene; this view describes the frozen ${int(scenes.length)}-scene ML manifest, not all raw PPI files.
+    An operational night runs from noon to noon UTC and therefore occupies two calendar-date rows.</figcaption>
   </figure>
 
   <h3>Exact scan list</h3>
@@ -65,7 +71,8 @@ export async function render(mount) {
   <h2>Split and season coverage</h2>
   <div class="two">
     <figure><div class="viz" id="c-split"></div>
-      <figcaption>Scenes per split by type. Swarm-free scenes are ~30% of positives.</figcaption></figure>
+      <figcaption>Scenes per split by type. Swarm-free scans were sampled to about one per scan with a
+      swarm, so these counts describe a balanced cohort, not the raw archive.</figcaption></figure>
     <figure><div class="viz" id="c-year"></div>
       <figcaption>Positive scenes per year, stacked by split.</figcaption></figure>
   </div>
@@ -80,16 +87,12 @@ export async function render(mount) {
   </div>
 
   <h2>Effect of the label threshold</h2>
-  <p class="small">Labels store dBZ per swarm pixel; a threshold binarises them. Experiment 3 selected
+  <p class="small">Labels store dBZ per swarm pixel; a threshold binarises them. The frozen protocol uses
   <b>dBZ ≥ 0</b>.</p>
   <div id="thr-table"></div>
 
   <h2>Are the splits comparable?</h2>
   <div id="cmp-table"></div>
-
-  <h2>Generalisation check</h2>
-  <p class="small">Score on data the model was fitted on versus data it has never seen.</p>
-  <div id="memo"></div>
 
   <h2>Data quality notes</h2>
   <div id="quality"></div>`;
@@ -182,7 +185,7 @@ export async function render(mount) {
         `<span class="sw" style="background:${SCENE_TYPE_COLOR[value === 1 ? 'positive' : 'negative']}"></span> ` +
         (value === 1 ? 'with swarm' : 'swarm free')},
       {key: 'area', label: 'Swarm area (px)', fmt: value => value == null ? '<span class="na">—</span>' : int(value)},
-      {key: 'night', label: 'Positive night', fmt: value => value ? esc(value) : '<span class="na">not assigned</span>'},
+      {key: 'night', label: 'Operational night', fmt: value => value ? esc(value) : '<span class="na">not assigned</span>'},
     ],
   });
 
@@ -240,48 +243,24 @@ export async function render(mount) {
   } : null;
   mount.querySelector('#cmp-table').innerHTML = `
     <div class="tscroll"><table>
-      <thead><tr><th>Split</th><th>Positive scenes</th><th>Nights</th><th>Years</th>
+      <thead><tr><th>Split</th><th>Positive scenes</th><th>Migration nights</th><th>Quiet nights</th><th>Years</th>
       <th>Median swarm area</th><th>IQR of swarm area</th><th>Median positive share</th></tr></thead><tbody>
       ${SPLITS.map(sp => {
         const rows = scenes.filter(s => s.split === sp && s.label === 1);
         const a = stat(rows.map(s => s.area).filter(v => v != null));
-        const nights = new Set(rows.map(s => s.night).filter(Boolean)).size;
+        const ps = ns.per_split[sp];
         const yrs = new Set(rows.map(s => s.year)).size;
         return `<tr><td><span class="sw" style="background:${SPLIT_COLOR[sp]}"></span> ${sp}</td>
-          <td class="n">${int(rows.length)}</td><td class="n">${nights}</td><td class="n">${yrs}</td>
+          <td class="n">${int(rows.length)}</td><td class="n">${int(ps.migration_nights)}</td>
+          <td class="n">${int(ps.quiet_nights)}</td><td class="n">${yrs}</td>
           <td class="n">${a ? int(a.med) : '—'}</td>
           <td class="n">${a ? `${int(a.q1)} – ${int(a.q3)}` : '—'}</td>
           <td class="n">${a ? pct(a.med / (ds.grid.h * ds.grid.w), 3) : '—'}</td></tr>`;
       }).join('')}
     </tbody></table></div>
-    <p class="small">The three splits have similar median swarm areas and interquartile ranges, so the
-    test set is not obviously easier or harder in target size. The night overlap noted above is a
-    separate and more serious issue.</p>`;
-
-  /* ---------- generalisation check ---------- */
-  const memoEl = mount.querySelector('#memo');
-  if (!mem) {
-    memoEl.innerHTML = `<div class="note warn"><span class="tag">not available</span><div class="bd">
-      Not generated. Run <code>python scripts/test_memorization.py</code>.</div></div>`;
-  } else {
-    const g = mem.area_matched_gap;
-    memoEl.innerHTML = `
-      <div class="tscroll"><table>
-        <thead><tr><th>Split</th><th>Model fitted on it?</th><th>Scenes</th><th>Mean Dice</th></tr></thead>
-        <tbody>
-        <tr><td>train</td><td style="text-align:left">yes</td>
-          <td class="n">${mem.n_train_scored}</td><td class="n">${mem.train_mean_dice.toFixed(4)}</td></tr>
-        <tr><td>validation</td><td style="text-align:left">no (used to choose the model)</td>
-          <td class="n">317</td><td class="n">${mem.val_mean_dice.toFixed(4)}</td></tr>
-        <tr class="best"><td>test</td><td style="text-align:left">no, fully held out</td>
-          <td class="n">170</td><td class="n">${mem.test_mean_dice.toFixed(4)}</td></tr>
-      </tbody></table></div>
-      <p class="small">Scores are the same to within
-      ${Math.abs(mem.train_mean_dice - mem.test_mean_dice).toFixed(4)} Dice
-      (area-matched gap ${g >= 0 ? '+' : ''}${g.toFixed(4)}, Mann-Whitney p = ${mem.mannwhitney_p.toFixed(2)}).
-      Per-scene performance is driven by <b>swarm size</b> (Spearman ρ = ${mem.area_partial_spearman.toFixed(3)}),
-      not by how much related data the model saw in training.</p>`;
-  }
+    <p class="small">Target size is summarised so a reader can judge whether the test nights are easier or
+    harder than the others. The splits share no night, so the test set is the only part of the data that
+    played no role in training, checkpoint choice or threshold choice.</p>`;
 
   /* ---------- data-quality notes ---------- */
   const noArea = scenes.filter(s => s.label === 1 && s.area == null).length;
@@ -293,9 +272,10 @@ export async function render(mount) {
         <td style="text-align:left">${noArea ? 'Excluded from area statistics.' : 'None: every positive scene has a label mask.'}</td></tr>
       <tr><td>Positive scenes emptied by the dBZ ≥ 0 threshold</td><td class="n">${zero0}</td>
         <td style="text-align:left">${zero0 ? 'These scenes have no learnable target under the selected label.' : 'None: the selected label keeps signal in every positive scene.'}</td></tr>
-      <tr><td>Nights spanning more than one split</td><td class="n">${lk.nights_multi_split} of ${lk.n_nights}</td>
-        <td style="text-align:left">Scenes within a night are correlated, so scene-level confidence intervals
-          are narrower than the truth. See <a href="#/stats">statistical analysis</a>.</td></tr>
+      <tr><td>Nights spanning more than one split</td><td class="n">${int(ns.overlap_nights)} of ${int(ns.total_nights)}</td>
+        <td style="text-align:left">${ns.overlap_nights ? 'Those nights leak correlated scans across splits.'
+          : 'None: no night is shared between splits.'} Scans within one night are still correlated, so
+          intervals resample whole nights. See <a href="#/stats">statistical analysis</a>.</td></tr>
       <tr><td>Input channels with missing values</td><td class="n">handled</td>
         <td style="text-align:left">Radar tilts are sparse; missing values are filled before normalisation and a
           <code>valid_mask</code> channel tells the model where a real echo existed.</td></tr>

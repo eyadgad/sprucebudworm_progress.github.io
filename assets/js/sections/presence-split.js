@@ -369,11 +369,16 @@ export async function render(mount) {
       ['Also in training', `${int(exposure.nights_seen_in_train)} / ${int(exposure.nights_total)}`],
       ['Also in the other split', `${int(valTestOverlap)} / ${int(nights.n)}`],
     ]);
-    mount.querySelector('#night-caveat').textContent = state.nightOperating === 'custom'
-      ? 'Exploratory: cut-off set by hand, and most nights were seen in training.'
+    const seenNote = exposure.nights_seen_in_train
+      ? ` ${int(exposure.nights_seen_in_train)} of ${int(exposure.nights_total)} nights were also seen in training.`
+      : ' No night here was seen in training.';
+    const sharedNote = valTestOverlap
+      ? ` Validation and test share ${int(valTestOverlap)} nights.` : '';
+    mount.querySelector('#night-caveat').textContent = (state.nightOperating === 'custom'
+      ? 'Cut-off set by hand, so it carries no selection guarantee.'
       : heldOut
-      ? 'Exploratory: validation and test share nights, and most were seen in training.'
-      : 'Exploratory: this is the split the cut-off was chosen on, and most nights were seen in training.';
+      ? 'Cut-off chosen on validation nights and applied to these test nights unchanged.'
+      : 'This is the split the cut-off was chosen on, so the rates below are optimistic.') + seenNote + sharedNote;
     mount.querySelector('#night-cards').innerHTML = metricCards(nights, nightMetrics);
 
     const groups = distributionGroups(nights).map((group, i) => ({

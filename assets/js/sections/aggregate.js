@@ -29,8 +29,9 @@ export async function render(mount) {
     <figcaption>Per-scene Dice, IoU, precision and recall, validation beside test.</figcaption></figure>
 
   <h2>Uncertainty on the headline number</h2>
-  <p class="small">Bootstrap percentile intervals over scenes (2000 resamples, fixed seed); scene-to-scene
-  variability only, not the night-overlap bias.</p>
+  <p class="small">Bootstrap percentile intervals over scenes (2000 resamples, fixed seed). Scans of one
+  night are correlated, so these scene-level intervals are narrower than the night-clustered intervals
+  reported on the <a href="publication.html">publication page</a>.</p>
   <div id="ci"></div>`;
 
   /* ---------------- metric tables ---------------- */
@@ -100,8 +101,9 @@ export async function render(mount) {
       </tbody></table></div>
     <p class="small">Computed by <code>scripts/export_dashboard_data.py</code> from a forward pass of
     checkpoint <code>${esc(sm.selected)}</code> over every scene in each split, at threshold ${thr}.
-    “Difference” is test minus validation: a large negative value would indicate the model was tuned to
-    the validation set.</p>`;
+    “Difference” is test minus validation. Validation chose the checkpoint and the threshold and its nights
+    differ from the test nights, so a drop is expected; the publication page shows it is of the same size
+    for every seed of both architectures.</p>`;
 
   function keyOf(k) {
     return ({dice:'dice', dice_micro:'dice_micro', iou:'iou', iou_micro:'iou_micro',

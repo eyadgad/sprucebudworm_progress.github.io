@@ -64,6 +64,8 @@ export const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'
 export const MODEL_NAME = {
   unet:'UNet', attention_unet:'Attention UNet', nnunet:'nnUNet',
   smp_unetpp:'UNet++', smp_deeplabv3p:'DeepLabV3+', smp_segformer:'SegFormer',
+  transunet:'TransUNet', swin_unet:'Swin-UNet', gated_swin_attn:'Gated Swin-Attention',
+  swin_tiny:'Swin-Tiny',
 };
 export const LOSS_NAME = {
   dice_bce:'Dice + BCE', focal:'Focal', tversky:'Tversky',

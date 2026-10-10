@@ -11,6 +11,8 @@ import { sceneFilters } from '../lib/ui.js';
 
 export async function render(mount) {
   const [sm, ds] = await Promise.all([load('samples'), load('summary')]);
+  const nameSel = sm.models?.[0]?.disp || sm.selected;
+  const nameCmp = sm.models?.[1]?.disp || sm.compare;
 
   mount.innerHTML = `
   <h1>Statistical analysis</h1>
@@ -98,19 +100,21 @@ export async function render(mount) {
       <div class="tscroll"><table>
         <thead><tr><th>Comparison</th><th>n scenes</th><th>Mean Dice</th><th>Median Dice</th>
         <th>Mean difference</th><th>95% CI of difference</th><th>Wilcoxon p</th></tr></thead><tbody>
-        <tr><td>Attention UNet (selected)</td><td class="n">${both.length}</td>
+        <tr><td>${esc(nameSel)} (selected)</td><td class="n">${both.length}</td>
           <td class="n">${fmtOr(mean(a), 'dice')}</td><td class="n">${fmtOr(quantile(a, .5), 'dice')}</td>
           <td class="n" rowspan="2">${mean(diffs) >= 0 ? '+' : ''}${mean(diffs).toFixed(4)}</td>
           <td class="n" rowspan="2">${ciD ? `${ciD[0].toFixed(4)} – ${ciD[1].toFixed(4)}` : '—'}</td>
           <td class="n" rowspan="2">${w ? (w.p < 0.001 ? '&lt; 0.001' : w.p.toFixed(3)) : '—'}</td></tr>
-        <tr><td>UNet++ (9 elevations)</td><td class="n">${both.length}</td>
+        <tr><td>${esc(nameCmp)}</td><td class="n">${both.length}</td>
           <td class="n">${fmtOr(mean(b), 'dice')}</td><td class="n">${fmtOr(quantile(b, .5), 'dice')}</td></tr>
       </tbody></table></div>
       <div class="note ${w && w.p < 0.05 ? '' : 'warn'}"><span class="tag">reading</span><div class="bd">
         ${w ? `${ciD && ciD[0] <= 0 && ciD[1] >= 0
             ? '<b>The 95% interval of the difference includes zero, so the two models are not distinguishable on this evidence.</b>'
             : `The interval excludes zero, but the difference (${Math.abs(mean(diffs)).toFixed(4)} Dice) is far below the scene-to-scene standard deviation of ${std(a).toFixed(3)}.`}
-          Because scenes within a night are correlated, the true p-value is larger than the one in the table.`
+          Because scenes within a night are correlated, the true p-value is larger than the one in the table.
+          The pre-specified version of this comparison, with a night-clustered interval, is on the
+          <a href="publication.html">publication page</a>.`
           : 'Too few differing scenes for a signed-rank test.'}
       </div></div>`;
 

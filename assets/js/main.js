@@ -25,9 +25,10 @@ const ROUTES = {
   experiments: {title: 'Experiment comparison',     mod: () => import('./sections/experiments.js' + V)},
   training:    {title: 'Training diagnostics',      mod: () => import('./sections/training.js' + V)},
   aggregate:   {title: 'Aggregate evaluation',      mod: () => import('./sections/aggregate.js' + V)},
-  presence:    {title: 'Present or absent (pooled)', mod: () => import('./sections/presence.js' + V)},
-  'presence-split': {title: 'Present or absent (by split)',
-                     mod: () => import('./sections/presence-split.js' + V)},
+  // One presence page: every cut-off is chosen on validation. The old
+  // presence-split address stays as an alias for existing links.
+  presence:    {title: 'Present or absent',         mod: () => import('./sections/presence-split.js' + V)},
+  'presence-split': {title: 'Present or absent',    mod: () => import('./sections/presence-split.js' + V)},
   segments:    {title: 'Performance breakdown',     mod: () => import('./sections/segments.js' + V)},
   samples:     {title: 'Sample explorer',           mod: () => import('./sections/samples.js' + V)},
   errors:      {title: 'Error & failure analysis',  mod: () => import('./sections/errors.js' + V)},

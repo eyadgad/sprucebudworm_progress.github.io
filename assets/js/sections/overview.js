@@ -10,16 +10,19 @@ import { card } from '../lib/ui.js';
 export async function render(mount) {
   // summary.json is a ~1 KB companion to dataset.json: the overview needs the
   // headline counts, not the 2000+ per-scene records.
-  const [ex, ds, mem] = await Promise.all([load('experiments'), load('summary'), load('memorization').catch(() => null)]);
+  const [ex, ds] = await Promise.all([load('experiments'), load('summary')]);
   const rows = ex.experiments;
   const sel = rows.find(r => r.selected);
   const byDice = [...rows].filter(r => r.dice !== null).sort((a, b) => b.dice - a.dice);
   const runners = byDice.slice(0, 6);
+  const seedDice = rows.filter(r => /^night_base_attunet9_s\d+$/.test(r.name) && r.dice !== null).map(r => r.dice);
+  const boundaryRank = 1 + byDice.filter(r => (r.boundary_iou ?? -1) > (sel.boundary_iou ?? -1)).length;
 
   const cnt = ds.split_summary.counts;
   const totalPos = cnt.train.positives + cnt.val.positives + cnt.test.positives;
   const totalNeg = cnt.train.negatives + cnt.val.negatives + cnt.test.negatives;
   const lk = ds.leakage;
+  const ns = ds.split_summary.night_split;
 
   // test-set pixel confusion for the selected run, from its stored full-scene
   // micro metrics (micro precision/recall + truth area recover the counts).
@@ -32,8 +35,9 @@ export async function render(mount) {
   <div class="note sel"><span class="tag">selected model</span><div class="bd">
     <b>${MODEL_NAME[sel.model] || sel.model}</b> trained with <b>${LOSS_NAME[sel.loss] || sel.loss}</b> loss,
     using <b>${sel.n_elev} radar elevation scans</b> as input and the <b>${targetName(sel.target_mode, sel.dbz_threshold)}</b>
-    label definition. Decisions are made at probability threshold <b>${sel.threshold}</b>.
-    <span class="small">Run id <code>${esc(sel.name)}</code>.</span>
+    label definition. Decisions are made at probability threshold <b>${sel.threshold}</b>, calibrated on
+    validation. This run was named as the confirmatory model before the test set was opened; it was not
+    picked for its test score. <span class="small">Run id <code>${esc(sel.name)}</code>.</span>
   </div></div>
 
   <h3>Headline result on the held-out test set</h3>
@@ -53,9 +57,9 @@ export async function render(mount) {
 
   <h2>Strongest alternatives</h2>
   <figure><div class="viz" id="alt"></div>
-    <figcaption>Test Dice for the six best runs. The selected run is outlined. The spread across
-    very different architectures is small, which is itself a finding: the data, not the architecture,
-    limits the score.</figcaption></figure>
+    <figcaption>Test Dice for the six highest-scoring segmenters on the frozen split. The selected run is
+    outlined. Seed-to-seed spread within one architecture is of the same size as the gaps between
+    architectures, so a ranking on this chart is not by itself evidence that one design is better.</figcaption></figure>
 
   <h2>Dataset at a glance</h2>
   <div class="meta">
@@ -64,7 +68,7 @@ export async function render(mount) {
     <div><div class="l">Scenes with a swarm</div><div class="d">${int(totalPos)}</div></div>
     <div><div class="l">Swarm-free scenes</div><div class="d">${int(totalNeg)}</div></div>
     <div><div class="l">Years</div><div class="d">2013 to 2019, July and August</div></div>
-    <div><div class="l">Split</div><div class="d">${esc(ds.split_summary?.mode || 'night')} disjoint, 70 / 20 / 10</div></div>
+    <div><div class="l">Split</div><div class="d">${int(ns.total_nights)} operational nights, night disjoint, 70 / 20 / 10</div></div>
   </div>
 
   <h2>Strengths, weaknesses and cautions</h2>
@@ -72,35 +76,37 @@ export async function render(mount) {
     <div class="panel"><h3 style="margin-top:0;color:var(--ok)">Strengths</h3><ul class="small" style="padding-left:18px;line-height:1.7">
       <li>Finds ${pct(sel.recall,0)} of true swarm pixels.</li>
       <li>Few false alarms on swarm-free scenes (${pct(sel.bg_fp_rate,2)} of pixels).</li>
-      <li>Among the best boundary scores of the ${rows.length} runs (top three).</li>
-      <li>Stable across 6 architectures: no single fragile configuration.</li>
+      <li>Boundary IoU ranks ${boundaryRank} of the ${byDice.length} segmenters.</li>
+      <li>Five Attention U-Net seeds span ${fmtOr(Math.min(...seedDice),'dice')}–${fmtOr(Math.max(...seedDice),'dice')} test Dice: no single fragile run.</li>
     </ul></div>
     <div class="panel"><h3 style="margin-top:0;color:var(--warn)">Weaknesses</h3><ul class="small" style="padding-left:18px;line-height:1.7">
       <li>Precision is only ${pct(sel.precision,0)}: it over-calls swarm area.</li>
-      <li>Score is capped near 0.63 Dice regardless of architecture.</li>
+      <li>No segmenter tested exceeds ${fmtOr(byDice[0].dice,'dice')} test Dice.</li>
       <li>Small, sparse swarms score far worse than large ones
           (see <a href="#/errors">error analysis</a>).</li>
       <li>Edges are fuzzy: ${tip('nsd','NSD')} is only ${fmtOr(sel.nsd,'nsd')}.</li>
     </ul></div>
     <div class="panel"><h3 style="margin-top:0;color:var(--bad)">Scope of the claim</h3><ul class="small" style="padding-left:18px;line-height:1.7">
-      <li>All results come from one radar (XAM) and ${lk.n_nights} nights, 2013–2019.</li>
+      <li>All results come from one radar (XAM) and ${int(ns.total_nights)} operational nights
+          (${int(ns.migration_nights)} with migration), 2013–2019.</li>
       <li>Transfer to another radar or a very different season is <b>untested</b>.</li>
       <li>Labels are single-annotator, so model error and label error cannot be separated.</li>
-      <li>Split integrity was checked directly and is <a href="#/data">sound</a>.</li>
+      <li>Test nights are unseen: ${int(lk.test_scenes_night_in_train)} test scans share a night with
+          training (<a href="#/data">split audit</a>).</li>
     </ul></div>
   </div>
 
   <h2>Where to go next</h2>
   <div class="cards">
     ${nav('#/experiments','Compare all runs',`${rows.length} configurations, sortable and filterable`)}
-    ${nav('#/presence','Check presence detection',`Scan-level SBW and exploratory night-level migration detection`)}
+    ${nav('#/presence','Check presence detection',`Scan-level and night-level detection on unseen nights`)}
     ${nav('#/samples','Inspect predictions',`Open any test scene and adjust the threshold`)}
     ${nav('#/errors','See the failures',`What breaks, and the evidence for why`)}
   </div>`;
 
   mount.querySelector('#alt').innerHTML = hBarChart({
     items: runners.map(r => ({
-      label: `${MODEL_NAME[r.model] || r.model} · ${r.n_elev} elev`,
+      label: r.name,
       value: r.dice, hl: r.selected,
       c: r.selected ? 'var(--best)' : 'var(--accent2)',
     })),
