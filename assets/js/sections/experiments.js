@@ -41,6 +41,8 @@ export async function render(mount) {
   <p class="lede">${rows.length} segmentation runs on the frozen night split: ${n('main')} runs in two
   pre-specified five-seed families, ${n('ablation')} cumulative ablation stages and ${n('other')} alternative
   decoders. All use the same nine reflectivity elevations, validity mask and dBZ ≥ 0 label.
+  Scan classifiers (Swin-Tiny, candidates, frozen head) are on
+  <a href="#/classification">Scan classification</a>, not in this Dice table.
   ${splits.length === 1 && splits[0] === 'test'
     ? 'Every number is on the held-out test set at the run’s validation-locked threshold.'
     : '<b>Rows mix splits; see the “Scored on” column.</b>'}</p>

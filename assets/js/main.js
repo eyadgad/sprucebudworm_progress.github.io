@@ -23,6 +23,7 @@ const ROUTES = {
   overview:    {title: 'Executive overview',        mod: () => import('./sections/overview.js' + V)},
   data:        {title: 'Data exploration',          mod: () => import('./sections/data.js' + V)},
   experiments: {title: 'Experiment comparison',     mod: () => import('./sections/experiments.js' + V)},
+  classification: {title: 'Scan classification',    mod: () => import('./sections/classification.js' + V)},
   training:    {title: 'Training diagnostics',      mod: () => import('./sections/training.js' + V)},
   aggregate:   {title: 'Aggregate evaluation',      mod: () => import('./sections/aggregate.js' + V)},
   // One presence page: every cut-off is chosen on validation. The old
