@@ -1,0 +1,111 @@
+{
+  "device": "cuda",
+  "threshold": 0.15,
+  "decision": "probability > threshold",
+  "patch": 256,
+  "overlap": 0.5,
+  "tta": false,
+  "gaussian_window": true,
+  "n_val_manifest": 612,
+  "n_val_on_disk": 187,
+  "n_pos_on_disk": 98,
+  "n_neg_on_disk": 89,
+  "missing_years": {
+    "2013": 61,
+    "2014": 73,
+    "2015": 81,
+    "2016": 87,
+    "2017": 123
+  },
+  "missing_target": 0,
+  "probe_identity": {
+    "stock_index0": {
+      "n": 12,
+      "n_exact": 0,
+      "n_within_2px": 0,
+      "median_abs": 3259.0,
+      "max_abs": 17044,
+      "p95_abs": 15141.549999999997,
+      "gt_exact": 8,
+      "gt_n": 8
+    },
+    "run_lowest": {
+      "n": 12,
+      "n_exact": 12,
+      "n_within_2px": 12,
+      "median_abs": 0.0,
+      "max_abs": 0,
+      "p95_abs": 0.0,
+      "gt_exact": 8,
+      "gt_n": 8
+    }
+  },
+  "batched_vs_official": {
+    "timestamp": 201807240030,
+    "model": "attunet_e1_m03",
+    "max_abs_prob": 0.0384106260805015,
+    "pred_area_official": 7505,
+    "pred_area_batched": 7502
+  },
+  "modes_fully_scored": [
+    "run_lowest"
+  ],
+  "winner_by_probe_median_abs": "run_lowest",
+  "per_model": {
+    "run_lowest": {
+      "attunet_e1_m03": {
+        "n": 187,
+        "n_pos": 98,
+        "n_neg": 89,
+        "macro_dice_pos": 0.4878631207985078,
+        "published_macro_dice_all_val": 0.4893074808736389,
+        "pred_area": {
+          "n": 187,
+          "n_exact": 187,
+          "n_within_2px": 187,
+          "median_abs": 0.0,
+          "max_abs": 0,
+          "p95_abs": 0.0
+        },
+        "gt_area_exact": 187,
+        "mean_bg_fp": 0.012163482170724096
+      },
+      "attunet_e4_p03": {
+        "n": 187,
+        "n_pos": 98,
+        "n_neg": 89,
+        "macro_dice_pos": 0.28845618033755754,
+        "published_macro_dice_all_val": 0.2986829046606476,
+        "pred_area": {
+          "n": 187,
+          "n_exact": 187,
+          "n_within_2px": 187,
+          "median_abs": 0.0,
+          "max_abs": 0,
+          "p95_abs": 0.0
+        },
+        "gt_area_exact": 187,
+        "mean_bg_fp": 0.04219321795021847
+      },
+      "attunet_e1e4_m03_p03": {
+        "n": 187,
+        "n_pos": 98,
+        "n_neg": 89,
+        "macro_dice_pos": 0.5229456028367495,
+        "published_macro_dice_all_val": 0.5137494708875645,
+        "pred_area": {
+          "n": 187,
+          "n_exact": 187,
+          "n_within_2px": 187,
+          "median_abs": 0.0,
+          "max_abs": 0,
+          "p95_abs": 0.0
+        },
+        "gt_area_exact": 187,
+        "mean_bg_fp": 0.01599491114622347
+      }
+    }
+  },
+  "seconds": 164.8,
+  "note": "macro_dice_pos is the mean of per-scene Dice on positive on-disk val scenes only. The published figure is the same mean over all 310 positive val scenes, including 2013-2017 volumes that are not on this machine. pred_area is compared to val_per_scene.json for every on-disk scene."
+}
