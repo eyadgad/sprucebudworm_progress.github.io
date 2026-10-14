@@ -43,6 +43,8 @@ function defaultsFrom(doc) {
     filters: { qualifies: false, status: "all", month: "all", annotation: false, minModels: 0 },
     corrections: [],
     selection: { year: "2021", night: "", scan: "" },
+    view: { mode: "agreement", model: ids[0] || "" },
+    sort: { key: "date", model: ids[0] || "" },
     ids,
   };
 }
@@ -55,6 +57,8 @@ function blankCopy(base) {
     filters: { ...base.filters },
     corrections: base.corrections.map(c => ({ ...c })),
     selection: { ...base.selection },
+    view: { ...base.view },
+    sort: { ...base.sort },
     ids: base.ids,
   };
 }
@@ -81,7 +85,7 @@ function hashParams() {
   const raw = location.hash.replace(/^#/, "");
   if (!raw) return null;
   const q = new URLSearchParams(raw);
-  const known = ["y", "n", "night", "s", "th", "inc", "rule", "fq", "fs", "fm", "fa", "fk", "cx"];
+  const known = ["y", "n", "night", "s", "th", "inc", "rule", "fq", "fs", "fm", "fa", "fk", "cx", "cm", "cid", "sk", "sid"];
   return known.some(k => q.has(k)) ? q : null;
 }
 
@@ -144,6 +148,18 @@ function applyStored(base, stored) {
       if (typeof stored.selection[key] === "string") next.selection[key] = stored.selection[key];
     }
   }
+  if (stored.view) {
+    if (stored.view.mode === "agreement" || stored.view.mode === "pass" || stored.view.mode === "score") {
+      next.view.mode = stored.view.mode;
+    }
+    if (typeof stored.view.model === "string" && stored.view.model in next.thresholds) next.view.model = stored.view.model;
+  }
+  if (stored.sort) {
+    if (stored.sort.key === "date" || stored.sort.key === "allpass" || stored.sort.key === "mean") {
+      next.sort.key = stored.sort.key;
+    }
+    if (typeof stored.sort.model === "string" && stored.sort.model in next.thresholds) next.sort.model = stored.sort.model;
+  }
   return next;
 }
 
@@ -184,6 +200,16 @@ function applyHash(base, q) {
     if (Number.isFinite(v)) next.filters.minModels = v;
   }
   if (q.has("cx")) next.corrections = decodeCorrections(q.get("cx"));
+  if (q.has("cm")) {
+    const mode = q.get("cm");
+    if (mode === "agreement" || mode === "pass" || mode === "score") next.view.mode = mode;
+  }
+  if (q.has("cid") && q.get("cid") in next.thresholds) next.view.model = q.get("cid");
+  if (q.has("sk")) {
+    const key = q.get("sk");
+    if (key === "date" || key === "allpass" || key === "mean") next.sort.key = key;
+  }
+  if (q.has("sid") && q.get("sid") in next.thresholds) next.sort.model = q.get("sid");
   return next;
 }
 
@@ -202,6 +228,10 @@ function writeHash() {
   q.set("fa", state.filters.annotation ? "1" : "0");
   q.set("fk", String(state.filters.minModels));
   q.set("cx", encodeCorrections(state.corrections));
+  q.set("cm", state.view.mode);
+  q.set("cid", state.view.model || "");
+  q.set("sk", state.sort.key);
+  q.set("sid", state.sort.model || "");
   const url = `${location.pathname}${location.search}#${q.toString()}`;
   history.replaceState(null, "", url);
 }
