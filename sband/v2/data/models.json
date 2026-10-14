@@ -33,6 +33,7 @@
     "dither": false,
     "note": "Full 960x960 grid. A white pixel is inside the mask. No 2x2 downsample."
   },
+  "mask_area_note": "Mask area counts every pixel with probability greater than 0.15, including pixels where DBZH is not finite. That is how the model decides a pixel, and it is the same pixel count as the C-band pred_area used for the Youden cut. On a 20-scan check, about 21,000 e4 mask pixels per scan were outside finite DBZH. e1 and e1e4 had fewer. The scan panel keeps those pixels in the area.",
   "set_counts": [
     "n_e1",
     "n_e4",
