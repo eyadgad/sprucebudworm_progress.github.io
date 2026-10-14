@@ -1,0 +1,211 @@
+{
+  "label": "C-band operating point, not calibrated on S-band (no S-band labels)",
+  "pixel_km2": 0.25,
+  "grid": {
+    "height": 960,
+    "width": 960,
+    "pixel_m": 500,
+    "row0": "north",
+    "col0": "west",
+    "northing0_m": 239500,
+    "easting0_m": -240000,
+    "northing_of_row0": "239500 m, the first northing in the S-band PPI"
+  },
+  "dbzh_display": {
+    "vmin_dbz": -5,
+    "vmax_dbz": 40,
+    "clip": "DBZH below -5 dBZ uses the -5 colour and DBZH above 40 dBZ uses the 40 colour",
+    "nodata_rgb": [
+      18,
+      24,
+      32
+    ],
+    "nodata_means": "non-finite DBZH",
+    "webp_quality": 72,
+    "pixels": 480,
+    "downsample": "mean of each 2x2 block of finite 500 m pixels; row 0 of the WebP is rows 0 and 1 of the 960 grid"
+  },
+  "mask_png": {
+    "mode": "1-bit",
+    "height": 960,
+    "width": 960,
+    "on": 1,
+    "dither": false,
+    "note": "Full 960x960 grid. A white pixel is inside the mask. No 2x2 downsample."
+  },
+  "set_counts": [
+    "n_e1",
+    "n_e4",
+    "n_e1e4",
+    "n_e1_and_e4",
+    "n_e1_and_e1e4",
+    "n_e4_and_e1e4",
+    "n_all_three"
+  ],
+  "set_count_meaning": "|e1|, |e4|, |e1e4|, |e1\u2229e4|, |e1\u2229e1e4|, |e4\u2229e1e4|, |e1\u2229e4\u2229e1e4| in 500 m pixels",
+  "classifiers": [
+    {
+      "id": "swin_e1",
+      "key": "e1",
+      "run": "swin_e1_m03",
+      "family": "classifier",
+      "input": "DBZH -0.3 deg",
+      "inputs": [
+        "DBZH -0.3 deg"
+      ],
+      "score": "probability",
+      "score_min": 0.0,
+      "score_max": 1.0,
+      "pass_rule": "probability >= threshold",
+      "default_threshold": 0.9,
+      "threshold_source": "C-band validation calibrated_threshold in swin_e1_m03_result.json",
+      "cband_val_auroc": 0.9429342020935699,
+      "cband_val_f1": 0.8673139158576052,
+      "cband_val_n": 612,
+      "label": "C-band operating point, not calibrated on S-band (no S-band labels)"
+    },
+    {
+      "id": "swin_e4",
+      "key": "e4",
+      "run": "swin_e4_p03",
+      "family": "classifier",
+      "input": "DBZH 0.4 deg (C-band 0.3 deg + 0.1 deg)",
+      "inputs": [
+        "DBZH 0.4 deg"
+      ],
+      "score": "probability",
+      "score_min": 0.0,
+      "score_max": 1.0,
+      "pass_rule": "probability >= threshold",
+      "default_threshold": 0.45,
+      "threshold_source": "C-band validation calibrated_threshold in swin_e4_p03_result.json",
+      "cband_val_auroc": 0.883497116000854,
+      "cband_val_f1": 0.8287112561174551,
+      "cband_val_n": 612,
+      "label": "C-band operating point, not calibrated on S-band (no S-band labels)"
+    },
+    {
+      "id": "swin_e1e4",
+      "key": "e1e4",
+      "run": "swin_e1e4_m03_p03",
+      "family": "classifier",
+      "input": "DBZH -0.3 deg and 0.4 deg",
+      "inputs": [
+        "DBZH -0.3 deg",
+        "DBZH 0.4 deg"
+      ],
+      "score": "probability",
+      "score_min": 0.0,
+      "score_max": 1.0,
+      "pass_rule": "probability >= threshold",
+      "default_threshold": 0.25,
+      "threshold_source": "C-band validation calibrated_threshold in swin_e1e4_m03_p03_result.json",
+      "cband_val_auroc": 0.9404133732108523,
+      "cband_val_f1": 0.8571428571428571,
+      "cband_val_n": 612,
+      "label": "C-band operating point, not calibrated on S-band (no S-band labels)"
+    }
+  ],
+  "segmenters": [
+    {
+      "id": "attunet_e1",
+      "key": "e1",
+      "run": "attunet_e1_m03",
+      "family": "segmenter",
+      "input": "DBZH -0.3 deg",
+      "inputs": [
+        "DBZH -0.3 deg"
+      ],
+      "score": "mask_area_km2",
+      "pixel_rule": "probability > 0.15",
+      "pixel_rule_fixed": true,
+      "pass_rule": "area_km2 >= threshold_km2",
+      "threshold_pixels": 6157,
+      "threshold_km2": 1539.25,
+      "threshold_source": "Youden J on pred_area (pixels) over the 612 C-band validation scenes in attunet_*_val_per_scene.json. Rule is pred_area >= cutoff. Ties prefer higher specificity, then the higher cutoff (src/presence.py select_youden_cutoff).",
+      "youden_j": 0.4911130100405896,
+      "tpr": 0.8354838709677419,
+      "fpr": 0.3443708609271523,
+      "specificity": 0.6556291390728477,
+      "tp": 259,
+      "fp": 104,
+      "tn": 198,
+      "fn": 51,
+      "n_val": 612,
+      "n_val_positive": 310,
+      "n_val_negative": 302,
+      "sband_n_pass": 2942,
+      "sband_n": 4666,
+      "cband_val_dice": 0.4893074808736389,
+      "cband_pixel_threshold": 0.15,
+      "label": "C-band operating point, not calibrated on S-band (no S-band labels)"
+    },
+    {
+      "id": "attunet_e4",
+      "key": "e4",
+      "run": "attunet_e4_p03",
+      "family": "segmenter",
+      "input": "DBZH 0.4 deg (C-band 0.3 deg + 0.1 deg)",
+      "inputs": [
+        "DBZH 0.4 deg"
+      ],
+      "score": "mask_area_km2",
+      "pixel_rule": "probability > 0.15",
+      "pixel_rule_fixed": true,
+      "pass_rule": "area_km2 >= threshold_km2",
+      "threshold_pixels": 19998,
+      "threshold_km2": 4999.5,
+      "threshold_source": "Youden J on pred_area (pixels) over the 612 C-band validation scenes in attunet_*_val_per_scene.json. Rule is pred_area >= cutoff. Ties prefer higher specificity, then the higher cutoff (src/presence.py select_youden_cutoff).",
+      "youden_j": 0.2428754539628284,
+      "tpr": 0.7064516129032258,
+      "fpr": 0.4635761589403974,
+      "specificity": 0.5364238410596026,
+      "tp": 219,
+      "fp": 140,
+      "tn": 162,
+      "fn": 91,
+      "n_val": 612,
+      "n_val_positive": 310,
+      "n_val_negative": 302,
+      "sband_n_pass": 2217,
+      "sband_n": 4666,
+      "cband_val_dice": 0.2986829046606476,
+      "cband_pixel_threshold": 0.15,
+      "label": "C-band operating point, not calibrated on S-band (no S-band labels)"
+    },
+    {
+      "id": "attunet_e1e4",
+      "key": "e1e4",
+      "run": "attunet_e1e4_m03_p03",
+      "family": "segmenter",
+      "input": "DBZH -0.3 deg",
+      "inputs": [
+        "DBZH -0.3 deg",
+        "DBZH 0.4 deg"
+      ],
+      "score": "mask_area_km2",
+      "pixel_rule": "probability > 0.15",
+      "pixel_rule_fixed": true,
+      "pass_rule": "area_km2 >= threshold_km2",
+      "threshold_pixels": 8051,
+      "threshold_km2": 2012.75,
+      "threshold_source": "Youden J on pred_area (pixels) over the 612 C-band validation scenes in attunet_*_val_per_scene.json. Rule is pred_area >= cutoff. Ties prefer higher specificity, then the higher cutoff (src/presence.py select_youden_cutoff).",
+      "youden_j": 0.5701559495834223,
+      "tpr": 0.8516129032258064,
+      "fpr": 0.2814569536423841,
+      "specificity": 0.7185430463576159,
+      "tp": 264,
+      "fp": 85,
+      "tn": 217,
+      "fn": 46,
+      "n_val": 612,
+      "n_val_positive": 310,
+      "n_val_negative": 302,
+      "sband_n_pass": 611,
+      "sband_n": 4666,
+      "cband_val_dice": 0.5137494708875645,
+      "cband_pixel_threshold": 0.15,
+      "label": "C-band operating point, not calibrated on S-band (no S-band labels)"
+    }
+  ]
+}
