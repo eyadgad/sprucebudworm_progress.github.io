@@ -22,9 +22,9 @@ const REFL_BANDS = [
   { color: [242, 31, 23], label: "19.1 – 25 dBZ" },
 ];
 const MASK_COLOR = {
-  e1: [47, 125, 209],
-  e4: [214, 140, 36],
-  e1e4: [150, 70, 190],
+  e1: [47, 140, 255],
+  e4: [230, 40, 210],
+  e1e4: [255, 255, 255],
 };
 const SEG_KEYS = ["e1", "e4", "e1e4"];
 const PRESETS = [
@@ -238,7 +238,7 @@ async function main() {
   ctrls.appendChild(qual);
   const ann = document.createElement("div");
   ann.className = "f";
-  ann.innerHTML = `<label for="f-annotation">Annotation set</label><span class="chk"><input type="checkbox" id="f-annotation"></span>`;
+  ann.innerHTML = `<label for="f-annotation">Annotation set</label><span class="chk"><input type="checkbox" id="f-annotation"> Annotation set</span>`;
   ann.querySelector("input").addEventListener("change", event => {
     state.preset = event.target.checked ? "ann" : "all";
     mount.querySelectorAll("#presets .chip").forEach(el => el.classList.toggle("on", el.dataset.p === state.preset));
@@ -413,9 +413,9 @@ async function main() {
               <label class="chk"><input type="checkbox" id="l_refl" checked> Reflectivity</label>
               <label class="model-choice"><input type="radio" name="refl" value="m03" checked> −0.3°</label>
               <label class="model-choice"><input type="radio" name="refl" value="max6"> Max of 6 lowest tilts</label>
-              <label class="chk"><input type="checkbox" id="l_e1" checked> e1</label>
-              <label class="chk"><input type="checkbox" id="l_e4"> e4</label>
-              <label class="chk"><input type="checkbox" id="l_e1e4"> e1e4</label>
+              <label class="chk"><input type="checkbox" id="l_e1" checked> <i class="mask-dot" style="background:rgb(${MASK_COLOR.e1.join(",")})"></i> e1</label>
+              <label class="chk"><input type="checkbox" id="l_e4"> <i class="mask-dot" style="background:rgb(${MASK_COLOR.e4.join(",")})"></i> e4</label>
+              <label class="chk"><input type="checkbox" id="l_e1e4"> <i class="mask-dot" style="background:rgb(${MASK_COLOR.e1e4.join(",")})"></i> e1e4</label>
             </div>
           </div>
           <div class="viewer-control-row">

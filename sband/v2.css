@@ -245,6 +245,7 @@ body.viewer-large .stage .dbzh-canvas{width:100%;max-height:min(900px,calc(100vh
 .cut{display:flex;flex-direction:column;gap:3px;font:11px var(--mono);color:var(--muted);min-width:0}
 .cut input{width:6.2rem;font:12px var(--mono)}
 .kbadge{display:inline-block;margin-top:2px;padding:0 6px;border-radius:99px;font:600 10px/1.5 var(--mono)}
+.mask-dot{display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid rgba(120,130,142,.7);vertical-align:-1px;flex:0 0 10px}
 .k0{background:rgba(179,55,47,.38)}
 .k1{background:rgba(179,55,47,.28)}
 .k2{background:rgba(184,121,27,.28)}
