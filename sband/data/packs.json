@@ -21,6 +21,7 @@
   "pack_path": "packs/{ts}.sbw.gz",
   "thumbnail_path": "thumbs/{ts}.webp",
   "version": "sbs1-fe83806da848",
+  "thumbnail_version": "refl120-nomask",
   "pixel_threshold": 0.15,
   "decision": "uint8 > threshold * 255"
 }

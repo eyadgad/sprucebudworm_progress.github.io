@@ -1,9 +1,7 @@
-/* S-band explore, laid out like the C-band Sample explorer.
-
-   The list, chips, thumbnails, table, nights view and modal follow
-   assets/js/sections/samples.js. Shared Modal and DataTable are imported
-   unchanged. The pack decoder is the local SBS1 copy.
-*/
+/* S-band explore. The default view is a night grid: one row per night,
+   one half-hour column from 19:00 through 08:30 UTC, and the reflectivity
+   thumbnail in every cell. Thumbnails and the table are the other views.
+   The modal viewer is unchanged. */
 
 import { DataTable } from "../../assets/js/lib/table.js";
 import { esc } from "../../assets/js/lib/metrics.js";
@@ -27,17 +25,10 @@ const MASK_COLOR = {
   e1e4: [255, 255, 255],
 };
 const SEG_KEYS = ["e1", "e4", "e1e4"];
-const PRESETS = [
-  ["all", "All scans"],
-  ["all6", "All six pass"],
-  ["cls", "All classifiers pass"],
-  ["seg", "All segmenters pass"],
-  ["disagree", "Classifiers and segmenters disagree"],
-  ["none", "No model passes"],
-  ["qual", "Qualifying nights"],
-  ["ann", "Annotation set"],
-  ["top20", "Top 20 by mean classifier probability"],
-];
+const SLOTS = [];
+for (const hour of [19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6, 7, 8]) {
+  SLOTS.push([hour, 0], [hour, 30]);
+}
 
 function pad(n) { return String(n).padStart(2, "0"); }
 
@@ -60,6 +51,11 @@ function edtOf(id) {
     date: `${edt.getUTCFullYear()}-${pad(edt.getUTCMonth() + 1)}-${pad(edt.getUTCDate())}`,
     long: `${edt.getUTCDate()} ${MONTHS[edt.getUTCMonth()]} ${edt.getUTCFullYear()}`,
   };
+}
+
+function edtHm(hour, minute) {
+  const total = ((hour * 60 + minute - 4 * 60) + 24 * 60) % (24 * 60);
+  return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
 }
 
 function inWindow(hour) { return hour >= 0 && hour <= 8; }
@@ -96,6 +92,7 @@ async function main() {
     key: m.key,
     family: m.family,
     label: `${m.family === "classifier" ? "Swin" : "AttUNet"} ${m.key}`,
+    short: `${m.family === "classifier" ? "Swin" : "Att"} ${m.key}`,
     input: m.input,
     scoreKey: m.family === "classifier" ? `p_${m.key}` : `area_${m.key}_km2`,
     cut: m.family === "classifier" ? Number(m.default_threshold) : Number(m.threshold_km2),
@@ -109,6 +106,9 @@ async function main() {
   const nights = nightDoc.nights;
   const nightById = new Map(nights.map(n => [n.night, n]));
   const corrections = () => getState()?.corrections || [];
+  const shared = getState();
+  const exp = shared.explore;
+  const queryNight = new URLSearchParams(location.search).get("night") || "";
 
   function placedScans() {
     const dropScan = new Set();
@@ -132,18 +132,51 @@ async function main() {
 
   let scans = placedScans();
   const state = {
-    year: "all", night: "all", status: "all", qualifies: false,
-    sort: "time", dir: 1, view: "grid", preset: "all", q: "",
-    cuts: Object.fromEntries(modelList.map(m => [m.id, Number.isFinite(Number(getState()?.thresholds?.[m.id])) ? Number(getState().thresholds[m.id]) : m.cut])),
+    year: exp.year || "all",
+    night: queryNight && nightById.has(queryNight) ? queryNight : (exp.night || "all"),
+    status: exp.status || "all",
+    qualifies: !!exp.qualifies,
+    annotation: !!exp.annotation,
+    q: exp.q || "",
+    colour: exp.colour || "all6",
+    view: exp.view || "grid",
+    cell: exp.cell || "72",
+    sort: "time",
+    dir: 1,
+    cuts: Object.fromEntries(modelList.map(m => [m.id, Number.isFinite(Number(shared.thresholds?.[m.id])) ? Number(shared.thresholds[m.id]) : m.cut])),
   };
 
   const passes = (scan, model) => Number(scan[model.scoreKey]) >= state.cuts[model.id];
   const kOf = scan => modelList.reduce((n, m) => n + (passes(scan, m) ? 1 : 0), 0);
-  const meanCls = scan => classifiers.reduce((n, m) => n + Number(scan[m.scoreKey]), 0) / classifiers.length;
-  const groupAll = (scan, group) => group.every(m => passes(scan, m));
+
+  function colourPass(scan) {
+    if (state.colour === "all6") return modelList.every(m => passes(scan, m));
+    if (state.colour === "cls") return classifiers.every(m => passes(scan, m));
+    if (state.colour === "seg") return segmenters.every(m => passes(scan, m));
+    const model = byId.get(state.colour);
+    return !!model && passes(scan, model);
+  }
+
+  function colourWords() {
+    if (state.colour === "all6") return "Colour rule: green when all six models pass their cutoffs, red when at least one fails.";
+    if (state.colour === "cls") return "Colour rule: green when all three classifiers pass, red when at least one classifier fails.";
+    if (state.colour === "seg") return "Colour rule: green when all three segmenters pass, red when at least one segmenter fails.";
+    const model = byId.get(state.colour);
+    return model ? `Colour rule: green when ${model.label} passes its cutoff, red when it fails.` : "";
+  }
 
   let qualifying = new Map();
   let windowCounts = new Map();
+  let bySlot = new Map();
+
+  function indexScans() {
+    bySlot = new Map();
+    for (const scan of scans) {
+      let slots = bySlot.get(scan.night);
+      if (!slots) { slots = new Map(); bySlot.set(scan.night, slots); }
+      slots.set(`${scan.hour}:${scan.minute}`, scan);
+    }
+  }
 
   function recomputeNights() {
     qualifying = new Map();
@@ -164,161 +197,327 @@ async function main() {
     }
   }
 
-  function rows() {
-    let list = scans.filter(scan => {
-      if (state.year !== "all" && !scan.night.startsWith(state.year)) return false;
-      if (state.night !== "all" && scan.night !== state.night) return false;
+  function queryOk(scan) {
+    if (!state.q) return true;
+    const q = state.q.toLowerCase();
+    return scan.night.toLowerCase().includes(q) || String(scan.id).includes(q);
+  }
+
+  function nightVisible(night) {
+    if (state.year !== "all" && !night.night.startsWith(state.year)) return false;
+    if (state.night !== "all" && night.night !== state.night) return false;
+    if (state.status !== "all" && night.status !== state.status) return false;
+    if (state.qualifies && !qualifying.get(night.night)) return false;
+    if (state.annotation && !night.annotation_role) return false;
+    if (!state.q) return true;
+    const q = state.q.toLowerCase();
+    if (night.night.toLowerCase().includes(q)) return true;
+    const slots = bySlot.get(night.night);
+    if (!slots) return false;
+    for (const scan of slots.values()) if (String(scan.id).includes(q)) return true;
+    return false;
+  }
+
+  function matchedScans() {
+    const out = [];
+    for (const scan of scans) {
       const meta = nightById.get(scan.night);
-      if (state.status !== "all" && meta?.status !== state.status) return false;
-      if (state.qualifies && !qualifying.get(scan.night)) return false;
-      if (state.q) {
-        const q = state.q.toLowerCase();
-        if (!String(scan.id).includes(q) && !scan.night.toLowerCase().includes(q)) return false;
-      }
-      return true;
+      if (!meta || !nightVisible(meta) || !queryOk(scan)) continue;
+      out.push(scan);
+    }
+    return out.sort((a, b) => a.id - b.id);
+  }
+
+  function rows() { return matchedScans(); }
+
+  function saveFilters() {
+    patch(s => {
+      s.explore.year = state.year;
+      s.explore.night = state.night;
+      s.explore.status = state.status;
+      s.explore.qualifies = state.qualifies;
+      s.explore.annotation = state.annotation;
+      s.explore.q = state.q;
+      s.explore.colour = state.colour;
+      s.explore.view = state.view;
+      s.explore.cell = state.cell;
     });
-    if (state.preset === "all6") list = list.filter(s => kOf(s) === 6);
-    else if (state.preset === "cls") list = list.filter(s => groupAll(s, classifiers));
-    else if (state.preset === "seg") list = list.filter(s => groupAll(s, segmenters));
-    else if (state.preset === "disagree") list = list.filter(s => groupAll(s, classifiers) !== groupAll(s, segmenters));
-    else if (state.preset === "none") list = list.filter(s => kOf(s) === 0);
-    else if (state.preset === "qual") list = list.filter(s => qualifying.get(s.night));
-    else if (state.preset === "ann") list = list.filter(s => nightById.get(s.night)?.annotation_role);
-    else if (state.preset === "top20") list = [...list].sort((a, b) => meanCls(b) - meanCls(a)).slice(0, 20);
-    const dir = state.dir;
-    const value = scan => state.sort === "time" ? scan.id : state.sort === "k" ? kOf(scan) : Number(scan[state.sort]);
-    return [...list].sort((a, b) => dir * (value(a) - value(b)) || (a.id - b.id));
   }
 
   const mount = document.getElementById("main");
   const years = [...new Set(nights.map(n => n.night.slice(0, 4)))].sort();
-  mount.querySelector("#presets").innerHTML = PRESETS.map(([k, label]) =>
-    `<button type="button" class="chip${k === "all" ? " on" : ""}" data-p="${k}">${esc(label)}</button>`).join("");
-
   const ctrls = mount.querySelector("#ctrls");
-  const addSelect = (label, key, options) => {
+  const addSelect = (label, id, options, current, onChange) => {
     const wrap = document.createElement("div");
     wrap.className = "f";
-    const id = "s_" + key;
     wrap.innerHTML = `<label for="${id}">${label}</label><select id="${id}">` +
       options.map(([v, text]) => `<option value="${esc(v)}">${esc(text)}</option>`).join("") + "</select>";
-    wrap.querySelector("select").addEventListener("change", event => {
-      state[key] = event.target.value;
-      if (key === "year") { state.night = "all"; rebuildNights(); }
-      draw();
-    });
+    const select = wrap.querySelector("select");
+    select.value = current;
+    select.addEventListener("change", () => onChange(select.value));
     ctrls.appendChild(wrap);
-    return wrap.querySelector("select");
+    return select;
   };
-  addSelect("Year", "year", [["all", "All years"], ...years.map(y => [y, y])]);
+
+  addSelect("Year", "s_year", [["all", "All years"], ...years.map(y => [y, y])], state.year, value => {
+    state.year = value;
+    if (state.night !== "all" && !state.night.startsWith(value) && value !== "all") state.night = "all";
+    rebuildNights();
+    saveFilters();
+    draw();
+  });
   const nightWrap = document.createElement("div");
   nightWrap.className = "f";
   ctrls.appendChild(nightWrap);
   function rebuildNights() {
     const ns = nights.filter(n => state.year === "all" || n.night.startsWith(state.year)).map(n => n.night);
-    if (!ns.includes(state.night)) state.night = "all";
+    if (state.night !== "all" && !ns.includes(state.night)) state.night = "all";
     nightWrap.innerHTML = `<label for="s_night">Night</label><select id="s_night">` +
       `<option value="all">All nights (${ns.length})</option>` +
       ns.map(n => `<option value="${esc(n)}"${n === state.night ? " selected" : ""}>${esc(n)}</option>`).join("") +
       "</select>";
     nightWrap.querySelector("select").addEventListener("change", event => {
       state.night = event.target.value;
+      saveFilters();
       draw();
     });
   }
   rebuildNights();
-  addSelect("Night status", "status", [
+  addSelect("Night status", "s_status", [
     ["all", "All statuses"], ["complete", "Complete"], ["partial", "Partial"],
     ["gap-skipped", "Gap-skipped"], ["absent", "No files"],
-  ]);
+  ], state.status, value => { state.status = value; saveFilters(); draw(); });
+
   const qual = document.createElement("div");
   qual.className = "f";
-  qual.innerHTML = `<label for="s_qual">Night qualifies</label><span class="chk"><input type="checkbox" id="s_qual"> 00–08 UTC rule</span>`;
-  qual.querySelector("input").addEventListener("change", event => { state.qualifies = event.target.checked; draw(); });
+  qual.innerHTML = `<label for="s_qual">Night qualifies</label><span class="chk"><input type="checkbox" id="s_qual"${state.qualifies ? " checked" : ""}> 00–08 UTC rule</span>`;
+  qual.querySelector("input").addEventListener("change", event => {
+    state.qualifies = event.target.checked;
+    saveFilters();
+    draw();
+  });
   ctrls.appendChild(qual);
   const ann = document.createElement("div");
   ann.className = "f";
-  ann.innerHTML = `<label for="f-annotation">Annotation set</label><span class="chk"><input type="checkbox" id="f-annotation"> Annotation set</span>`;
+  ann.innerHTML = `<label for="f-annotation">Annotation set</label><span class="chk"><input type="checkbox" id="f-annotation"${state.annotation ? " checked" : ""}> Annotation set</span>`;
   ann.querySelector("input").addEventListener("change", event => {
-    state.preset = event.target.checked ? "ann" : "all";
-    mount.querySelectorAll("#presets .chip").forEach(el => el.classList.toggle("on", el.dataset.p === state.preset));
+    state.annotation = event.target.checked;
+    saveFilters();
     draw();
   });
   ctrls.appendChild(ann);
-  addSelect("Sort by", "sort", [
+  addSelect("Colour by", "s_colour", [
+    ["all6", "All six models"],
+    ["cls", "All classifiers"],
+    ["seg", "All segmenters"],
+    ...modelList.map(m => [m.id, m.label]),
+  ], state.colour, value => { state.colour = value; saveFilters(); draw(); });
+  addSelect("View", "s_view", [["grid", "Night grid"], ["thumbs", "Thumbnails"], ["table", "Table"]], state.view, value => {
+    state.view = value;
+    saveFilters();
+    draw();
+  });
+  addSelect("Cell size", "s_cell", [["48", "Small 48"], ["72", "Medium 72"], ["110", "Large 110"]], state.cell, value => {
+    state.cell = value;
+    saveFilters();
+    draw();
+  });
+  addSelect("Sort by", "s_sort", [
     ["time", "Time"], ["k", "k/6 passing"],
     ...modelList.map(m => [m.scoreKey, m.label]),
-  ]);
-  addSelect("Order", "dir", [["1", "Low / early first"], ["-1", "High / late first"]]);
-  addSelect("View", "view", [["grid", "Thumbnails"], ["table", "Table"], ["nights", "Nights"]]);
+  ], state.sort, value => { state.sort = value; draw(); });
+  addSelect("Order", "s_dir", [["1", "Low / early first"], ["-1", "High / late first"]], String(state.dir), value => {
+    state.dir = Number(value);
+    draw();
+  });
 
   const search = document.createElement("div");
   search.className = "f";
-  search.innerHTML = `<label for="s_q">Find a scan</label><input id="s_q" type="search" placeholder="202207170300 or 2022-07-16">`;
-  search.querySelector("input").addEventListener("input", event => { state.q = event.target.value.trim(); draw(); });
+  search.innerHTML = `<label for="s_q">Find a scan</label><input id="s_q" type="search" placeholder="202207170300 or 2022-07-16" value="${esc(state.q)}">`;
+  search.querySelector("input").addEventListener("input", event => {
+    state.q = event.target.value.trim();
+    saveFilters();
+    draw();
+  });
   ctrls.appendChild(search);
 
   const cuts = mount.querySelector("#cuts");
   for (const model of modelList) {
     const wrap = document.createElement("label");
     wrap.className = "cut";
-    wrap.innerHTML = `${esc(model.label)}<input class="th-num" data-model="${model.id}" type="number" min="${model.min}" max="${model.max}" step="${model.step}" value="${state.cuts[model.id]}">`;
-    wrap.querySelector("input").addEventListener("input", event => {
-      const value = Number(event.target.value);
-      if (!Number.isFinite(value)) return;
+    wrap.innerHTML = `${esc(model.label)}<input class="th-num" data-model="${model.id}" type="number" min="${model.min}" max="${model.max}" step="${model.step}" value="${state.cuts[model.id]}" aria-invalid="false">`;
+    const input = wrap.querySelector("input");
+    const applyCut = () => {
+      const raw = input.value.trim();
+      const value = Number(raw);
+      const min = Number(input.min);
+      const max = Number(input.max);
+      const ok = raw !== "" && Number.isFinite(value) && value >= min && value <= max;
+      input.classList.toggle("invalid", !ok);
+      input.setAttribute("aria-invalid", ok ? "false" : "true");
+      if (!ok) return;
       state.cuts[model.id] = value;
       patch(s => { s.thresholds[model.id] = value; });
       recomputeNights();
       draw();
       if (curId) renderOpenPanels();
+    };
+    input.addEventListener("input", applyCut);
+    input.addEventListener("blur", () => {
+      if (!input.classList.contains("invalid")) return;
+      input.value = String(state.cuts[model.id]);
+      input.classList.remove("invalid");
+      input.setAttribute("aria-invalid", "false");
     });
     cuts.appendChild(wrap);
   }
-  mount.querySelector("#presets").addEventListener("click", event => {
-    const button = event.target.closest(".chip");
-    if (!button) return;
-    state.preset = button.dataset.p;
-    mount.querySelectorAll("#presets .chip").forEach(el => el.classList.toggle("on", el === button));
-    const box = document.getElementById("f-annotation");
-    if (box) box.checked = state.preset === "ann";
-    draw();
-  });
 
-  const thumbUrl = ts => assetUrl(packMeta.thumbnail_path, ts, packMeta.version);
+  const thumbUrl = ts => assetUrl(packMeta.thumbnail_path, ts, packMeta.thumbnail_version || packMeta.version);
   const packs = new SbandPackCache(ts => fetchSbandPack(assetUrl(packMeta.pack_path, ts, packMeta.version), packMeta), 3);
+  let docX = 0;
+  let docY = 0;
+  const pinDoc = () => window.scrollTo(docX, docY);
+  mount.addEventListener("pointerdown", event => {
+    if (!event.target.closest(".gcell[data-ts], .scell[data-ts]")) return;
+    docX = window.scrollX;
+    docY = window.scrollY;
+    requestAnimationFrame(pinDoc);
+    setTimeout(pinDoc, 0);
+    setTimeout(pinDoc, 80);
+  }, true);
 
   function draw() {
-    const matched = rows();
+    const matched = matchedScans();
     const count = mount.querySelector("#count");
     count.dataset.n = String(matched.length);
-    count.dataset.preset = state.preset;
-    count.innerHTML = state.view === "nights"
-      ? ""
-      : `<b>${matched.length.toLocaleString("en-US")}</b> scans match. Click a scan to open it.`;
+    count.dataset.view = state.view;
+    count.dataset.colour = state.colour;
+    count.innerHTML = `<b>${matched.length.toLocaleString("en-US")}</b> scans match.`;
+    const selectedNight = document.getElementById("selected-night");
+    if (selectedNight) selectedNight.textContent = state.night === "all" ? "none" : state.night;
+    const annBox = document.getElementById("f-annotation");
+    if (annBox) annBox.checked = state.annotation;
+    const qualBox = document.getElementById("s_qual");
+    if (qualBox) qualBox.checked = state.qualifies;
+    document.getElementById("legend").innerHTML =
+      `<span class="swatch-key"><i class="chip-sw pass"></i> all selected models pass</span>` +
+      `<span class="swatch-key"><i class="chip-sw fail"></i> at least one fails</span>` +
+      `<span class="swatch-key"><i class="chip-sw hatch"></i> no scan</span>` +
+      `<span id="colour-rule">${esc(colourWords())}</span>`;
+    document.getElementById("hour-caveat").textContent =
+      "Training-hour caveat: on C-band, scans at 19–23 UTC and at 09–11 UTC were all label 1. Read evening passes with care.";
     const body = mount.querySelector("#body");
-    if (state.view === "nights") { drawNights(body); return; }
-    if (!matched.length) {
-      body.innerHTML = `<div class="state"><div class="big">No scans match</div><div class="small">Clear a filter or choose All scans.</div></div>`;
+    if (state.view === "table") { drawTable(body, ordered(matched)); return; }
+    if (state.view === "thumbs") { drawThumbs(body, ordered(matched)); return; }
+    drawGrid(body);
+  }
+
+  function ordered(list) {
+    const dir = Number(state.dir) || 1;
+    const value = scan => state.sort === "time" ? scan.id : state.sort === "k" ? kOf(scan) : Number(scan[state.sort]);
+    return list.slice().sort((a, b) => dir * (value(a) - value(b)) || (a.id - b.id));
+  }
+
+  function slotHeads() {
+    const one = (hour, minute) => {
+      const label = `${pad(hour)}:${pad(minute)} UTC, ${edtHm(hour, minute)} EDT`;
+      return `<span class="sh" title="${esc(label)}"><b>${pad(hour)}</b><small>:${pad(minute)}</small></span>`;
+    };
+    return SLOTS.slice(0, 10).map(([h, m]) => one(h, m)).join("") +
+      `<span class="midnight-bar" title="Midnight UTC"></span>` +
+      SLOTS.slice(10).map(([h, m]) => one(h, m)).join("");
+  }
+
+  function cellHtml(night, hour, minute) {
+    const key = `${hour}:${minute}`;
+    const scan = bySlot.get(night.night)?.get(key);
+    const slot = `${pad(hour)}:${pad(minute)}`;
+    if (!scan || !queryOk(scan)) {
+      return `<div class="gcell hatch" data-pass="h" data-key="${esc(night.night)}|${slot}" data-night="${esc(night.night)}" title="No scan at ${slot} UTC"></div>`;
+    }
+    const ok = colourPass(scan);
+    const when = stamp(scan.id);
+    const glyph = ok ? "✓" : "✗";
+    const word = ok ? "pass" : "fail";
+    return `<button type="button" class="gcell ${ok ? "pass" : "fail"}" data-pass="${ok ? "1" : "0"}" data-ts="${scan.id}" data-night="${esc(scan.night)}" data-slot="${slot}" title="${esc(when.title)} ${word}"><img alt="" width="${state.cell}" height="${state.cell}" loading="lazy" decoding="async" src="${esc(thumbUrl(scan.id))}"><span class="glyph" aria-hidden="true">${glyph}</span></button>`;
+  }
+
+  function rowHtml(night) {
+    const stat = windowCounts.get(night.night) || { n: 0, counts: {}, qualifies: false };
+    const swin = classifiers.map(model => `${model.key} ${stat.n ? `${stat.counts[model.id] || 0}/${stat.n}` : "—"}`).join(" · ");
+    const att = segmenters.map(model => `${model.key} ${stat.n ? `${stat.counts[model.id] || 0}/${stat.n}` : "—"}`).join(" · ");
+    const cells = SLOTS.slice(0, 10).map(([h, m]) => cellHtml(night, h, m)).join("") +
+      `<span class="midnight-bar" title="Midnight UTC"></span>` +
+      SLOTS.slice(10).map(([h, m]) => cellHtml(night, h, m)).join("");
+    return `<div class="ng-row" data-night="${esc(night.night)}" data-status="${esc(night.status)}" data-qualifies="${stat.qualifies ? "1" : "0"}">
+      <div class="ng-sum">
+        <div class="ng-id"><b>${esc(night.night)}</b> <span class="${stat.qualifies ? "q-yes" : "q-no"}">${stat.qualifies ? "✓" : "✗"}</span></div>
+        <div class="ng-meta">${esc(night.status)}${stat.n ? ` · ${stat.n} in 00–08` : ""}</div>
+        <div class="ng-counts" title="Swin passes in 00–08 UTC">Swin ${swin}</div>
+        <div class="ng-counts" title="AttUNet passes in 00–08 UTC">Att ${att}</div>
+      </div>
+      <div class="ng-slots">${cells}</div>
+    </div>`;
+  }
+
+  function drawGrid(body) {
+    const visible = nights.filter(nightVisible);
+    body.innerHTML = `<div id="grid-scroll" data-ready="0"><div class="night-grid" style="--cell:${Number(state.cell)}px" data-colour="${esc(state.colour)}">
+      <div class="ng-row ng-head"><div class="ng-sum">Night · 00–08 UTC</div><div class="ng-slots">${slotHeads()}</div></div>
+      <div id="ng-body"></div>
+    </div></div>`;
+    const scroller = body.querySelector("#grid-scroll");
+    const host = body.querySelector("#ng-body");
+    scroller.addEventListener("click", event => {
+      const cell = event.target.closest(".gcell[data-ts]");
+      if (!cell) return;
+      open(cell.dataset.ts);
+      pinDoc();
+    });
+    if (!visible.length) {
+      host.innerHTML = `<p class="small">No nights match.</p>`;
+      scroller.dataset.ready = "1";
       return;
     }
-    if (state.view === "table") { drawTable(body, matched); return; }
+    const chunk = 10;
+    let index = 0;
+    const paintChunk = () => {
+      if (!host.isConnected) return;
+      host.insertAdjacentHTML("beforeend", visible.slice(index, index + chunk).map(rowHtml).join(""));
+      index += chunk;
+      if (index < visible.length) requestAnimationFrame(paintChunk);
+      else scroller.dataset.ready = "1";
+    };
+    paintChunk();
+  }
+
+  function drawThumbs(body, matched) {
+    if (!matched.length) {
+      body.innerHTML = `<div class="state"><div class="big">No scans match</div></div>`;
+      return;
+    }
     body.innerHTML = `<div class="sgrid">` + matched.slice(0, 120).map(scan => {
       const when = stamp(scan.id);
-      const k = kOf(scan);
-      return `<button type="button" class="scell" data-ts="${scan.id}">
+      const ok = colourPass(scan);
+      return `<button type="button" class="scell ${ok ? "pass" : "fail"}" data-ts="${scan.id}" data-pass="${ok ? "1" : "0"}">
         <img class="im" width="120" height="120" loading="lazy" decoding="async" alt="" src="${esc(thumbUrl(scan.id))}">
         <span class="cap"><b>${when.hm}</b> <span class="m">${when.day}</span><br>
-        <span class="kbadge k${k}">${k}/6 pass</span></span>
+        <span class="glyph">${ok ? "✓" : "✗"}</span> <span class="kbadge">${kOf(scan)}/6</span></span>
       </button>`;
     }).join("") + `</div>
-      <p class="small" style="margin-top:10px">Thumbnails show <b>−0.3° reflectivity</b> with the AttUNet e1 prediction at 0.15. ${matched.length > 120 ? `Showing the first 120 of ${matched.length.toLocaleString("en-US")}. Narrow the filters or switch to the table.` : ""}</p>`;
-    body.querySelectorAll(".scell").forEach(button => button.addEventListener("click", () => open(button.dataset.ts)));
+      <p class="small" style="margin-top:10px">Thumbnails are −0.3° reflectivity, with no mask. The border is the colour rule. ${matched.length > 120 ? `Showing the first 120 of ${matched.length.toLocaleString("en-US")}.` : ""}</p>`;
+    body.querySelectorAll(".scell").forEach(button => button.addEventListener("click", () => {
+      docX = window.scrollX;
+      docY = window.scrollY;
+      open(button.dataset.ts);
+      pinDoc();
+    }));
   }
 
   function drawTable(body, matched) {
     body.innerHTML = `<div id="tbl"></div>`;
     const tableRows = matched.map(scan => {
-      const row = { ts: scan.id, night: scan.night, k: kOf(scan), _scan: scan };
+      const row = { ts: scan.id, night: scan.night, k: kOf(scan), pass: colourPass(scan) ? "pass" : "fail", _scan: scan };
       for (const model of modelList) row[model.id] = Number(scan[model.scoreKey]);
       return row;
     });
@@ -331,6 +530,7 @@ async function main() {
           fmt: v => m.family === "classifier" ? fmtProb(v) : fmtKm(v),
         })),
         { key: "k", label: "k/6", fmt: v => `${v}/6` },
+        { key: "pass", label: "Colour", fmt: v => v === "pass" ? "✓" : "✗" },
       ],
       rows: tableRows,
       sort: state.sort === "time" ? "ts" : state.sort === "k" ? "k" : modelList.find(m => m.scoreKey === state.sort)?.id,
@@ -338,46 +538,6 @@ async function main() {
       pageSize: 25,
       onRow: row => open(String(row.ts)),
     });
-  }
-
-  function drawNights(body) {
-    const list = nights.filter(night => {
-      if (state.year !== "all" && !night.night.startsWith(state.year)) return false;
-      if (state.night !== "all" && night.night !== state.night) return false;
-      if (state.status !== "all" && night.status !== state.status) return false;
-      if (state.qualifies && !qualifying.get(night.night)) return false;
-      if (state.preset === "ann" && !night.annotation_role) return false;
-      if (state.preset === "qual" && !qualifying.get(night.night)) return false;
-      if (state.q && !night.night.includes(state.q)) return false;
-      return true;
-    });
-    const count = mount.querySelector("#count");
-    count.dataset.n = String(list.length);
-    count.innerHTML = `<b>${list.length}</b> nights. A row uses the 00–08 UTC scans and the cutoffs above. Click a night to see its thumbnails.`;
-    body.innerHTML = list.map(night => {
-      const stat = windowCounts.get(night.night) || { n: 0, counts: {}, qualifies: false };
-      const cells = modelList.map(model => {
-        const got = stat.counts[model.id] || 0;
-        return `<span class="msum">${esc(model.key)} ${stat.n ? `${got}/${stat.n}` : "—"}</span>`;
-      }).join("");
-      return `<button type="button" class="night-line" data-night="${night.night}">
-        <b>${night.night}</b>
-        <span class="m">${esc(night.status)}</span>
-        <span class="${stat.qualifies ? "q-yes" : "q-no"}">${stat.qualifies ? "✓ qualifies" : "✗ does not qualify"}</span>
-        ${cells}
-      </button>`;
-    }).join("") || `<div class="state"><div class="big">No nights match</div></div>`;
-    body.querySelectorAll(".night-line").forEach(button => button.addEventListener("click", () => {
-      state.night = button.dataset.night;
-      state.year = button.dataset.night.slice(0, 4);
-      state.view = "grid";
-      state.preset = "all";
-      mount.querySelector("#s_year").value = state.year;
-      mount.querySelector("#s_view").value = "grid";
-      mount.querySelectorAll("#presets .chip").forEach(el => el.classList.toggle("on", el.dataset.p === "all"));
-      rebuildNights();
-      draw();
-    }));
   }
 
   /* Viewer. The shell is built once; same-night chips and arrows swap the scan. */
@@ -580,10 +740,10 @@ async function main() {
 
   function drawLegend(showRefl, reflCount, counts, layers) {
     const leg = q("#leg2");
-    const rows = [];
+    const rowsHtml = [];
     const push = (color, name, count, id) => {
       const shown = count == null ? "" : pct(count);
-      rows.push(`<div class="scan-legend-row" data-layer="${id}" data-count="${shown.count ?? ""}">
+      rowsHtml.push(`<div class="scan-legend-row" data-layer="${id}" data-count="${shown.count ?? ""}">
         <span class="scan-legend-sw" style="background:rgb(${color.join(",")})"></span>
         <span>${esc(name)}</span>
         ${shown.text == null ? "" : `<span class="scan-legend-pct">${shown.text}%</span>`}
@@ -598,11 +758,11 @@ async function main() {
       push([190, 222, 230], "Reflectivity (not background)", reflCount, "refl");
       REFL_BANDS.forEach(band => {
         if (!band.label) return;
-        rows.push(`<div class="scan-legend-row"><span class="scan-legend-sw" style="background:rgb(${band.color.join(",")})"></span><span>${esc(band.label)}</span></div>`);
+        rowsHtml.push(`<div class="scan-legend-row"><span class="scan-legend-sw" style="background:rgb(${band.color.join(",")})"></span><span>${esc(band.label)}</span></div>`);
       });
     }
-    leg.innerHTML = rows.join("");
-    leg.hidden = !rows.length;
+    leg.innerHTML = rowsHtml.join("");
+    leg.hidden = !rowsHtml.length;
     if (!legPos) { leg.style.left = "8px"; leg.style.top = "8px"; }
     else clampLegend();
   }
@@ -615,7 +775,7 @@ async function main() {
     return dice(inter, na, nb);
   }
 
-  function renderOpenPanels(layers) {
+  function renderOpenPanels() {
     if (!cur) return;
     const when = stamp(cur.id);
     const edt = edtOf(cur.id);
@@ -676,7 +836,7 @@ async function main() {
     q("#prev").disabled = vidx <= 0;
     q("#next").disabled = vidx < 0 || vidx >= vlist.length - 1;
     renderNight();
-    renderOpenPanels(null);
+    renderOpenPanels();
     const noimg = q("#noimg");
     noimg.style.display = "flex";
     noimg.innerHTML = `<div><div class="spin"></div><div>Loading sample...</div></div>`;
@@ -696,6 +856,20 @@ async function main() {
   function step(dir) {
     const next = vlist[vidx + dir];
     if (next) loadScene(next.id);
+  }
+
+  function wrapArrows() {
+    const orig = modal.onKey;
+    if (!orig || orig.wrapped) return;
+    document.removeEventListener("keydown", orig);
+    const wrapped = event => {
+      const el = event.target;
+      if (el && el.matches && el.matches("input, textarea, select") && String(event.key).startsWith("Arrow")) return;
+      orig(event);
+    };
+    wrapped.wrapped = true;
+    modal.onKey = wrapped;
+    document.addEventListener("keydown", wrapped);
   }
 
   function bindViewer() {
@@ -771,8 +945,13 @@ async function main() {
     }
     zoom = 1; panX = 0; panY = 0; legPos = null;
     modal.open(SHELL, { onPrev: () => step(-1), onNext: () => step(1) });
+    wrapArrows();
     bindViewer();
     loadScene(id);
+    pinDoc();
+    mount.querySelectorAll(".gcell.on").forEach(el => el.classList.remove("on"));
+    const marked = mount.querySelector(`.gcell[data-ts="${id}"]`);
+    if (marked) marked.classList.add("on");
   }
 
   function legacyId() {
@@ -787,31 +966,14 @@ async function main() {
     return "";
   }
 
-  const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
-  const params = new URLSearchParams(location.search);
-  const hashedNight = params.get("night") || hash.get("n") || hash.get("night") || "";
-  if (hashedNight && nightById.has(hashedNight)) {
-    state.night = hashedNight;
-    state.year = hashedNight.slice(0, 4);
-    const yearSel = document.getElementById("s_year");
-    if (yearSel) yearSel.value = state.year;
-    rebuildNights();
-  }
-  if (getState()?.filters?.annotation || hash.get("fa") === "1") {
-    state.preset = "ann";
-    mount.querySelectorAll("#presets .chip").forEach(el => el.classList.toggle("on", el.dataset.p === "ann"));
-    const box = document.getElementById("f-annotation");
-    if (box) box.checked = true;
-  }
-  const selectedNight = document.getElementById("selected-night");
-  if (selectedNight) selectedNight.textContent = state.night === "all" ? "none" : state.night;
+  indexScans();
   recomputeNights();
   draw();
   const initial = legacyId();
   if (initial) open(initial);
   window.__explore = {
-    rows, kOf, qualifying, passes,
-    rescan() { scans = placedScans(); recomputeNights(); },
+    rows, kOf, qualifying, passes, colourPass,
+    rescan() { scans = placedScans(); indexScans(); recomputeNights(); draw(); },
   };
 }
 

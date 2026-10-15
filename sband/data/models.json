@@ -179,7 +179,7 @@
       "key": "e1e4",
       "run": "attunet_e1e4_m03_p03",
       "family": "segmenter",
-      "input": "DBZH -0.3 deg",
+      "input": "DBZH -0.3 deg and 0.4 deg",
       "inputs": [
         "DBZH -0.3 deg",
         "DBZH 0.4 deg"

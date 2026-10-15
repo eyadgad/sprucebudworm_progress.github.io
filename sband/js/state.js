@@ -41,6 +41,10 @@ function defaultsFrom(doc) {
     included,
     nightRule: { mode: "every", fraction: 0.5, minScans: 10, hourStart: 0, hourEnd: 8 },
     filters: { qualifies: false, status: "all", month: "all", annotation: false, minModels: 0 },
+    explore: {
+      year: "all", night: "all", status: "all", qualifies: false, annotation: false,
+      q: "", colour: "all6", view: "grid", cell: "72",
+    },
     corrections: [],
     selection: { year: "2021", night: "", scan: "" },
     view: { mode: "agreement", model: ids[0] || "" },
@@ -62,6 +66,7 @@ function blankCopy(base) {
     included: { ...base.included },
     nightRule: { ...base.nightRule },
     filters: { ...base.filters },
+    explore: { ...base.explore },
     corrections: base.corrections.map(c => ({ ...c })),
     selection: { ...base.selection },
     view: { ...base.view },
@@ -97,7 +102,7 @@ function hashParams() {
   const raw = location.hash.replace(/^#/, "");
   if (!raw) return null;
   const q = new URLSearchParams(raw);
-  const known = ["y", "n", "night", "s", "th", "inc", "rule", "fq", "fs", "fm", "fa", "fk", "cx", "cm", "cid", "sk", "sid", "tv", "vm", "vo", "vk", "vp"];
+  const known = ["y", "n", "night", "s", "th", "inc", "rule", "fq", "fs", "fm", "fa", "fk", "cx", "cm", "cid", "sk", "sid", "tv", "vm", "vo", "vk", "vp", "ey", "q", "cb", "vw", "cz"];
   return known.some(k => q.has(k)) ? q : null;
 }
 
@@ -132,19 +137,7 @@ function applyStored(base, stored) {
       if (Number.isFinite(v)) next.thresholds[id] = v;
     }
   }
-  if (stored.included) {
-    for (const id of base.ids) {
-      if (typeof stored.included[id] === "boolean") next.included[id] = stored.included[id];
-    }
-  }
-  if (stored.nightRule) {
-    const r = stored.nightRule;
-    if (r.mode === "every" || r.mode === "allpass") next.nightRule.mode = r.mode;
-    for (const key of ["fraction", "minScans", "hourStart", "hourEnd"]) {
-      const v = Number(r[key]);
-      if (Number.isFinite(v)) next.nightRule[key] = v;
-    }
-  }
+  // included and nightRule are fixed. Stale copies in localStorage are ignored.
   if (stored.filters) {
     const f = stored.filters;
     if (typeof f.qualifies === "boolean") next.filters.qualifies = f.qualifies;
@@ -153,6 +146,27 @@ function applyStored(base, stored) {
     if (typeof f.month === "string") next.filters.month = f.month;
     const k = Number(f.minModels);
     if (Number.isFinite(k)) next.filters.minModels = k;
+  }
+  if (stored.explore && typeof stored.explore === "object") {
+    const src = stored.explore;
+    const exp = next.explore;
+    if (["all", "2021", "2022"].includes(src.year)) exp.year = src.year;
+    if (typeof src.night === "string") exp.night = src.night || "all";
+    if (["all", "complete", "partial", "gap-skipped", "absent"].includes(src.status)) exp.status = src.status;
+    if (typeof src.qualifies === "boolean") exp.qualifies = src.qualifies;
+    if (typeof src.annotation === "boolean") exp.annotation = src.annotation;
+    if (typeof src.q === "string") exp.q = src.q;
+    if (["all6", "cls", "seg", "swin_e1", "swin_e4", "swin_e1e4", "attunet_e1", "attunet_e4", "attunet_e1e4"].includes(src.colour)) exp.colour = src.colour;
+    if (["grid", "thumbs", "table"].includes(src.view)) exp.view = src.view;
+    if (["48", "72", "110"].includes(String(src.cell))) exp.cell = String(src.cell);
+  } else {
+    next.explore.annotation = next.filters.annotation;
+    next.explore.qualifies = next.filters.qualifies;
+    if (["all", "complete", "partial", "gap-skipped", "absent"].includes(next.filters.status)) {
+      next.explore.status = next.filters.status;
+    }
+    const storedNight = stored.selection && typeof stored.selection.night === "string" ? stored.selection.night : "";
+    if (storedNight) next.explore.night = storedNight;
   }
   if (Array.isArray(stored.corrections)) next.corrections = decodeCorrections(encodeCorrections(stored.corrections));
   if (stored.selection) {
@@ -196,6 +210,8 @@ function applyHash(base, q) {
   if (q.has("y")) next.selection.year = q.get("y") || "";
   if (q.has("n")) next.selection.night = q.get("n") || "";
   if (q.has("night")) next.selection.night = q.get("night") || "";
+  if (q.has("n") || q.has("night")) next.explore.night = next.selection.night || "all";
+  if (q.has("ey") && ["all", "2021", "2022"].includes(q.get("ey"))) next.explore.year = q.get("ey");
   if (q.has("s")) next.selection.scan = q.get("s") || "";
   if (q.has("th")) {
     for (const part of q.get("th").split(",")) {
@@ -206,23 +222,28 @@ function applyHash(base, q) {
       if (id in next.thresholds && Number.isFinite(v)) next.thresholds[id] = v;
     }
   }
-  if (q.has("inc")) {
-    const on = new Set(q.get("inc").split(",").filter(Boolean));
-    for (const id of next.ids) next.included[id] = on.has(id);
+  // inc= and rule= are ignored. Every page uses all six models and the 00-08 UTC rule.
+  if (q.has("fq")) {
+    next.filters.qualifies = q.get("fq") === "1";
+    next.explore.qualifies = next.filters.qualifies;
   }
-  if (q.has("rule")) {
-    const [mode, fraction, minScans, hourStart, hourEnd] = q.get("rule").split(",");
-    if (mode === "every" || mode === "allpass") next.nightRule.mode = mode;
-    const nums = { fraction, minScans, hourStart, hourEnd };
-    for (const key of Object.keys(nums)) {
-      const v = Number(nums[key]);
-      if (Number.isFinite(v)) next.nightRule[key] = v;
+  if (q.has("fs")) {
+    next.filters.status = q.get("fs") || "all";
+    if (["all", "complete", "partial", "gap-skipped", "absent"].includes(next.filters.status)) {
+      next.explore.status = next.filters.status;
     }
   }
-  if (q.has("fq")) next.filters.qualifies = q.get("fq") === "1";
-  if (q.has("fs")) next.filters.status = q.get("fs") || "all";
   if (q.has("fm")) next.filters.month = q.get("fm") || "all";
-  if (q.has("fa")) next.filters.annotation = q.get("fa") === "1";
+  if (q.has("fa")) {
+    next.filters.annotation = q.get("fa") === "1";
+    next.explore.annotation = next.filters.annotation;
+  }
+  if (q.has("q")) next.explore.q = q.get("q") || "";
+  if (q.has("cb") && ["all6", "cls", "seg", "swin_e1", "swin_e4", "swin_e1e4", "attunet_e1", "attunet_e4", "attunet_e1e4"].includes(q.get("cb"))) {
+    next.explore.colour = q.get("cb");
+  }
+  if (q.has("vw") && ["grid", "thumbs", "table"].includes(q.get("vw"))) next.explore.view = q.get("vw");
+  if (q.has("cz") && ["48", "72", "110"].includes(q.get("cz"))) next.explore.cell = q.get("cz");
   if (q.has("fk")) {
     const v = Number(q.get("fk"));
     if (Number.isFinite(v)) next.filters.minModels = v;
@@ -263,13 +284,15 @@ function writeHash() {
   q.set("n", state.selection.night || "");
   q.set("s", state.selection.scan || "");
   q.set("th", state.ids.map(id => `${id}:${state.thresholds[id]}`).join(","));
-  q.set("inc", state.ids.filter(id => state.included[id]).join(","));
-  const r = state.nightRule;
-  q.set("rule", [r.mode, r.fraction, r.minScans, r.hourStart, r.hourEnd].join(","));
-  q.set("fq", state.filters.qualifies ? "1" : "0");
-  q.set("fs", state.filters.status);
+  q.set("ey", state.explore.year);
+  q.set("q", state.explore.q);
+  q.set("cb", state.explore.colour);
+  q.set("vw", state.explore.view);
+  q.set("cz", state.explore.cell);
+  q.set("fq", state.explore.qualifies ? "1" : "0");
+  q.set("fs", state.explore.status);
   q.set("fm", state.filters.month);
-  q.set("fa", state.filters.annotation ? "1" : "0");
+  q.set("fa", state.explore.annotation ? "1" : "0");
   q.set("fk", String(state.filters.minModels));
   q.set("cx", encodeCorrections(state.corrections));
   q.set("cm", state.view.mode);
@@ -286,7 +309,22 @@ function writeHash() {
   history.replaceState(null, "", url);
 }
 
+function lockAgreement(next) {
+  for (const id of next.ids) next.included[id] = true;
+  next.nightRule.mode = "every";
+  next.nightRule.fraction = 0.5;
+  next.nightRule.minScans = 10;
+  next.nightRule.hourStart = 0;
+  next.nightRule.hourEnd = 8;
+  next.selection.night = next.explore.night === "all" ? "" : next.explore.night;
+  next.filters.qualifies = next.explore.qualifies;
+  next.filters.annotation = next.explore.annotation;
+  next.filters.status = next.explore.status;
+  return next;
+}
+
 function persist() {
+  lockAgreement(state);
   writeStorage();
   writeHash();
   emit();
@@ -299,6 +337,7 @@ export function boot(doc) {
   let next = applyStored(base, readStorage());
   const q = hashParams();
   if (q) next = applyHash(next, q);
+  lockAgreement(next);
   state = next;
   writeStorage();
   writeHash();

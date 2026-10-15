@@ -71,7 +71,7 @@
 .qual-link{border:0;background:transparent;padding:0 2px;font-family:var(--mono);cursor:pointer}
 .agree-ramp{display:inline-block;width:112px;height:12px;border-radius:99px;vertical-align:middle;background:linear-gradient(90deg,rgba(120,130,142,.28),rgba(31,122,84,.62))}
 .slot-head{position:sticky;top:0;z-index:4;background:var(--paper);padding:2px 0}
-#grid-scroll{position:sticky;top:58px;max-height:calc(100vh - 70px);overflow-y:auto;overflow-x:hidden;overflow-anchor:none;overscroll-behavior:contain}
+#grid-scroll{position:relative;flex:1 1 auto;min-height:160px;min-width:0;max-width:100%;overflow:auto;overflow-anchor:none;overscroll-behavior:contain}
 .explore-ui{overflow-anchor:none}
 .band-label{display:none}
 .nav-row,.viewer-bar{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:flex-end;margin:4px 0}
@@ -261,3 +261,53 @@ body.viewer-large .stage .dbzh-canvas{width:100%;max-height:min(900px,calc(100vh
 .night-line b{font-family:var(--mono)}
 .explore-page .stage{background:#000;border:1px solid var(--hair);border-radius:11px;overflow:hidden;aspect-ratio:1}
 .explore-page #combine{max-width:16rem}
+.th-num.invalid{border-color:var(--bad);outline:2px solid var(--bad)}
+#legend{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin:8px 0 4px;font-size:13px}
+#legend .swatch-key{display:inline-flex;align-items:center;gap:6px}
+#legend .chip-sw{width:18px;height:14px;border-radius:3px;box-sizing:border-box;flex:0 0 18px}
+#legend .chip-sw.pass{border:3px solid #1f7a54;background:rgba(31,122,84,.28)}
+#legend .chip-sw.fail{border:3px solid #b3372f;background:rgba(179,55,47,.28)}
+#legend .chip-sw.hatch{border:1px solid var(--hair);background:repeating-linear-gradient(135deg,var(--panel2),var(--panel2) 3px,var(--hair) 3px,var(--hair) 4px)}
+#colour-rule{flex:1 1 16rem;color:var(--ink2);font-size:12.5px}
+#hour-caveat{margin:0 0 6px}
+.explore-page #body{min-width:0;max-width:100%}
+.night-grid{width:max-content;min-width:100%}
+.ng-row{display:flex;align-items:stretch}
+.ng-head{position:sticky;top:0;z-index:3;background:var(--paper)}
+.ng-sum{
+  position:sticky;left:0;z-index:2;flex:0 0 13.2rem;width:13.2rem;box-sizing:border-box;
+  padding:4px 8px;background:var(--paper);border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)
+}
+.ng-head .ng-sum{z-index:4}
+.ng-id{display:flex;gap:6px;align-items:baseline;font:600 12px/1.3 var(--mono)}
+.ng-meta{font:10px var(--mono);color:var(--muted)}
+.ng-counts{font:10px/1.35 var(--mono);color:var(--ink2)}
+.ng-slots{display:grid;grid-template-columns:repeat(10,var(--cell)) 4px repeat(18,var(--cell));gap:3px;padding:3px;align-items:center}
+.sh{width:var(--cell);text-align:center;font:9px/1.1 var(--mono);color:var(--muted)}
+.sh b{display:block;font-weight:600}
+.gcell{
+  appearance:none;position:relative;display:block;width:var(--cell);height:var(--cell);margin:0;padding:0;box-sizing:border-box;
+  border:3px solid transparent;border-radius:4px;overflow:hidden;background:#10141a;color:#fff;cursor:pointer
+}
+.gcell img{width:100%;height:100%;object-fit:cover;display:block}
+.gcell.pass{border-color:#1f7a54}
+.gcell.fail{border-color:#b3372f}
+.gcell.pass::after,.gcell.fail::after{content:"";position:absolute;inset:0;pointer-events:none}
+.gcell.pass::after{background:rgba(31,122,84,.22)}
+.gcell.fail::after{background:rgba(179,55,47,.22)}
+.gcell .glyph{
+  position:absolute;right:1px;bottom:1px;z-index:1;min-width:1em;padding:0 2px;text-align:center;
+  font:700 11px/1.25 var(--mono);color:#fff;background:rgba(0,0,0,.72);border-radius:3px;pointer-events:none
+}
+.gcell.hatch{
+  border-width:1px;border-color:var(--hair);cursor:default;
+  background:repeating-linear-gradient(135deg,var(--panel2),var(--panel2) 4px,var(--hair) 4px,var(--hair) 5px)
+}
+.gcell.on{outline:2px solid var(--accent);outline-offset:-5px}
+.explore-page .sgrid .scell.pass{border:3px solid #1f7a54}
+.explore-page .sgrid .scell.fail{border:3px solid #b3372f}
+.ng-slots .midnight-bar{align-self:stretch;min-height:18px;background:var(--bad)}
+@media(max-width:720px){
+  .ng-sum{flex-basis:9.2rem;width:9.2rem;padding:3px 5px}
+  .ng-counts{font-size:9px}
+}
