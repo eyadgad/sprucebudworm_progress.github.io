@@ -230,6 +230,9 @@ function buildGrid() {
   document.getElementById("grid-ready").textContent = `${n} scans on the grid`;
   showYear(st.selection.year || "2021");
   paintFast();
+  lastScrolled = "";
+  scrollSelectionIntoGrid();
+  lastScrolled = `${st.selection.year}|${st.selection.night}|${st.selection.scan}`;
 }
 
 function bindRows() {
@@ -478,13 +481,35 @@ function paintGroups(st) {
   document.getElementById("group-segmenters").textContent = `Segmenters ${word(seg)}`;
 }
 
-function revealImage() {
-  const panel = document.getElementById("scan-panel");
-  if (!panel) return;
-  const sticky = 58;
-  const top = panel.getBoundingClientRect().top;
-  if (top > sticky + 1) window.scrollBy({ top: top - sticky, left: 0, behavior: "instant" });
-  panel.scrollTop = 0;
+function scrollNearest(scroller, el) {
+  // Move only this scroller (block: nearest). Use the on-screen slice when it
+  // can fit the row, so a scroller taller than the viewport does not park the
+  // row below the fold. Never touches window scroll.
+  if (!scroller || !el || el.closest("[hidden]")) return;
+  const box = scroller.getBoundingClientRect();
+  const row = el.getBoundingClientRect();
+  if (row.height <= 0 || box.height <= 0) return;
+  const visibleTop = Math.max(box.top, 0);
+  const visibleBottom = Math.min(box.bottom, window.innerHeight);
+  const onScreen = visibleBottom - visibleTop > row.height;
+  let top = onScreen ? visibleTop : box.top;
+  const bottom = onScreen ? visibleBottom : box.bottom;
+  const head = el.parentElement?.querySelector(".slot-head");
+  const headH = head && getComputedStyle(head).display !== "none" ? head.offsetHeight : 0;
+  if (headH > 0 && bottom - (top + headH) > row.height) top += headH;
+  if (row.top < top) scroller.scrollTop += row.top - top;
+  else if (row.bottom > bottom) scroller.scrollTop += row.bottom - bottom;
+}
+
+let lastScrolled = "";
+
+function scrollSelectionIntoGrid() {
+  const st = getState();
+  const scroller = document.getElementById("grid-scroll");
+  const night = st.selection.night;
+  const row = night ? document.querySelector(`.erow[data-night="${night}"]`) : null;
+  showYear(st.selection.year || "2021");
+  scrollNearest(scroller, row);
 }
 
 function paintPanel(st) {
@@ -530,7 +555,8 @@ function paintPanel(st) {
   }
   if (paintPanel.scan !== String(scan.id)) {
     paintPanel.scan = String(scan.id);
-    revealImage();
+    const panel = document.getElementById("scan-panel");
+    if (panel) panel.scrollTop = 0;
   }
 }
 
@@ -594,8 +620,6 @@ function selectScan(entry) {
     s.selection.year = entry.night.slice(0, 4);
   });
   showYear(entry.night.slice(0, 4));
-  const cell = document.querySelector(`.slots > .scell[data-scan="${entry.id}"]`);
-  cell?.scrollIntoView({ block: "nearest", behavior: "instant" });
 }
 
 function stepScan(dir) {
@@ -637,7 +661,7 @@ function reveal(night) {
   const row = document.querySelector(`.erow[data-night="${night}"]`);
   if (!row) return;
   if (row.hidden) row.hidden = false;
-  row.scrollIntoView({ block: "center", behavior: "instant" });
+  scrollNearest(document.getElementById("grid-scroll"), row);
 }
 
 function applyLegacyQuery() {
@@ -843,6 +867,9 @@ function wire() {
     showYear("2022");
   });
   const grid = document.getElementById("grid");
+  grid.addEventListener("mousedown", event => {
+    if (event.target.closest(".scell, .night-pick")) event.preventDefault();
+  });
   grid.addEventListener("click", event => {
     const nightBtn = event.target.closest(".night-pick");
     if (nightBtn) {
@@ -939,7 +966,13 @@ async function main() {
       return;
     }
     paintFast();
-    showYear(getState().selection.year || "2021");
+    const st = getState();
+    const key = `${st.selection.year}|${st.selection.night}|${st.selection.scan}`;
+    showYear(st.selection.year || "2021");
+    if (key !== lastScrolled) {
+      lastScrolled = key;
+      scrollSelectionIntoGrid();
+    }
   });
   boot(models);
   lastCx = JSON.stringify(getState().corrections);

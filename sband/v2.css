@@ -70,7 +70,9 @@
 .msum.fail-rule{color:var(--bad);font-weight:700}
 .qual-link{border:0;background:transparent;padding:0 2px;font-family:var(--mono);cursor:pointer}
 .agree-ramp{display:inline-block;width:112px;height:12px;border-radius:99px;vertical-align:middle;background:linear-gradient(90deg,rgba(120,130,142,.28),rgba(31,122,84,.62))}
-.slot-head{position:sticky;top:46px;z-index:4;background:var(--paper);padding:2px 0}
+.slot-head{position:sticky;top:0;z-index:4;background:var(--paper);padding:2px 0}
+#grid-scroll{position:sticky;top:58px;max-height:calc(100vh - 70px);overflow-y:auto;overflow-x:hidden;overflow-anchor:none;overscroll-behavior:contain}
+.explore-ui{overflow-anchor:none}
 .band-label{display:none}
 .nav-row,.viewer-bar{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:flex-end;margin:4px 0}
 .viewer-bar label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted);min-width:0;flex:1 1 7rem}
