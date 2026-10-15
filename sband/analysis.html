@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S-band analysis — Radar Segmentation Evaluation</title>
+<link rel="stylesheet" href="../assets/css/app.css">
+<link rel="stylesheet" href="v2.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><circle cx='20' cy='20' r='17' fill='none' stroke='%2314479a' stroke-width='3'/></svg>">
+<script>try{var s=localStorage.getItem("theme");if(s)document.documentElement.setAttribute("data-theme",s);}catch(e){}</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="shell">
+  <nav class="side" id="side" aria-label="Sections"></nav>
+  <div class="main">
+    <div class="topbar">
+      <button class="menu-btn" id="menu" type="button" aria-label="Toggle navigation" aria-expanded="false">☰</button>
+      <span class="crumb">S-band analysis</span>
+      <span class="sp"></span>
+      <button id="theme" type="button" aria-label="Switch colour theme">Theme</button>
+    </div>
+    <main id="main" class="analysis-ui" tabindex="-1">
+      <p id="corrections-banner" class="banner" hidden></p>
+      <h1>S-band analysis</h1>
+      <p class="lede">Charts use the thresholds and included models from the shared state. S-band has no labels, so every figure is agreement between models.</p>
+      <div id="state-line" class="state-line"></div>
+      <p id="rule-line"></p>
+      <h2>Distributions</h2>
+      <div id="distributions" class="dist-grid"></div>
+      <h2>Model comparison</h2>
+      <div id="compare"></div>
+      <h2>Patterns</h2>
+      <div id="patterns"></div>
+      <h2 id="segmentation">Segmentation</h2>
+      <div id="segmentation-body"></div>
+      <p id="cband-ref"></p>
+      <h2>Corrections</h2>
+      <ul id="active-corrections"></ul>
+    </main>
+  </div>
+</div>
+<script type="module" src="js/analysis.js"></script>
+</body>
+</html>
