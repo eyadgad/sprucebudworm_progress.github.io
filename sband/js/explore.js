@@ -1,993 +1,822 @@
+/* S-band explore, laid out like the C-band Sample explorer.
+
+   The list, chips, thumbnails, table, nights view and modal follow
+   assets/js/sections/samples.js. Shared Modal and DataTable are imported
+   unchanged. The pack decoder is the local SBS1 copy.
+*/
+
+import { DataTable } from "../../assets/js/lib/table.js";
+import { esc } from "../../assets/js/lib/metrics.js";
+import { Modal } from "../../assets/js/lib/ui.js";
+import { assetUrl, fetchSbandPack, SbandPackCache, validatePackMeta } from "./pack.js";
+import { boot, getState, patch } from "./state.js";
 import { initShell } from "./shell.js";
-import { boot, getState, onChange, patch } from "./state.js";
-import { bindViewer, updateViewer } from "./viewer.js";
 
-initShell("explore");
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const REFL_BANDS = [
+  { color: [190, 222, 230], label: "-10 – -1 dBZ" },
+  { color: [117, 231, 137], label: "-1.1 – 2 dBZ" },
+  { color: [42, 220, 18], label: "2.1 – 7 dBZ" },
+  { color: [247, 235, 39], label: "7.1 – 12 dBZ" },
+  { color: [247, 139, 20], label: "12.1 – 19 dBZ" },
+  { color: [242, 31, 23], label: "19.1 – 25 dBZ" },
+];
+const MASK_COLOR = {
+  e1: [47, 125, 209],
+  e4: [214, 140, 36],
+  e1e4: [150, 70, 190],
+};
+const SEG_KEYS = ["e1", "e4", "e1e4"];
+const PRESETS = [
+  ["all", "All scans"],
+  ["all6", "All six pass"],
+  ["cls", "All classifiers pass"],
+  ["seg", "All segmenters pass"],
+  ["disagree", "Classifiers and segmenters disagree"],
+  ["none", "No model passes"],
+  ["qual", "Qualifying nights"],
+  ["ann", "Annotation set"],
+  ["top20", "Top 20 by mean classifier probability"],
+];
 
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const SLOTS = [];
-for (let hour = 19; hour <= 23; hour++) for (const minute of [0, 30]) SLOTS.push([hour, minute]);
-for (let hour = 0; hour <= 8; hour++) for (const minute of [0, 30]) SLOTS.push([hour, minute]);
+function pad(n) { return String(n).padStart(2, "0"); }
 
-let modelDoc = null;
-let modelList = [];
-let modelById = new Map();
-let nights = [];
-let nightById = new Map();
-let scanById = new Map();
-let defaults = {};
-let rowScans = new Map();
-let rows = [];
-let cells = [];
-let ready = false;
-let lastCx = "";
-
-function pad(n) {
-  return String(n).padStart(2, "0");
+function stamp(id) {
+  const s = String(id).padStart(12, "0");
+  return {
+    s,
+    hm: `${s.slice(8, 10)}:${s.slice(10, 12)}`,
+    day: `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`,
+    title: `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)} ${s.slice(8, 10)}:${s.slice(10, 12)}`,
+  };
 }
 
-function scoreOf(scan, model) {
-  return model.family === "classifier" ? scan[model.pKey] : scan[model.aKey];
-}
-
-function formatProb(p) {
-  if (p > 0 && p < 0.001) return p.toExponential(2);
-  return p.toFixed(3);
-}
-
-function formatArea(km) {
-  if (km >= 10000) return `${(km / 1000).toFixed(0)}k`;
-  if (km >= 1000) return `${(km / 1000).toFixed(1)}k`;
-  return km.toFixed(0);
-}
-
-function formatKm(km) {
-  return `${Number(km).toLocaleString("en-US", { maximumFractionDigits: 2 })} km²`;
-}
-
-function edtFromStamp(id) {
+function edtOf(id) {
   const s = String(id).padStart(12, "0");
   const utc = Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8), +s.slice(8, 10), +s.slice(10, 12));
   const edt = new Date(utc - 4 * 3600 * 1000);
   return {
     hm: `${pad(edt.getUTCHours())}:${pad(edt.getUTCMinutes())}`,
-    date: `${edt.getUTCDate()} ${MONTHS[edt.getUTCMonth()]} ${edt.getUTCFullYear()}`,
+    date: `${edt.getUTCFullYear()}-${pad(edt.getUTCMonth() + 1)}-${pad(edt.getUTCDate())}`,
+    long: `${edt.getUTCDate()} ${MONTHS[edt.getUTCMonth()]} ${edt.getUTCFullYear()}`,
   };
 }
 
-function utcFromStamp(id) {
-  const s = String(id).padStart(12, "0");
-  return {
-    hm: `${s.slice(8, 10)}:${s.slice(10, 12)}`,
-    date: `${+s.slice(6, 8)} ${MONTHS[+s.slice(4, 6) - 1]} ${s.slice(0, 4)}`,
-  };
+function inWindow(hour) { return hour >= 0 && hour <= 8; }
+
+function dice(inter, a, b) {
+  if (!a && !b) return 1;
+  return (2 * inter) / (a + b);
 }
 
-function inWindow(hour, rule) {
-  const a = Number(rule.hourStart);
-  const b = Number(rule.hourEnd);
-  return a <= b ? hour >= a && hour <= b : hour >= a || hour <= b;
+function fmtProb(p) {
+  if (p > 0 && p < 0.001) return p.toExponential(2);
+  return Number(p).toFixed(3);
 }
 
-function included(st) {
-  return modelList.filter(m => st.included[m.id]);
+function fmtKm(km) {
+  return `${Number(km).toLocaleString("en-US", { maximumFractionDigits: 2 })} km²`;
 }
 
-function ruleSentence(rule) {
-  const a = pad(rule.hourStart);
-  const b = pad(rule.hourEnd);
-  const pct = rule.fraction * 100;
-  const frac = Number.isInteger(pct) ? `${pct}%` : String(rule.fraction);
-  if (rule.mode === "allpass") {
-    return `The share of scans where all included models pass is at least ${frac} of the night's ${a}–${b} UTC scans, and the night has at least ${rule.minScans} scans in that window.`;
-  }
-  return `Every included model passes on at least ${frac} of the night's ${a}–${b} UTC scans, and the night has at least ${rule.minScans} scans in that window.`;
-}
+async function main() {
+  initShell("explore");
+  const [modelsDoc, nightDoc, scanDoc, packMeta] = await Promise.all([
+    fetch("data/models.json").then(r => r.json()),
+    fetch("data/nights.json").then(r => r.json()),
+    fetch("data/scans.json").then(r => r.json()),
+    fetch("data/packs.json").then(r => r.json()),
+  ]);
+  validatePackMeta(packMeta);
+  boot(modelsDoc);
+  const note = document.getElementById("mask-area-note");
+  if (note) note.textContent = modelsDoc.mask_area_note || "";
 
-function placement(corrections) {
-  const dropScan = new Set();
-  const dropNight = new Set();
-  const move = new Map();
-  for (const c of corrections) {
-    if (c.op === "exclude-scan") dropScan.add(String(c.scan));
-    else if (c.op === "exclude-night") dropNight.add(c.night);
-    else if (c.op === "move-scan") move.set(String(c.scan), c.to);
-  }
-  return { dropScan, dropNight, move };
-}
-
-function assignScans(corrections) {
-  const { dropScan, dropNight, move } = placement(corrections);
-  const known = new Set(nights.map(n => n.night));
-  const by = new Map();
-  for (const scan of scanById.values()) {
-    const id = String(scan.id);
-    if (dropScan.has(id)) continue;
-    const night = move.get(id) || scan.night;
-    if (!known.has(night) || dropNight.has(night)) continue;
-    const list = by.get(night);
-    if (list) list.push(scan);
-    else by.set(night, [scan]);
-  }
-  return { by, dropNight };
-}
-
-function whyText(night, dropped) {
-  if (dropped) return "Excluded in this browser. The files are unchanged.";
-  const parts = [];
-  if (night.status === "absent") parts.push("No files for this operational night.");
-  const gap = night.missing_stretch;
-  if (night.status === "gap-skipped" && gap) {
-    parts.push(`Not scored. The longest gap between selected half-hour scans is ${gap.minutes} minutes, from ${gap.from} to ${gap.to}.`);
-  }
-  if (night.status === "partial" && gap?.timestamps?.length) {
-    const ts = gap.timestamps;
-    parts.push(`Scored ${night.n_scored} of 28 slots. Missing ${ts.length}, from ${ts[0]} to ${ts[ts.length - 1]}.`);
-  }
-  if (night.no_0008) parts.push("No scored scan in 00–08 UTC.");
-  return parts.join(" ");
-}
-
-function badgeHtml(night, dropped) {
-  const bits = [];
-  if (night.status === "complete") bits.push(`<span class="badge">complete</span>`);
-  if (night.status === "partial") bits.push(`<span class="badge partial">partial</span>`);
-  if (night.status === "gap-skipped") bits.push(`<span class="badge gap">gap-skipped</span>`);
-  if (night.status === "absent") bits.push(`<span class="badge none">no files</span>`);
-  if (night.no_0008) bits.push(`<span class="badge morning">no 00–08</span>`);
-  if (dropped) bits.push(`<span class="badge excluded">excluded</span>`);
-  return bits.join("");
-}
-
-function withBands(pieces) {
-  let html = "";
-  for (let i = 0; i < pieces.length; i++) {
-    if (i % 7 === 0) {
-      const [hour, minute] = SLOTS[i];
-      html += `<span class="band-label">${pad(hour)}:${pad(minute)}</span>`;
-    }
-    html += pieces[i];
-    if (i === 9) html += `<span class="midnight-bar" title="Midnight UTC"></span>`;
-  }
-  return html;
-}
-
-function edtHm(hour, minute) {
-  return `${pad((hour + 20) % 24)}:${pad(minute)}`;
-}
-
-function hourHead(hour) {
-  const title = `${pad(hour)}:00–${pad(hour)}:30 UTC (${edtHm(hour, 0)}–${edtHm(hour, 30)} EDT)`;
-  return `<span class="sh" data-hour="${hour}" title="${title}">${pad(hour)}</span>`;
-}
-
-function slotHeads() {
-  let html = "";
-  for (let hour = 19; hour <= 23; hour++) html += hourHead(hour);
-  html += `<span class="midnight-bar" title="Midnight UTC"></span>`;
-  for (let hour = 0; hour <= 8; hour++) html += hourHead(hour);
-  return html;
-}
-
-function rowHtml(night, scans, dropped) {
-  const bySlot = new Map();
-  for (const scan of scans) {
-    const key = `${scan.hour}:${scan.minute}`;
-    const list = bySlot.get(key);
-    if (list) list.push(scan);
-    else bySlot.set(key, [scan]);
-  }
-  const buttons = SLOTS.map(([hour, minute]) => {
-    const found = bySlot.get(`${hour}:${minute}`) || [];
-    const scan = found[0];
-    const extra = found.slice(1).map(s => `<span class="scell extra" hidden data-scan="${s.id}"></span>`).join("");
-    if (!scan) {
-      return `<button type="button" class="scell hatch" data-hour="${hour}" data-minute="${minute}" data-night="${night.night}"><span class="glyph">–</span></button>`;
-    }
-    return `<button type="button" class="scell" data-scan="${scan.id}" data-hour="${hour}" data-minute="${minute}" data-night="${night.night}" data-p-e1="${scan.p_e1}" data-p-e4="${scan.p_e4}" data-p-e1e4="${scan.p_e1e4}" data-a-e1="${scan.area_e1_km2}" data-a-e4="${scan.area_e4_km2}" data-a-e1e4="${scan.area_e1e4_km2}" data-insect="${scan.insect}" data-rain="${scan.rain}"><span class="glyph"></span>${extra}</button>`;
-  });
-  const slots = withBands(buttons);
-  let family = "";
-  const models = modelList.map(m => {
-    let lead = "";
-    if (m.family !== family) {
-      if (family) lead += `<span class="grp-bar">|</span>`;
-      lead += `<span class="grp">${m.family === "classifier" ? "Swin" : "AttUNet"}</span>`;
-      family = m.family;
-    }
-    return `${lead}<span class="msum" data-model="${m.id}"></span>`;
-  }).join("");
-  const why = whyText(night, dropped);
-  return `<article class="erow" data-night="${night.night}" data-year="${night.night.slice(0, 4)}" data-status="${night.status}" data-role="${night.annotation_role || ""}">
-    <div class="sum">
-      <button type="button" class="night-link night-pick" data-night="${night.night}">${night.night}</button>
-      <span class="badges">${badgeHtml(night, dropped)}</span>
-      <span data-part="qual"></span>
-      <span data-part="window"></span>
-      <span class="model-cols">${models}</span>
-    </div>
-    <p class="why"${why ? "" : " hidden"}>${why}</p>
-    <div class="slots">${slots}</div>
-  </article>`;
-}
-
-function buildGrid() {
-  const st = getState();
-  const { by, dropNight } = assignScans(st.corrections);
-  rowScans = new Map();
-  const head = `<div class="slot-head">${slotHeads()}</div>`;
-  const html = ["2021", "2022"].map(year => {
-    const body = nights.filter(n => n.night.startsWith(year)).map(n => {
-      const scans = by.get(n.night) || [];
-      return rowHtml(n, scans, dropNight.has(n.night));
-    }).join("");
-    const hidden = st.selection.year === year ? "" : " hidden";
-    return `<section id="year-${year}"${hidden}>${head}${body}</section>`;
-  }).join("");
-  document.getElementById("grid").innerHTML = html;
-  bindRows();
-  const n = document.querySelectorAll(".scell[data-scan]").length;
-  document.getElementById("grid-ready").textContent = `${n} scans on the grid`;
-  showYear(st.selection.year || "2021");
-  paintFast();
-  lastScrolled = "";
-  scrollSelectionIntoGrid();
-  lastScrolled = `${st.selection.year}|${st.selection.night}|${st.selection.scan}`;
-}
-
-function bindRows() {
-  rows = [];
-  cells = [];
-  for (const row of document.querySelectorAll(".erow")) {
-    const scans = [];
-    row._sum = {
-      qual: row.querySelector('[data-part="qual"]'),
-      window: row.querySelector('[data-part="window"]'),
-      models: Object.fromEntries(modelList.map(m => [m.id, row.querySelector(`.msum[data-model="${m.id}"]`)])),
-    };
-    for (const el of row.querySelectorAll(".slots > .scell")) {
-      const scan = el.dataset.scan ? scanById.get(el.dataset.scan) : null;
-      if (scan) scans.push(scan);
-      for (const extra of el.querySelectorAll(".extra")) {
-        const more = scanById.get(extra.dataset.scan);
-        if (more) scans.push(more);
-      }
-      cells.push({ el, glyph: el.querySelector(".glyph"), scan });
-    }
-    row._scans = scans;
-    rows.push(row);
-  }
-}
-
-function nightStats(scans, st, inc) {
-  const pass = {};
-  const winPass = {};
-  const mean = {};
-  const rule = st.nightRule;
-  for (const m of modelList) {
-    let n = 0;
-    let w = 0;
-    let sum = 0;
-    const t = st.thresholds[m.id];
-    for (const scan of scans) {
-      const v = scoreOf(scan, m);
-      sum += v;
-      if (v >= t) {
-        n++;
-        if (inWindow(scan.hour, rule)) w++;
-      }
-    }
-    pass[m.id] = n;
-    winPass[m.id] = w;
-    mean[m.id] = scans.length ? sum / scans.length : 0;
-  }
-  let nAll = 0;
-  let winAll = 0;
-  let maxK = 0;
-  let nWindow = 0;
-  for (const scan of scans) {
-    const inside = inWindow(scan.hour, rule);
-    if (inside) nWindow++;
-    let k = 0;
-    for (const m of inc) if (scoreOf(scan, m) >= st.thresholds[m.id]) k++;
-    if (k > maxK) maxK = k;
-    if (inc.length && k === inc.length) {
-      nAll++;
-      if (inside) winAll++;
-    }
-  }
-  let qualifies = false;
-  if (inc.length && nWindow >= rule.minScans) {
-    if (rule.mode === "allpass") qualifies = winAll / nWindow >= rule.fraction;
-    else qualifies = inc.every(m => winPass[m.id] / nWindow >= rule.fraction);
-  }
-  return { pass, winPass, mean, nAll, winAll, maxK, nScored: scans.length, nWindow, qualifies };
-}
-
-function matches(row, stat, st) {
-  const f = st.filters;
-  if (f.qualifies && !stat.qualifies) return false;
-  if (f.status !== "all" && row.dataset.status !== f.status) return false;
-  if (f.month !== "all" && !row.dataset.night.startsWith(f.month)) return false;
-  if (f.annotation && !row.dataset.role) return false;
-  if (Number(f.minModels) > 0 && stat.maxK < Number(f.minModels)) return false;
-  return true;
-}
-
-function setClass(el, base, on) {
-  const cls = on ? `${base} on` : base;
-  if (el.className !== cls) el.className = cls;
-}
-
-function paintCell(item, st, inc) {
-  const { el, glyph, scan } = item;
-  if (!glyph) return;
-  const selected = scan && String(scan.id) === st.selection.scan;
-  if (!scan) {
-    setClass(el, "scell hatch", false);
-    if (glyph.textContent !== "–") glyph.textContent = "–";
-    return;
-  }
-  if (st.view.mode === "pass") {
-    const model = modelById.get(st.view.model) || modelList[0];
-    const ok = scoreOf(scan, model) >= st.thresholds[model.id];
-    const text = ok ? "✓" : "✗";
-    if (glyph.textContent !== text) glyph.textContent = text;
-    setClass(el, ok ? "scell ag-all" : "scell ag-none", selected);
-    el.style.removeProperty("--score");
-    return;
-  }
-  if (st.view.mode === "score") {
-    const model = modelById.get(st.view.model) || modelList[0];
-    const value = scoreOf(scan, model);
-    const text = model.family === "classifier" ? formatProb(value) : formatArea(value);
-    if (glyph.textContent !== text) glyph.textContent = text;
-    setClass(el, "scell score", selected);
-    const scaled = model.family === "classifier"
-      ? Math.max(0, Math.min(1, value))
-      : Math.log1p(Math.max(0, value)) / Math.log1p(80000);
-    el.style.setProperty("--score", String(Math.max(0, Math.min(1, scaled))));
-    return;
-  }
-  let k = 0;
-  for (const m of inc) if (scoreOf(scan, m) >= st.thresholds[m.id]) k++;
-  const n = inc.length;
-  const text = n ? `${k}/${n}` : "–";
-  let base = "scell ag-some";
-  if (!n || k === 0) base = n ? "scell ag-none" : "scell ag-some";
-  else if (k === n) base = "scell ag-all";
-  if (glyph.textContent !== text) glyph.textContent = text;
-  setClass(el, base, selected);
-  el.style.removeProperty("--score");
-  if (n && k > 0 && k < n) el.style.setProperty("--agree", String(k / n));
-  else el.style.removeProperty("--agree");
-}
-
-function paintFast() {
-  const st = getState();
-  const inc = included(st);
-  const t0 = performance.now();
-  let nMatch = 0;
-  let nScans = 0;
-  const globalPass = Object.fromEntries(modelList.map(m => [m.id, 0]));
-  const qualNights = [];
-  for (const item of cells) paintCell(item, st, inc);
-  for (const row of rows) {
-    const stat = nightStats(row._scans, st, inc);
-    const match = matches(row, stat, st);
-    if (row.hidden !== !match) row.hidden = !match;
-    row.dataset.qualifies = stat.qualifies ? "1" : "0";
-    row.dataset.nScored = String(stat.nScored);
-    row.dataset.nAll = String(stat.nAll);
-    row.dataset.nWindow = String(stat.nWindow);
-    row.dataset.match = match ? "1" : "0";
-    row.classList.toggle("is-qual", stat.qualifies);
-    row._sum.qual.textContent = stat.qualifies ? "✓ qualifies" : "✗ does not qualify";
-    row._sum.qual.className = stat.qualifies ? "q-yes" : "q-no";
-    const a = pad(st.nightRule.hourStart);
-    const b = pad(st.nightRule.hourEnd);
-    row._sum.window.textContent = `${stat.nWindow} in ${a}–${b}`;
-    row._sum.window.title = `Whole night: ${stat.nScored} scored, ${stat.nAll} all-pass. The rule uses ${stat.nWindow} scans in ${a}–${b} UTC.`;
-    for (const m of modelList) {
-      const el = row._sum.models[m.id];
-      const on = !!st.included[m.id];
-      el.hidden = !on;
-      el.dataset.pass = String(stat.pass[m.id]);
-      el.dataset.win = String(stat.winPass[m.id]);
-      const frac = stat.nWindow ? stat.winPass[m.id] / stat.nWindow : 0;
-      const fails = on && st.nightRule.mode === "every" && (!stat.nWindow || frac < st.nightRule.fraction);
-      el.classList.toggle("fail-rule", fails);
-      el.textContent = stat.nWindow ? `${m.short} ${stat.winPass[m.id]}/${stat.nWindow}` : `${m.short} —`;
-      el.title = `Whole night ${stat.pass[m.id]}/${stat.nScored}. Window ${stat.nWindow ? `${stat.winPass[m.id]}/${stat.nWindow}` : "none"}.`;
-      row.setAttribute(`data-mean-${m.id}`, String(stat.mean[m.id]));
-      globalPass[m.id] += stat.pass[m.id];
-    }
-    if (stat.qualifies) qualNights.push(row.dataset.night);
-    if (match) {
-      nMatch++;
-      nScans += stat.nScored;
-    }
-    const on = row.dataset.night === st.selection.night;
-    if (row.classList.contains("on") !== on) row.classList.toggle("on", on);
-  }
-  sortRows(st);
-  paintLegend(st, inc);
-  paintGroups(st);
-  paintPanel(st, inc);
-  document.getElementById("rule-text").textContent = ruleSentence(st.nightRule);
-  document.getElementById("shown-count").textContent = `${nMatch} nights match, ${nScans} scans`;
-  paintResults(qualNights, globalPass);
-  paintPassing(globalPass);
-  document.getElementById("selected-night").textContent = st.selection.night || "none";
-  const ms = performance.now() - t0;
-  const mark = document.getElementById("paint-ms");
-  mark.dataset.ms = ms.toFixed(2);
-  mark.textContent = `Last recolour ${ms.toFixed(1)} ms`;
-}
-
-function sortRows(st) {
-  const key = st.sort.key;
-  for (const year of ["2021", "2022"]) {
-    const section = document.getElementById(`year-${year}`);
-    if (!section) continue;
-    const list = [...section.querySelectorAll(".erow")];
-    list.sort((a, b) => {
-      if (key === "allpass") {
-        const da = Number(a.dataset.nScored) ? Number(a.dataset.nAll) / Number(a.dataset.nScored) : -1;
-        const db = Number(b.dataset.nScored) ? Number(b.dataset.nAll) / Number(b.dataset.nScored) : -1;
-        if (db !== da) return db - da;
-      } else if (key === "mean") {
-        const ma = Number(a.getAttribute(`data-mean-${st.sort.model}`)) || 0;
-        const mb = Number(b.getAttribute(`data-mean-${st.sort.model}`)) || 0;
-        if (mb !== ma) return mb - ma;
-      }
-      return a.dataset.night < b.dataset.night ? -1 : a.dataset.night > b.dataset.night ? 1 : 0;
-    });
-    for (const row of list) section.appendChild(row);
-  }
-}
-
-function paintLegend(st, inc) {
-  const el = document.getElementById("legend");
-  const n = inc.length;
-  if (st.view.mode === "pass") {
-    const model = modelById.get(st.view.model) || modelList[0];
-    el.innerHTML = `<span class="sw ag-all">✓</span> ${model.label} pass. <span class="sw ag-none">✗</span> ${model.label} fail. <span class="sw hatch">–</span> No scan. The mark is the same fact as the colour.`;
-    return;
-  }
-  if (st.view.mode === "score") {
-    const model = modelById.get(st.view.model) || modelList[0];
-    const unit = model.family === "classifier" ? "probability" : "mask area, km²";
-    el.innerHTML = `<span class="ramp" title="Low score to high score"></span> ${model.label} ${unit}, continuous scale from low (light) to high (dark). The cell prints the score. Probabilities below 0.001 use scientific notation. <span class="sw hatch">–</span> No scan.`;
-    return;
-  }
-  el.innerHTML = `<span class="sw ag-none">0/${n}</span> No included model passes. <span class="agree-ramp" title="Neutral to green"></span> Some included models pass. The cell shows k/n. <span class="sw ag-all">${n}/${n}</span> All included models pass. <span class="sw hatch">–</span> No scan.`;
-}
-
-function paintResults(qualNights, globalPass) {
-  const el = document.getElementById("result-line");
-  if (!el) return;
-  qualNights.sort();
-  const links = qualNights.map(night => `<button type="button" class="qual-link" data-night="${night}">${night}</button>`).join(" ");
-  const passes = modelList.map(m => `<span data-pass-model="${m.id}">${m.label} ${globalPass[m.id]}</span>`).join(" · ");
-  el.innerHTML = `<b>${qualNights.length} nights qualify</b> ${links || "none"}. <span class="pass-line">Scans passing: ${passes}</span>`;
-}
-
-function paintGroups(st) {
-  const cls = modelList.filter(m => m.family === "classifier");
-  const seg = modelList.filter(m => m.family === "segmenter");
-  const word = group => group.every(m => st.included[m.id]) ? "on" : group.some(m => st.included[m.id]) ? "mixed" : "off";
-  document.getElementById("group-classifiers").textContent = `Classifiers ${word(cls)}`;
-  document.getElementById("group-segmenters").textContent = `Segmenters ${word(seg)}`;
-}
-
-function scrollNearest(scroller, el) {
-  // Move only this scroller (block: nearest). Use the on-screen slice when it
-  // can fit the row, so a scroller taller than the viewport does not park the
-  // row below the fold. Never touches window scroll.
-  if (!scroller || !el || el.closest("[hidden]")) return;
-  const box = scroller.getBoundingClientRect();
-  const row = el.getBoundingClientRect();
-  if (row.height <= 0 || box.height <= 0) return;
-  const visibleTop = Math.max(box.top, 0);
-  const visibleBottom = Math.min(box.bottom, window.innerHeight);
-  const onScreen = visibleBottom - visibleTop > row.height;
-  let top = onScreen ? visibleTop : box.top;
-  const bottom = onScreen ? visibleBottom : box.bottom;
-  const head = el.parentElement?.querySelector(".slot-head");
-  const headH = head && getComputedStyle(head).display !== "none" ? head.offsetHeight : 0;
-  if (headH > 0 && bottom - (top + headH) > row.height) top += headH;
-  if (row.top < top) scroller.scrollTop += row.top - top;
-  else if (row.bottom > bottom) scroller.scrollTop += row.bottom - bottom;
-}
-
-let lastScrolled = "";
-
-function scrollSelectionIntoGrid() {
-  const st = getState();
-  const scroller = document.getElementById("grid-scroll");
-  const night = st.selection.night;
-  const row = night ? document.querySelector(`.erow[data-night="${night}"]`) : null;
-  showYear(st.selection.year || "2021");
-  scrollNearest(scroller, row);
-}
-
-function paintPanel(st) {
-  const scan = st.selection.scan ? scanById.get(st.selection.scan) : null;
-  document.getElementById("mask-area-note").textContent = modelDoc.mask_area_note || "";
-  const idEl = document.getElementById("panel-id");
-  const when = document.getElementById("panel-when");
-  const qual = document.getElementById("panel-qual");
-  const table = document.getElementById("panel-scores");
-  if (!scan) {
-    idEl.textContent = st.selection.night ? `Night ${st.selection.night}` : "No scan selected.";
-    when.textContent = "";
-    qual.textContent = "";
-    table.innerHTML = "";
-    paintPanel.scan = "";
-    if (paintPanel.sig !== "none") {
-      paintPanel.sig = "none";
-      updateViewer(null, st);
-    }
-    return;
-  }
-  const utc = utcFromStamp(scan.id);
-  const edt = edtFromStamp(scan.id);
-  const night = document.querySelector(`.scell[data-scan="${scan.id}"]`)?.dataset.night || scan.night;
-  idEl.textContent = String(scan.id);
-  when.textContent = `${utc.hm} UTC · ${edt.hm} EDT`;
-  when.title = `${utc.hm} UTC on ${utc.date}. ${edt.hm} EDT on ${edt.date}.`;
-  const row = document.querySelector(`.erow[data-night="${night}"]`);
-  qual.textContent = row?.dataset.qualifies === "1" ? "✓ qualifies" : "✗ does not qualify";
-  const body = modelList.map(m => {
-    const value = scoreOf(scan, m);
-    const threshold = st.thresholds[m.id];
-    const ok = value >= threshold;
-    const shown = m.family === "classifier" ? formatProb(value) : formatKm(value);
-    const cut = m.family === "classifier" ? formatProb(threshold) : formatKm(threshold);
-    return `<tr data-model="${m.id}" data-pass="${ok ? "1" : "0"}"><td>${m.label}</td><td>${shown}</td><td>${cut}</td><td>${ok ? "pass" : "fail"}</td></tr>`;
-  }).join("");
-  table.innerHTML = `<thead><tr><th>Model</th><th>Score</th><th>Threshold</th><th>Call</th></tr></thead><tbody>${body}</tbody>`;
-  const sig = `${st.selection.scan}|${st.viewer.tilt}|${st.viewer.mode}|${st.viewer.only}|${Object.entries(st.viewer.masks).map(([id, on]) => on ? id : "").join(",")}|${Object.values(st.viewer.opacity).join(",")}`;
-  if (sig !== paintPanel.sig) {
-    paintPanel.sig = sig;
-    updateViewer(scan, st);
-  }
-  if (paintPanel.scan !== String(scan.id)) {
-    paintPanel.scan = String(scan.id);
-    const panel = document.getElementById("scan-panel");
-    if (panel) panel.scrollTop = 0;
-  }
-}
-
-function fillTip(el) {
-  const scan = el.dataset.scan ? scanById.get(el.dataset.scan) : null;
-  if (!scan) {
-    el.title = "No scan";
-    return;
-  }
-  const st = getState();
-  const utc = utcFromStamp(scan.id);
-  const edt = edtFromStamp(scan.id);
-  const lines = [
-    String(scan.id),
-    `night ${el.dataset.night}`,
-    `${utc.hm} UTC on ${utc.date}`,
-    `${edt.hm} EDT on ${edt.date}`,
-  ];
-  for (const m of modelList) {
-    const value = scoreOf(scan, m);
-    const ok = value >= st.thresholds[m.id] ? "pass" : "fail";
-    lines.push(`${m.id} ${value} ${ok}`);
-  }
-  lines.push(`insect ${scan.insect}`);
-  lines.push(`rain ${scan.rain}`);
-  el.title = lines.join("\n");
-}
-
-function showYear(year) {
-  const y = year === "2022" ? "2022" : "2021";
-  const a = document.getElementById("year-2021");
-  const b = document.getElementById("year-2022");
-  if (a) a.hidden = y !== "2021";
-  if (b) b.hidden = y !== "2022";
-  document.getElementById("tab-2021").classList.toggle("on", y === "2021");
-  document.getElementById("tab-2022").classList.toggle("on", y === "2022");
-}
-
-function scanOrder() {
-  const ids = [];
-  for (const year of ["2021", "2022"]) {
-    const section = document.getElementById(`year-${year}`);
-    if (!section) continue;
-    for (const cell of section.querySelectorAll(".erow .slots > .scell[data-scan]")) {
-      ids.push({
-        id: cell.dataset.scan,
-        night: cell.dataset.night,
-        hour: Number(cell.dataset.hour),
-        minute: Number(cell.dataset.minute),
-      });
-    }
-  }
-  return ids;
-}
-
-function selectScan(entry) {
-  if (!entry) return;
-  patch(s => {
-    s.selection.scan = entry.id;
-    s.selection.night = entry.night;
-    s.selection.year = entry.night.slice(0, 4);
-  });
-  showYear(entry.night.slice(0, 4));
-}
-
-function stepScan(dir) {
-  const order = scanOrder();
-  if (!order.length) return;
-  const cur = getState().selection.scan;
-  let index = order.findIndex(s => s.id === cur);
-  if (index < 0) index = dir > 0 ? -1 : order.length;
-  selectScan(order[index + dir]);
-}
-
-function stepNight(dir) {
-  const order = [...document.querySelectorAll(".erow")].map(row => row.dataset.night);
-  const st = getState();
-  let index = order.indexOf(st.selection.night);
-  if (index < 0) index = dir > 0 ? -1 : order.length;
-  const night = order[index + dir];
-  if (!night) return;
-  const scan = st.selection.scan ? scanById.get(st.selection.scan) : null;
-  const row = document.querySelector(`.erow[data-night="${night}"]`);
-  let cell = null;
-  if (scan) {
-    cell = row.querySelector(`.slots > .scell[data-hour="${scan.hour}"][data-minute="${scan.minute}"][data-scan]`);
-  }
-  if (!cell) cell = row.querySelector(".slots > .scell[data-scan]");
-  if (cell) selectScan({ id: cell.dataset.scan, night });
-  else {
-    patch(s => {
-      s.selection.night = night;
-      s.selection.scan = "";
-      s.selection.year = night.slice(0, 4);
-    });
-    showYear(night.slice(0, 4));
-  }
-}
-
-function reveal(night) {
-  showYear(night.slice(0, 4));
-  const row = document.querySelector(`.erow[data-night="${night}"]`);
-  if (!row) return;
-  if (row.hidden) row.hidden = false;
-  scrollNearest(document.getElementById("grid-scroll"), row);
-}
-
-function applyLegacyQuery() {
-  const params = new URLSearchParams(location.search);
-  if (!params.has("night") && !params.has("i")) return;
-  const night = params.get("night") || "";
-  const index = Number(params.get("i"));
-  let scanId = "";
-  if (night && Number.isInteger(index) && index >= 0) {
-    const list = [...scanById.values()].filter(scan => scan.night === night).sort((a, b) => a.id - b.id);
-    if (list[index]) scanId = String(list[index].id);
-  }
-  patch(s => {
-    if (night) {
-      s.selection.night = night;
-      s.selection.year = night.slice(0, 4);
-    }
-    if (scanId) s.selection.scan = scanId;
-  });
-  history.replaceState(null, "", `${location.pathname}${location.hash}`);
-}
-
-function goSearch() {
-  const q = document.getElementById("scan-search").value.trim();
-  const say = document.getElementById("find-error");
-  if (/^\d{12}$/.test(q)) {
-    const scan = scanById.get(q);
-    if (!scan) { say.textContent = "That scan is not in the 4,666 scored scans."; return; }
-    const cell = document.querySelector(`.scell[data-scan="${q}"]`);
-    if (!cell) { say.textContent = "That scan is excluded by a correction."; return; }
-    say.textContent = "";
-    patch(s => {
-      s.selection.scan = q;
-      s.selection.night = cell.dataset.night;
-      s.selection.year = cell.dataset.night.slice(0, 4);
-    });
-    reveal(cell.dataset.night);
-    return;
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(q) && nightById.has(q)) {
-    say.textContent = "";
-    patch(s => {
-      s.selection.night = q;
-      s.selection.scan = "";
-      s.selection.year = q.slice(0, 4);
-    });
-    reveal(q);
-    return;
-  }
-  say.textContent = "Enter a night date (2021-07-27) or a 12-digit scan id.";
-}
-
-function syncControls() {
-  const st = getState();
-  for (const m of modelList) {
-    const num = document.querySelector(`.th-num[data-model="${m.id}"]`);
-    const range = document.querySelector(`.th-range[data-model="${m.id}"]`);
-    const inc = document.querySelector(`.inc[data-model="${m.id}"]`);
-    num.value = String(st.thresholds[m.id]);
-    range.value = String(Math.min(Number(range.max), st.thresholds[m.id]));
-    inc.checked = !!st.included[m.id];
-  }
-  document.getElementById("rule-mode").value = st.nightRule.mode;
-  document.getElementById("rule-fraction").value = String(st.nightRule.fraction);
-  document.getElementById("rule-min").value = String(st.nightRule.minScans);
-  document.getElementById("rule-h0").value = String(st.nightRule.hourStart);
-  document.getElementById("rule-h1").value = String(st.nightRule.hourEnd);
-  document.getElementById("view-mode").value = st.view.mode;
-  document.getElementById("view-model").value = st.view.model;
-  document.getElementById("sort-key").value = st.sort.key;
-  document.getElementById("sort-model").value = st.sort.model;
-  document.getElementById("f-qualifies").checked = !!st.filters.qualifies;
-  document.getElementById("f-status").value = st.filters.status;
-  document.getElementById("f-month").value = st.filters.month;
-  document.getElementById("f-annotation").checked = !!st.filters.annotation;
-  document.getElementById("f-k").value = String(st.filters.minModels);
-}
-
-function buildControls() {
-  const month = document.getElementById("f-month");
-  for (const year of [2021, 2022]) {
-    for (const m of [5, 6, 7, 8]) {
-      const value = `${year}-${pad(m)}`;
-      month.insertAdjacentHTML("beforeend", `<option value="${value}">${value}</option>`);
-    }
-  }
-  const options = modelList.map(m => `<option value="${m.id}">${m.label}</option>`).join("");
-  document.getElementById("view-model").innerHTML = options;
-  document.getElementById("sort-model").innerHTML = options;
-  const body = modelList.map(m => {
-    const prob = m.family === "classifier";
-    return `<div class="th-row">
-      <label class="check"><input type="checkbox" class="inc" data-model="${m.id}"> ${m.label}</label>
-      <span class="tiny">${prob ? "probability" : "area km²"}</span>
-      <span class="th-cell">
-        <input type="range" class="th-range" data-model="${m.id}" min="0" max="${prob ? 1 : 80000}" step="${prob ? 0.01 : 1}">
-        <input type="number" class="th-num" data-model="${m.id}" min="0" step="${prob ? 0.01 : 0.25}">
-      </span>
-      <span class="npass" data-model="${m.id}"></span>
-      <button type="button" class="th-reset" data-model="${m.id}">Reset</button>
-    </div>`;
-  }).join("");
-  document.getElementById("model-controls").innerHTML = `<div class="th-grid">${body}</div>`;
-}
-
-function paintPassing(globalPass) {
-  for (const m of modelList) {
-    const el = document.querySelector(`.npass[data-model="${m.id}"]`);
-    if (el) el.textContent = String(globalPass[m.id]);
-  }
-}
-
-function wire() {
-  for (const m of modelList) {
-    const num = document.querySelector(`.th-num[data-model="${m.id}"]`);
-    const range = document.querySelector(`.th-range[data-model="${m.id}"]`);
-    const inc = document.querySelector(`.inc[data-model="${m.id}"]`);
-    num.addEventListener("input", () => {
-      const value = Number(num.value);
-      if (!Number.isFinite(value)) return;
-      range.value = String(Math.min(Number(range.max), value));
-      patch(s => { s.thresholds[m.id] = value; });
-    });
-    range.addEventListener("input", () => {
-      const value = Number(range.value);
-      num.value = String(value);
-      patch(s => { s.thresholds[m.id] = value; });
-    });
-    inc.addEventListener("change", () => {
-      patch(s => { s.included[m.id] = inc.checked; });
-    });
-    document.querySelector(`.th-reset[data-model="${m.id}"]`).addEventListener("click", () => {
-      patch(s => { s.thresholds[m.id] = defaults[m.id]; });
-      num.value = String(defaults[m.id]);
-      range.value = String(Math.min(Number(range.max), defaults[m.id]));
-    });
-  }
-  const toggle = family => {
-    const group = modelList.filter(m => m.family === family);
-    const allOn = group.every(m => getState().included[m.id]);
-    patch(s => { for (const m of group) s.included[m.id] = !allOn; });
-    syncControls();
-  };
-  document.getElementById("group-classifiers").addEventListener("click", () => toggle("classifier"));
-  document.getElementById("group-segmenters").addEventListener("click", () => toggle("segmenter"));
-  document.getElementById("th-reset-all").addEventListener("click", () => {
-    patch(s => { for (const m of modelList) s.thresholds[m.id] = defaults[m.id]; });
-    syncControls();
-  });
-  const rule = () => patch(s => {
-    s.nightRule.mode = document.getElementById("rule-mode").value;
-    const fraction = Number(document.getElementById("rule-fraction").value);
-    const minScans = Number(document.getElementById("rule-min").value);
-    const hourStart = Number(document.getElementById("rule-h0").value);
-    const hourEnd = Number(document.getElementById("rule-h1").value);
-    if (Number.isFinite(fraction)) s.nightRule.fraction = fraction;
-    if (Number.isFinite(minScans)) s.nightRule.minScans = minScans;
-    if (Number.isFinite(hourStart)) s.nightRule.hourStart = hourStart;
-    if (Number.isFinite(hourEnd)) s.nightRule.hourEnd = hourEnd;
-  });
-  for (const id of ["rule-mode", "rule-fraction", "rule-min", "rule-h0", "rule-h1"]) {
-    document.getElementById(id).addEventListener("change", rule);
-    document.getElementById(id).addEventListener("input", rule);
-  }
-  document.getElementById("view-mode").addEventListener("change", () => {
-    patch(s => { s.view.mode = document.getElementById("view-mode").value; });
-  });
-  document.getElementById("view-model").addEventListener("change", () => {
-    patch(s => { s.view.model = document.getElementById("view-model").value; });
-  });
-  document.getElementById("sort-key").addEventListener("change", () => {
-    patch(s => { s.sort.key = document.getElementById("sort-key").value; });
-  });
-  document.getElementById("sort-model").addEventListener("change", () => {
-    patch(s => { s.sort.model = document.getElementById("sort-model").value; });
-  });
-  document.getElementById("f-qualifies").addEventListener("change", () => {
-    patch(s => { s.filters.qualifies = document.getElementById("f-qualifies").checked; });
-  });
-  document.getElementById("f-status").addEventListener("change", () => {
-    patch(s => { s.filters.status = document.getElementById("f-status").value; });
-  });
-  document.getElementById("f-month").addEventListener("change", () => {
-    patch(s => { s.filters.month = document.getElementById("f-month").value; });
-  });
-  document.getElementById("f-annotation").addEventListener("change", () => {
-    patch(s => { s.filters.annotation = document.getElementById("f-annotation").checked; });
-  });
-  document.getElementById("f-k").addEventListener("input", () => {
-    const value = Number(document.getElementById("f-k").value);
-    if (Number.isFinite(value)) patch(s => { s.filters.minModels = value; });
-  });
-  document.getElementById("scan-go").addEventListener("click", goSearch);
-  document.getElementById("scan-search").addEventListener("keydown", event => {
-    if (event.key === "Enter") { event.preventDefault(); goSearch(); }
-  });
-  document.getElementById("tab-2021").addEventListener("click", () => {
-    patch(s => { s.selection.year = "2021"; });
-    showYear("2021");
-  });
-  document.getElementById("tab-2022").addEventListener("click", () => {
-    patch(s => { s.selection.year = "2022"; });
-    showYear("2022");
-  });
-  const grid = document.getElementById("grid");
-  grid.addEventListener("mousedown", event => {
-    if (event.target.closest(".scell, .night-pick")) event.preventDefault();
-  });
-  grid.addEventListener("click", event => {
-    const nightBtn = event.target.closest(".night-pick");
-    if (nightBtn) {
-      patch(s => {
-        s.selection.night = nightBtn.dataset.night;
-        s.selection.year = nightBtn.dataset.night.slice(0, 4);
-        s.selection.scan = "";
-      });
-      return;
-    }
-    const cell = event.target.closest(".scell");
-    if (!cell?.dataset.scan || cell.classList.contains("extra") || !cell.closest(".slots")) return;
-    patch(s => {
-      s.selection.scan = cell.dataset.scan;
-      s.selection.night = cell.dataset.night;
-      s.selection.year = cell.dataset.night.slice(0, 4);
-    });
-  });
-  grid.addEventListener("mouseover", event => {
-    const cell = event.target.closest(".scell");
-    if (cell && !cell.classList.contains("extra") && cell.closest(".slots")) fillTip(cell);
-  });
-  document.getElementById("result-line").addEventListener("click", event => {
-    const link = event.target.closest(".qual-link");
-    if (!link) return;
-    patch(s => {
-      s.selection.night = link.dataset.night;
-      s.selection.scan = "";
-      s.selection.year = link.dataset.night.slice(0, 4);
-    });
-    reveal(link.dataset.night);
-  });
-  document.getElementById("prev-scan").addEventListener("click", () => stepScan(-1));
-  document.getElementById("next-scan").addEventListener("click", () => stepScan(1));
-  document.getElementById("prev-night").addEventListener("click", () => stepNight(-1));
-  document.getElementById("next-night").addEventListener("click", () => stepNight(1));
-  document.addEventListener("keydown", event => {
-    const tag = document.activeElement?.tagName;
-    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
-    if (event.key === "ArrowRight") { event.preventDefault(); stepScan(1); }
-    else if (event.key === "ArrowLeft") { event.preventDefault(); stepScan(-1); }
-    else if (event.key === "ArrowDown") { event.preventDefault(); stepNight(1); }
-    else if (event.key === "ArrowUp") { event.preventDefault(); stepNight(-1); }
-  });
-  window.__setViewer = (mode, on, only) => {
-    patch(s => {
-      s.viewer.mode = mode;
-      if (only) s.viewer.only = only;
-      for (const id of Object.keys(s.viewer.masks)) s.viewer.masks[id] = on.includes(id);
-    });
-  };
-  bindViewer(document.getElementById("viewer"), { patch, getState, nextId: id => {
-    const order = scanOrder();
-    const index = order.findIndex(s => s.id === id);
-    return index >= 0 && order[index + 1] ? order[index + 1].id : "";
-  } });
-}
-
-function prepareModels(doc) {
-  modelDoc = doc;
-  modelList = [...doc.classifiers, ...doc.segmenters].map(m => ({
+  const modelList = [...modelsDoc.classifiers, ...modelsDoc.segmenters].map(m => ({
     id: m.id,
     key: m.key,
     family: m.family,
     label: `${m.family === "classifier" ? "Swin" : "AttUNet"} ${m.key}`,
-    short: m.key,
     input: m.input,
-    pKey: `p_${m.key}`,
-    aKey: `area_${m.key}_km2`,
+    scoreKey: m.family === "classifier" ? `p_${m.key}` : `area_${m.key}_km2`,
+    cut: m.family === "classifier" ? Number(m.default_threshold) : Number(m.threshold_km2),
+    step: m.family === "classifier" ? "0.01" : "0.25",
+    min: "0",
+    max: m.family === "classifier" ? "1" : "200000",
   }));
-  modelById = new Map(modelList.map(m => [m.id, m]));
-  defaults = {};
-  for (const m of [...doc.classifiers, ...doc.segmenters]) {
-    defaults[m.id] = m.family === "classifier" ? Number(m.default_threshold) : Number(m.threshold_km2);
-  }
-}
+  const byId = new Map(modelList.map(m => [m.id, m]));
+  const classifiers = modelList.filter(m => m.family === "classifier");
+  const segmenters = modelList.filter(m => m.family === "segmenter");
+  const nights = nightDoc.nights;
+  const nightById = new Map(nights.map(n => [n.night, n]));
+  const corrections = () => getState()?.corrections || [];
 
-async function main() {
-  const [models, nightDoc, scanDoc] = await Promise.all([
-    fetch("data/models.json").then(r => r.json()),
-    fetch("data/nights.json").then(r => r.json()),
-    fetch("data/scans.json").then(r => r.json()),
+  function placedScans() {
+    const dropScan = new Set();
+    const dropNight = new Set();
+    const move = new Map();
+    for (const c of corrections()) {
+      if (c.op === "exclude-scan") dropScan.add(String(c.scan));
+      else if (c.op === "exclude-night") dropNight.add(c.night);
+      else if (c.op === "move-scan") move.set(String(c.scan), c.to);
+    }
+    const out = [];
+    for (const scan of scanDoc.scans) {
+      const id = String(scan.id);
+      if (dropScan.has(id)) continue;
+      const night = move.get(id) || scan.night;
+      if (dropNight.has(night) || !nightById.has(night)) continue;
+      out.push(night === scan.night ? scan : { ...scan, night });
+    }
+    return out;
+  }
+
+  let scans = placedScans();
+  const state = {
+    year: "all", night: "all", status: "all", qualifies: false,
+    sort: "time", dir: 1, view: "grid", preset: "all", q: "",
+    cuts: Object.fromEntries(modelList.map(m => [m.id, Number.isFinite(Number(getState()?.thresholds?.[m.id])) ? Number(getState().thresholds[m.id]) : m.cut])),
+  };
+
+  const passes = (scan, model) => Number(scan[model.scoreKey]) >= state.cuts[model.id];
+  const kOf = scan => modelList.reduce((n, m) => n + (passes(scan, m) ? 1 : 0), 0);
+  const meanCls = scan => classifiers.reduce((n, m) => n + Number(scan[m.scoreKey]), 0) / classifiers.length;
+  const groupAll = (scan, group) => group.every(m => passes(scan, m));
+
+  let qualifying = new Map();
+  let windowCounts = new Map();
+
+  function recomputeNights() {
+    qualifying = new Map();
+    windowCounts = new Map();
+    const byNight = new Map();
+    for (const scan of scans) {
+      const list = byNight.get(scan.night);
+      if (list) list.push(scan);
+      else byNight.set(scan.night, [scan]);
+    }
+    for (const night of nights) {
+      const list = (byNight.get(night.night) || []).filter(scan => inWindow(scan.hour));
+      const counts = {};
+      for (const model of modelList) counts[model.id] = list.filter(scan => passes(scan, model)).length;
+      const ok = list.length >= 10 && modelList.every(model => counts[model.id] / list.length >= 0.5);
+      qualifying.set(night.night, ok);
+      windowCounts.set(night.night, { n: list.length, counts, qualifies: ok });
+    }
+  }
+
+  function rows() {
+    let list = scans.filter(scan => {
+      if (state.year !== "all" && !scan.night.startsWith(state.year)) return false;
+      if (state.night !== "all" && scan.night !== state.night) return false;
+      const meta = nightById.get(scan.night);
+      if (state.status !== "all" && meta?.status !== state.status) return false;
+      if (state.qualifies && !qualifying.get(scan.night)) return false;
+      if (state.q) {
+        const q = state.q.toLowerCase();
+        if (!String(scan.id).includes(q) && !scan.night.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+    if (state.preset === "all6") list = list.filter(s => kOf(s) === 6);
+    else if (state.preset === "cls") list = list.filter(s => groupAll(s, classifiers));
+    else if (state.preset === "seg") list = list.filter(s => groupAll(s, segmenters));
+    else if (state.preset === "disagree") list = list.filter(s => groupAll(s, classifiers) !== groupAll(s, segmenters));
+    else if (state.preset === "none") list = list.filter(s => kOf(s) === 0);
+    else if (state.preset === "qual") list = list.filter(s => qualifying.get(s.night));
+    else if (state.preset === "ann") list = list.filter(s => nightById.get(s.night)?.annotation_role);
+    else if (state.preset === "top20") list = [...list].sort((a, b) => meanCls(b) - meanCls(a)).slice(0, 20);
+    const dir = state.dir;
+    const value = scan => state.sort === "time" ? scan.id : state.sort === "k" ? kOf(scan) : Number(scan[state.sort]);
+    return [...list].sort((a, b) => dir * (value(a) - value(b)) || (a.id - b.id));
+  }
+
+  const mount = document.getElementById("main");
+  const years = [...new Set(nights.map(n => n.night.slice(0, 4)))].sort();
+  mount.querySelector("#presets").innerHTML = PRESETS.map(([k, label]) =>
+    `<button type="button" class="chip${k === "all" ? " on" : ""}" data-p="${k}">${esc(label)}</button>`).join("");
+
+  const ctrls = mount.querySelector("#ctrls");
+  const addSelect = (label, key, options) => {
+    const wrap = document.createElement("div");
+    wrap.className = "f";
+    const id = "s_" + key;
+    wrap.innerHTML = `<label for="${id}">${label}</label><select id="${id}">` +
+      options.map(([v, text]) => `<option value="${esc(v)}">${esc(text)}</option>`).join("") + "</select>";
+    wrap.querySelector("select").addEventListener("change", event => {
+      state[key] = event.target.value;
+      if (key === "year") { state.night = "all"; rebuildNights(); }
+      draw();
+    });
+    ctrls.appendChild(wrap);
+    return wrap.querySelector("select");
+  };
+  addSelect("Year", "year", [["all", "All years"], ...years.map(y => [y, y])]);
+  const nightWrap = document.createElement("div");
+  nightWrap.className = "f";
+  ctrls.appendChild(nightWrap);
+  function rebuildNights() {
+    const ns = nights.filter(n => state.year === "all" || n.night.startsWith(state.year)).map(n => n.night);
+    if (!ns.includes(state.night)) state.night = "all";
+    nightWrap.innerHTML = `<label for="s_night">Night</label><select id="s_night">` +
+      `<option value="all">All nights (${ns.length})</option>` +
+      ns.map(n => `<option value="${esc(n)}"${n === state.night ? " selected" : ""}>${esc(n)}</option>`).join("") +
+      "</select>";
+    nightWrap.querySelector("select").addEventListener("change", event => {
+      state.night = event.target.value;
+      draw();
+    });
+  }
+  rebuildNights();
+  addSelect("Night status", "status", [
+    ["all", "All statuses"], ["complete", "Complete"], ["partial", "Partial"],
+    ["gap-skipped", "Gap-skipped"], ["absent", "No files"],
   ]);
-  prepareModels(models);
-  nights = nightDoc.nights;
-  nightById = new Map(nights.map(n => [n.night, n]));
-  for (const scan of scanDoc.scans) scanById.set(String(scan.id), scan);
-  onChange(() => {
-    if (!ready) return;
-    const cx = JSON.stringify(getState().corrections);
-    if (cx !== lastCx) {
-      lastCx = cx;
-      buildGrid();
+  const qual = document.createElement("div");
+  qual.className = "f";
+  qual.innerHTML = `<label for="s_qual">Night qualifies</label><span class="chk"><input type="checkbox" id="s_qual"> 00–08 UTC rule</span>`;
+  qual.querySelector("input").addEventListener("change", event => { state.qualifies = event.target.checked; draw(); });
+  ctrls.appendChild(qual);
+  const ann = document.createElement("div");
+  ann.className = "f";
+  ann.innerHTML = `<label for="f-annotation">Annotation set</label><span class="chk"><input type="checkbox" id="f-annotation"></span>`;
+  ann.querySelector("input").addEventListener("change", event => {
+    state.preset = event.target.checked ? "ann" : "all";
+    mount.querySelectorAll("#presets .chip").forEach(el => el.classList.toggle("on", el.dataset.p === state.preset));
+    draw();
+  });
+  ctrls.appendChild(ann);
+  addSelect("Sort by", "sort", [
+    ["time", "Time"], ["k", "k/6 passing"],
+    ...modelList.map(m => [m.scoreKey, m.label]),
+  ]);
+  addSelect("Order", "dir", [["1", "Low / early first"], ["-1", "High / late first"]]);
+  addSelect("View", "view", [["grid", "Thumbnails"], ["table", "Table"], ["nights", "Nights"]]);
+
+  const search = document.createElement("div");
+  search.className = "f";
+  search.innerHTML = `<label for="s_q">Find a scan</label><input id="s_q" type="search" placeholder="202207170300 or 2022-07-16">`;
+  search.querySelector("input").addEventListener("input", event => { state.q = event.target.value.trim(); draw(); });
+  ctrls.appendChild(search);
+
+  const cuts = mount.querySelector("#cuts");
+  for (const model of modelList) {
+    const wrap = document.createElement("label");
+    wrap.className = "cut";
+    wrap.innerHTML = `${esc(model.label)}<input class="th-num" data-model="${model.id}" type="number" min="${model.min}" max="${model.max}" step="${model.step}" value="${state.cuts[model.id]}">`;
+    wrap.querySelector("input").addEventListener("input", event => {
+      const value = Number(event.target.value);
+      if (!Number.isFinite(value)) return;
+      state.cuts[model.id] = value;
+      patch(s => { s.thresholds[model.id] = value; });
+      recomputeNights();
+      draw();
+      if (curId) renderOpenPanels();
+    });
+    cuts.appendChild(wrap);
+  }
+  mount.querySelector("#presets").addEventListener("click", event => {
+    const button = event.target.closest(".chip");
+    if (!button) return;
+    state.preset = button.dataset.p;
+    mount.querySelectorAll("#presets .chip").forEach(el => el.classList.toggle("on", el === button));
+    const box = document.getElementById("f-annotation");
+    if (box) box.checked = state.preset === "ann";
+    draw();
+  });
+
+  const thumbUrl = ts => assetUrl(packMeta.thumbnail_path, ts, packMeta.version);
+  const packs = new SbandPackCache(ts => fetchSbandPack(assetUrl(packMeta.pack_path, ts, packMeta.version), packMeta), 3);
+
+  function draw() {
+    const matched = rows();
+    const count = mount.querySelector("#count");
+    count.dataset.n = String(matched.length);
+    count.dataset.preset = state.preset;
+    count.innerHTML = state.view === "nights"
+      ? ""
+      : `<b>${matched.length.toLocaleString("en-US")}</b> scans match. Click a scan to open it.`;
+    const body = mount.querySelector("#body");
+    if (state.view === "nights") { drawNights(body); return; }
+    if (!matched.length) {
+      body.innerHTML = `<div class="state"><div class="big">No scans match</div><div class="small">Clear a filter or choose All scans.</div></div>`;
       return;
     }
-    paintFast();
-    const st = getState();
-    const key = `${st.selection.year}|${st.selection.night}|${st.selection.scan}`;
-    showYear(st.selection.year || "2021");
-    if (key !== lastScrolled) {
-      lastScrolled = key;
-      scrollSelectionIntoGrid();
+    if (state.view === "table") { drawTable(body, matched); return; }
+    body.innerHTML = `<div class="sgrid">` + matched.slice(0, 120).map(scan => {
+      const when = stamp(scan.id);
+      const k = kOf(scan);
+      return `<button type="button" class="scell" data-ts="${scan.id}">
+        <img class="im" width="120" height="120" loading="lazy" decoding="async" alt="" src="${esc(thumbUrl(scan.id))}">
+        <span class="cap"><b>${when.hm}</b> <span class="m">${when.day}</span><br>
+        <span class="kbadge k${k}">${k}/6 pass</span></span>
+      </button>`;
+    }).join("") + `</div>
+      <p class="small" style="margin-top:10px">Thumbnails show <b>−0.3° reflectivity</b> with the AttUNet e1 prediction at 0.15. ${matched.length > 120 ? `Showing the first 120 of ${matched.length.toLocaleString("en-US")}. Narrow the filters or switch to the table.` : ""}</p>`;
+    body.querySelectorAll(".scell").forEach(button => button.addEventListener("click", () => open(button.dataset.ts)));
+  }
+
+  function drawTable(body, matched) {
+    body.innerHTML = `<div id="tbl"></div>`;
+    const tableRows = matched.map(scan => {
+      const row = { ts: scan.id, night: scan.night, k: kOf(scan), _scan: scan };
+      for (const model of modelList) row[model.id] = Number(scan[model.scoreKey]);
+      return row;
+    });
+    new DataTable(body.querySelector("#tbl"), {
+      columns: [
+        { key: "ts", label: "Scan", cls: "", fmt: v => `<code>${v}</code>` },
+        { key: "night", label: "Night", cls: "", fmt: v => esc(v) },
+        ...modelList.map(m => ({
+          key: m.id, label: m.label,
+          fmt: v => m.family === "classifier" ? fmtProb(v) : fmtKm(v),
+        })),
+        { key: "k", label: "k/6", fmt: v => `${v}/6` },
+      ],
+      rows: tableRows,
+      sort: state.sort === "time" ? "ts" : state.sort === "k" ? "k" : modelList.find(m => m.scoreKey === state.sort)?.id,
+      dir: state.dir,
+      pageSize: 25,
+      onRow: row => open(String(row.ts)),
+    });
+  }
+
+  function drawNights(body) {
+    const list = nights.filter(night => {
+      if (state.year !== "all" && !night.night.startsWith(state.year)) return false;
+      if (state.night !== "all" && night.night !== state.night) return false;
+      if (state.status !== "all" && night.status !== state.status) return false;
+      if (state.qualifies && !qualifying.get(night.night)) return false;
+      if (state.preset === "ann" && !night.annotation_role) return false;
+      if (state.preset === "qual" && !qualifying.get(night.night)) return false;
+      if (state.q && !night.night.includes(state.q)) return false;
+      return true;
+    });
+    const count = mount.querySelector("#count");
+    count.dataset.n = String(list.length);
+    count.innerHTML = `<b>${list.length}</b> nights. A row uses the 00–08 UTC scans and the cutoffs above. Click a night to see its thumbnails.`;
+    body.innerHTML = list.map(night => {
+      const stat = windowCounts.get(night.night) || { n: 0, counts: {}, qualifies: false };
+      const cells = modelList.map(model => {
+        const got = stat.counts[model.id] || 0;
+        return `<span class="msum">${esc(model.key)} ${stat.n ? `${got}/${stat.n}` : "—"}</span>`;
+      }).join("");
+      return `<button type="button" class="night-line" data-night="${night.night}">
+        <b>${night.night}</b>
+        <span class="m">${esc(night.status)}</span>
+        <span class="${stat.qualifies ? "q-yes" : "q-no"}">${stat.qualifies ? "✓ qualifies" : "✗ does not qualify"}</span>
+        ${cells}
+      </button>`;
+    }).join("") || `<div class="state"><div class="big">No nights match</div></div>`;
+    body.querySelectorAll(".night-line").forEach(button => button.addEventListener("click", () => {
+      state.night = button.dataset.night;
+      state.year = button.dataset.night.slice(0, 4);
+      state.view = "grid";
+      state.preset = "all";
+      mount.querySelector("#s_year").value = state.year;
+      mount.querySelector("#s_view").value = "grid";
+      mount.querySelectorAll("#presets .chip").forEach(el => el.classList.toggle("on", el.dataset.p === "all"));
+      rebuildNights();
+      draw();
+    }));
+  }
+
+  /* Viewer. The shell is built once; same-night chips and arrows swap the scan. */
+  const modalEl = mount.querySelector("#modal");
+  const modal = new Modal(modalEl);
+  const q = sel => modalEl.querySelector(sel);
+  let cur = null, curId = "", pack = null, vlist = [], vidx = 0, token = 0;
+  let ctx = null, image = null;
+  let zoom = 1, panX = 0, panY = 0, legPos = null;
+  const ZOOM_MIN = 1, ZOOM_MAX = 8, ZOOM_STEP = 1.25;
+
+  const SHELL = `
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Scan viewer">
+      <div class="box">
+        <div class="hd">
+          <h2 id="v-title" style="flex:1"></h2>
+          <button id="prev" type="button" aria-label="Previous scan">←</button>
+          <button id="next" type="button" aria-label="Next scan">→</button>
+          <button id="x" type="button" aria-label="Close">✕ Close</button>
+        </div>
+        <div class="viewer-controls">
+          <div class="viewer-control-row">
+            <span class="viewer-control-label">Model</span>
+            <div class="model-choices" role="radiogroup" aria-label="Model">
+              <label class="model-choice"><input type="radio" name="v_model" value="e1" checked><span>AttUNet e1</span><small>−0.3°</small></label>
+              <label class="model-choice"><input type="radio" name="v_model" value="e4"><span>AttUNet e4</span><small>0.4°</small></label>
+              <label class="model-choice"><input type="radio" name="v_model" value="e1e4"><span>AttUNet e1e4</span></label>
+            </div>
+          </div>
+          <div class="viewer-control-row">
+            <span class="viewer-control-label">Layers</span>
+            <div class="layer-choices" id="lays">
+              <label class="chk"><input type="checkbox" id="l_refl" checked> Reflectivity</label>
+              <label class="model-choice"><input type="radio" name="refl" value="m03" checked> −0.3°</label>
+              <label class="model-choice"><input type="radio" name="refl" value="max6"> Max of 6 lowest tilts</label>
+              <label class="chk"><input type="checkbox" id="l_e1" checked> e1</label>
+              <label class="chk"><input type="checkbox" id="l_e4"> e4</label>
+              <label class="chk"><input type="checkbox" id="l_e1e4"> e1e4</label>
+            </div>
+          </div>
+          <div class="viewer-control-row">
+            <span class="viewer-control-label">Combine</span>
+            <select id="combine">
+              <option value="overlay">Overlay</option>
+              <option value="inter">Intersection</option>
+              <option value="union">Union</option>
+            </select>
+          </div>
+          <div class="viewer-control-row viewer-range-row">
+            <span class="viewer-control-label">Display</span>
+            <div class="viewer-slider"><label for="thr">Threshold <b id="thv">0.15</b></label>
+              <input type="range" id="thr" min="0.02" max="0.9" step="0.01" value="0.15"></div>
+            <div class="viewer-slider"><label for="op">Overlay opacity</label>
+              <input type="range" id="op" min="0" max="1" step="0.05" value="0.75"></div>
+            <button id="rst" type="button" class="ghost compact">Reset threshold</button>
+          </div>
+          <div class="viewer-control-row viewer-night-row">
+            <span class="viewer-control-label">Same night</span>
+            <div id="night"></div>
+          </div>
+        </div>
+        <div class="viewer">
+          <div>
+            <div class="stage" id="stage">
+              <div class="stage-scan" id="stage-scan"><canvas id="cv" width="480" height="480"></canvas></div>
+              <div id="leg2" class="scan-legend" hidden title="Drag to move"></div>
+              <div class="zoom-ctrls" role="group" aria-label="Scan zoom">
+                <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+                <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
+                <button type="button" id="zoom-reset" aria-label="Reset zoom">1×</button>
+                <span class="zoom-lvl" id="zoom-lvl">100%</span>
+              </div>
+              <div id="noimg" class="state" style="display:none;position:absolute;inset:0"></div>
+            </div>
+            <p class="small" id="live"></p>
+          </div>
+          <div>
+            <h3 style="margin-top:0">Scene</h3><div class="kv" id="v-scene"></div>
+            <h3>Classification</h3><div class="kv" id="v-cls"></div>
+            <h3>Segmentation</h3><div class="kv" id="v-seg"></div>
+            <h3>Model comparison</h3><div class="kv" id="v-cmp"></div>
+            <p class="small" id="v-cmp-note"></p>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  const modelKey = () => q('input[name="v_model"]:checked')?.value || "e1";
+  const shownKeys = () => SEG_KEYS.filter(key => q("#l_" + key)?.checked);
+  const threshold = () => Number(q("#thr")?.value || 0.15);
+
+  function maskOf(key, cut) {
+    const plane = pack.probabilities[key];
+    const out = new Uint8Array(plane.length);
+    for (let i = 0; i < plane.length; i++) if (plane[i] > cut) out[i] = 1;
+    return out;
+  }
+
+  function combined(cut) {
+    const keys = shownKeys();
+    const masks = Object.fromEntries(keys.map(key => [key, maskOf(key, cut)]));
+    const mode = q("#combine").value;
+    const primary = modelKey();
+    if (mode === "overlay" || keys.length < 2) return { mode, keys, masks, paint: masks };
+    const out = new Uint8Array(pack.pixels);
+    for (let i = 0; i < out.length; i++) {
+      const hits = keys.filter(key => masks[key][i]);
+      if (mode === "inter" ? hits.length === keys.length : hits.length > 0) out[i] = 1;
     }
-  });
-  boot(models);
-  lastCx = JSON.stringify(getState().corrections);
-  document.getElementById("mask-area-note").textContent = models.mask_area_note || "";
-  document.getElementById("selected-night").textContent = getState().selection.night || "none";
-  buildControls();
-  wire();
-  syncControls();
-  buildGrid();
-  ready = true;
-  applyLegacyQuery();
+    return { mode, keys, masks, paint: { [primary]: out } };
+  }
+
+  function applyZoom() {
+    const scan = q("#stage-scan"), stage = q("#stage");
+    if (!scan || !stage) return;
+    if (zoom <= 1) { zoom = 1; panX = 0; panY = 0; }
+    else {
+      const maxX = (stage.clientWidth * (zoom - 1)) / 2;
+      const maxY = (stage.clientHeight * (zoom - 1)) / 2;
+      panX = Math.max(-maxX, Math.min(maxX, panX));
+      panY = Math.max(-maxY, Math.min(maxY, panY));
+    }
+    scan.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    q("#zoom-lvl").textContent = `${Math.round(zoom * 100)}%`;
+    stage.classList.toggle("is-zoomed", zoom > 1);
+    q("#zoom-out").disabled = zoom <= ZOOM_MIN;
+    q("#zoom-in").disabled = zoom >= ZOOM_MAX;
+    q("#zoom-reset").disabled = zoom === 1;
+  }
+
+  function setZoom(next, cx, cy) {
+    const stage = q("#stage");
+    const prev = zoom;
+    zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, next));
+    if (zoom !== prev && stage) {
+      const rect = stage.getBoundingClientRect();
+      const px = (cx == null ? rect.width / 2 : cx - rect.left) - rect.width / 2;
+      const py = (cy == null ? rect.height / 2 : cy - rect.top) - rect.height / 2;
+      const k = zoom / prev;
+      panX = px - (px - panX) * k;
+      panY = py - (py - panY) * k;
+    }
+    applyZoom();
+  }
+
+  function clampLegend() {
+    const stage = q("#stage"), leg = q("#leg2");
+    if (!stage || !leg || leg.hidden || !legPos) return;
+    const maxX = Math.max(4, stage.clientWidth - leg.offsetWidth - 4);
+    const maxY = Math.max(4, stage.clientHeight - leg.offsetHeight - 4);
+    legPos.x = Math.max(4, Math.min(maxX, legPos.x));
+    legPos.y = Math.max(4, Math.min(maxY, legPos.y));
+    leg.style.left = legPos.x + "px";
+    leg.style.top = legPos.y + "px";
+    leg.style.right = "auto";
+    leg.style.bottom = "auto";
+  }
+
+  function paint() {
+    if (!pack || !ctx || !cur) return;
+    const cut = threshold() * 255;
+    const layers = combined(cut);
+    const showRefl = q("#l_refl").checked;
+    const refl = pack.reflectivity[q('input[name="refl"]:checked')?.value || "m03"];
+    const opacity = Number(q("#op").value);
+    const data = image.data;
+    const counts = {};
+    for (const key of Object.keys(layers.paint)) counts[key] = 0;
+    const paintOrder = [...SEG_KEYS.filter(name => name !== modelKey()), modelKey()];
+    let reflCount = 0;
+    for (let i = 0, p = 0; i < pack.pixels; i++, p += 4) {
+      let r = 0, g = 0, b = 0;
+      if (showRefl && refl[i]) {
+        const color = REFL_BANDS[refl[i] - 1].color;
+        r = color[0]; g = color[1]; b = color[2];
+        reflCount++;
+      }
+      const over = color => {
+        r = r * (1 - opacity) + color[0] * opacity;
+        g = g * (1 - opacity) + color[1] * opacity;
+        b = b * (1 - opacity) + color[2] * opacity;
+      };
+      for (const key of paintOrder) {
+        const plane = layers.paint[key];
+        if (plane && plane[i]) { counts[key]++; over(MASK_COLOR[key]); }
+      }
+      data[p] = r; data[p + 1] = g; data[p + 2] = b; data[p + 3] = 255;
+    }
+    ctx.putImageData(image, 0, 0);
+    q("#thv").textContent = threshold().toFixed(2);
+    drawLegend(showRefl, reflCount, counts, layers);
+    renderOpenPanels(layers);
+  }
+
+  function pct(n) {
+    const total = pack.pixels;
+    const ratio = n / total;
+    return { text: (ratio * 100).toFixed(ratio < 0.01 ? 2 : 1), count: n };
+  }
+
+  function drawLegend(showRefl, reflCount, counts, layers) {
+    const leg = q("#leg2");
+    const rows = [];
+    const push = (color, name, count, id) => {
+      const shown = count == null ? "" : pct(count);
+      rows.push(`<div class="scan-legend-row" data-layer="${id}" data-count="${shown.count ?? ""}">
+        <span class="scan-legend-sw" style="background:rgb(${color.join(",")})"></span>
+        <span>${esc(name)}</span>
+        ${shown.text == null ? "" : `<span class="scan-legend-pct">${shown.text}%</span>`}
+      </div>`);
+    };
+    for (const key of SEG_KEYS) {
+      if (counts[key] == null) continue;
+      const name = layers.mode === "overlay" ? `AttUNet ${key}` : `${layers.mode} ${key}`;
+      push(MASK_COLOR[key], name, counts[key], key);
+    }
+    if (showRefl) {
+      push([190, 222, 230], "Reflectivity (not background)", reflCount, "refl");
+      REFL_BANDS.forEach(band => {
+        if (!band.label) return;
+        rows.push(`<div class="scan-legend-row"><span class="scan-legend-sw" style="background:rgb(${band.color.join(",")})"></span><span>${esc(band.label)}</span></div>`);
+      });
+    }
+    leg.innerHTML = rows.join("");
+    leg.hidden = !rows.length;
+    if (!legPos) { leg.style.left = "8px"; leg.style.top = "8px"; }
+    else clampLegend();
+  }
+
+  function previewDice(a, b) {
+    let inter = 0, na = 0, nb = 0;
+    for (let i = 0; i < a.length; i++) {
+      na += a[i]; nb += b[i]; inter += a[i] && b[i] ? 1 : 0;
+    }
+    return dice(inter, na, nb);
+  }
+
+  function renderOpenPanels(layers) {
+    if (!cur) return;
+    const when = stamp(cur.id);
+    const edt = edtOf(cur.id);
+    const qualNight = qualifying.get(cur.night);
+    q("#v-title").textContent = when.title;
+    q("#v-title").dataset.ts = String(cur.id);
+    q("#v-scene").innerHTML = [
+      ["Timestamp", cur.id], ["Night", cur.night],
+      ["UTC", `${when.hm} on ${when.day}`], ["EDT", `${edt.hm} on ${edt.date}`],
+      ["Qualifies", qualNight ? "✓ qualifies" : "✗ does not qualify"],
+    ].map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v" data-field="${esc(k)}">${esc(v)}</span>`).join("");
+    q("#v-cls").innerHTML = classifiers.map(model => {
+      const value = Number(cur[model.scoreKey]);
+      const ok = value >= state.cuts[model.id];
+      return `<span class="k">${esc(model.label)}</span><span class="v" data-metric="cls-${model.key}" data-pass="${ok ? 1 : 0}" data-value="${value}">${fmtProb(value)} ${ok ? "pass" : "fail"} <span class="m">cut ${fmtProb(state.cuts[model.id])}</span></span>`;
+    }).join("");
+    const key = modelKey();
+    const seg = segmenters.find(model => model.key === key);
+    const fullKm = Number(cur[seg.scoreKey]);
+    const fullOk = fullKm >= state.cuts[seg.id];
+    const cut = pack ? threshold() * 255 : 0;
+    const every = pack ? Object.fromEntries(SEG_KEYS.map(name => [name, maskOf(name, cut)])) : null;
+    const livePx = every ? every[key].reduce((n, v) => n + v, 0) : 0;
+    q("#v-seg").innerHTML = [
+      [`Preview area`, `${fmtKm(livePx)} `, `live-area`, String(livePx)],
+      [`Full-resolution area at 0.15`, `${fmtKm(fullKm)} ${fullOk ? "pass" : "fail"}`, `full-area`, String(fullKm)],
+      [`Area cutoff`, fmtKm(state.cuts[seg.id]), `area-cut`, String(state.cuts[seg.id])],
+    ].map(([k, v, metric, raw]) => `<span class="k">${esc(k)}</span><span class="v" data-metric="${metric}" data-value="${raw}" data-pass="${metric === "full-area" ? (fullOk ? 1 : 0) : ""}">${v}</span>`).join("");
+    const pairs = [["e1", "e4", "n_e1", "n_e4", "n_e1_and_e4"], ["e1", "e1e4", "n_e1", "n_e1e4", "n_e1_and_e1e4"], ["e4", "e1e4", "n_e4", "n_e1e4", "n_e4_and_e1e4"]];
+    const liveMasks = every || {};
+    q("#v-cmp").innerHTML = pairs.map(([a, b, na, nb, ni]) => {
+      const full = dice(Number(cur[ni]), Number(cur[na]), Number(cur[nb]));
+      const live = liveMasks[a] && liveMasks[b] ? previewDice(liveMasks[a], liveMasks[b]) : null;
+      return `<span class="k">${a}–${b} full</span><span class="v" data-metric="dice-full-${a}-${b}" data-value="${full}">${full.toFixed(3)}</span>
+        <span class="k">${a}–${b} preview</span><span class="v" data-metric="dice-live-${a}-${b}" data-value="${live ?? ""}">${live == null ? "—" : live.toFixed(3)}</span>`;
+    }).join("");
+    q("#v-cmp-note").textContent = "Full-resolution Dice uses the stored 960×960 masks at probability > 0.15. Preview Dice uses this 480 px block-max at the slider and is optimistic.";
+    q("#live").textContent = `Preview threshold ${threshold().toFixed(2)} on the 480 px pack. Full-resolution area stays at 0.15.`;
+  }
+
+  function renderNight() {
+    const el = q("#night");
+    const sibs = scans.filter(scan => scan.night === cur.night).sort((a, b) => a.id - b.id);
+    el.innerHTML = `<div class="chips">` + sibs.map(scan => {
+      const k = kOf(scan);
+      return `<button type="button" class="chip k${k}${scan.id === cur.id ? " on" : ""}" data-ts="${scan.id}">${stamp(scan.id).hm} · ${k}/6</button>`;
+    }).join("") + `</div><p class="small">${sibs.length} scored scans on ${esc(cur.night)}, in time order.</p>`;
+    el.querySelectorAll(".chip").forEach(button => button.addEventListener("click", () => loadScene(button.dataset.ts)));
+  }
+
+  async function loadScene(id) {
+    const scan = scans.find(item => String(item.id) === String(id));
+    if (!scan) return;
+    const my = ++token;
+    cur = scan;
+    curId = String(scan.id);
+    vidx = vlist.findIndex(item => String(item.id) === curId);
+    q("#prev").disabled = vidx <= 0;
+    q("#next").disabled = vidx < 0 || vidx >= vlist.length - 1;
+    renderNight();
+    renderOpenPanels(null);
+    const noimg = q("#noimg");
+    noimg.style.display = "flex";
+    noimg.innerHTML = `<div><div class="spin"></div><div>Loading sample...</div></div>`;
+    try {
+      const next = await packs.get(curId);
+      if (my !== token) return;
+      pack = next;
+      noimg.style.display = "none";
+      paint();
+    } catch (error) {
+      if (my !== token) return;
+      noimg.style.display = "flex";
+      noimg.innerHTML = `<div><div class="big">Image failed to load</div><div class="small">${esc(error.message)}</div></div>`;
+    }
+  }
+
+  function step(dir) {
+    const next = vlist[vidx + dir];
+    if (next) loadScene(next.id);
+  }
+
+  function bindViewer() {
+    q("#x").addEventListener("click", () => { curId = ""; modal.close(); });
+    q("#prev").addEventListener("click", () => step(-1));
+    q("#next").addEventListener("click", () => step(1));
+    q("#rst").addEventListener("click", () => { q("#thr").value = "0.15"; paint(); });
+    ["#l_refl", "#l_e1", "#l_e4", "#l_e1e4", "#thr", "#op", "#combine"].forEach(sel => q(sel).addEventListener("input", paint));
+    modalEl.querySelectorAll('input[name="refl"]').forEach(el => el.addEventListener("change", paint));
+    modalEl.querySelectorAll('input[name="v_model"]').forEach(el => el.addEventListener("change", () => {
+      q("#l_" + modelKey()).checked = true;
+      paint();
+    }));
+    q("#zoom-in").addEventListener("click", () => setZoom(zoom * ZOOM_STEP));
+    q("#zoom-out").addEventListener("click", () => setZoom(zoom / ZOOM_STEP));
+    q("#zoom-reset").addEventListener("click", () => { zoom = 1; panX = 0; panY = 0; applyZoom(); });
+    const stage = q("#stage");
+    stage.addEventListener("wheel", event => {
+      if (q("#noimg").style.display === "flex") return;
+      event.preventDefault();
+      setZoom(zoom * (event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP), event.clientX, event.clientY);
+    }, { passive: false });
+    let panDrag = null;
+    stage.addEventListener("pointerdown", event => {
+      if (event.button !== 0 || zoom <= 1 || event.target.closest(".scan-legend, .zoom-ctrls, #noimg")) return;
+      panDrag = { id: event.pointerId, x: event.clientX, y: event.clientY, ox: panX, oy: panY };
+      stage.setPointerCapture(event.pointerId);
+      stage.classList.add("is-panning");
+    });
+    stage.addEventListener("pointermove", event => {
+      if (!panDrag || event.pointerId !== panDrag.id) return;
+      panX = panDrag.ox + (event.clientX - panDrag.x);
+      panY = panDrag.oy + (event.clientY - panDrag.y);
+      applyZoom();
+    });
+    const endPan = event => {
+      if (!panDrag || event.pointerId !== panDrag.id) return;
+      panDrag = null;
+      stage.classList.remove("is-panning");
+    };
+    stage.addEventListener("pointerup", endPan);
+    stage.addEventListener("pointercancel", endPan);
+    const leg = q("#leg2");
+    let legDrag = null;
+    leg.addEventListener("pointerdown", event => {
+      if (event.button !== 0) return;
+      const rect = leg.getBoundingClientRect();
+      const host = stage.getBoundingClientRect();
+      legPos = { x: rect.left - host.left, y: rect.top - host.top };
+      legDrag = { id: event.pointerId, x: event.clientX, y: event.clientY, ox: legPos.x, oy: legPos.y };
+      leg.setPointerCapture(event.pointerId);
+      event.stopPropagation();
+    });
+    leg.addEventListener("pointermove", event => {
+      if (!legDrag || event.pointerId !== legDrag.id) return;
+      legPos = { x: legDrag.ox + (event.clientX - legDrag.x), y: legDrag.oy + (event.clientY - legDrag.y) };
+      clampLegend();
+    });
+    leg.addEventListener("pointerup", () => { legDrag = null; });
+    ctx = q("#cv").getContext("2d", { willReadFrequently: true });
+    image = ctx.createImageData(480, 480);
+    applyZoom();
+  }
+
+  function open(id) {
+    const known = scans.find(scan => String(scan.id) === String(id));
+    if (!known) return;
+    vlist = rows();
+    const inList = vlist.some(scan => String(scan.id) === String(id));
+    if (!inList) {
+      const scan = scans.find(item => String(item.id) === String(id));
+      if (scan) vlist = [scan, ...vlist];
+    }
+    zoom = 1; panX = 0; panY = 0; legPos = null;
+    modal.open(SHELL, { onPrev: () => step(-1), onNext: () => step(1) });
+    bindViewer();
+    loadScene(id);
+  }
+
+  function legacyId() {
+    const params = new URLSearchParams(location.search);
+    if (params.get("ts")) return String(params.get("ts"));
+    const night = params.get("night") || "";
+    const index = Number(params.get("i"));
+    if (night && Number.isInteger(index) && index >= 0) {
+      const list = scans.filter(scan => scan.night === night).sort((a, b) => a.id - b.id);
+      if (list[index]) return String(list[index].id);
+    }
+    return "";
+  }
+
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const params = new URLSearchParams(location.search);
+  const hashedNight = params.get("night") || hash.get("n") || hash.get("night") || "";
+  if (hashedNight && nightById.has(hashedNight)) {
+    state.night = hashedNight;
+    state.year = hashedNight.slice(0, 4);
+    const yearSel = document.getElementById("s_year");
+    if (yearSel) yearSel.value = state.year;
+    rebuildNights();
+  }
+  if (getState()?.filters?.annotation || hash.get("fa") === "1") {
+    state.preset = "ann";
+    mount.querySelectorAll("#presets .chip").forEach(el => el.classList.toggle("on", el.dataset.p === "ann"));
+    const box = document.getElementById("f-annotation");
+    if (box) box.checked = true;
+  }
+  const selectedNight = document.getElementById("selected-night");
+  if (selectedNight) selectedNight.textContent = state.night === "all" ? "none" : state.night;
+  recomputeNights();
+  draw();
+  const initial = legacyId();
+  if (initial) open(initial);
+  window.__explore = {
+    rows, kOf, qualifying, passes,
+    rescan() { scans = placedScans(); recomputeNights(); },
+  };
 }
 
-main().catch(err => {
+main().catch(error => {
   const note = document.createElement("p");
-  note.textContent = err.message || String(err);
+  note.textContent = error.message || String(error);
   document.getElementById("main").appendChild(note);
 });

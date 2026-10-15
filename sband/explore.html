@@ -20,125 +20,21 @@
       <span class="sp"></span>
       <button id="theme" type="button" aria-label="Switch colour theme">Theme</button>
     </div>
-    <main id="main" class="explore-ui" tabindex="-1">
+    <main id="main" class="explore-page" tabindex="-1">
       <p id="corrections-banner" class="banner" hidden></p>
       <h1>S-band explore</h1>
-      <p id="rule-text"></p>
-      <div class="rule-form">
-        <label>Night rule
-          <select id="rule-mode">
-            <option value="every">Every included model</option>
-            <option value="allpass">All-pass share</option>
-          </select>
-        </label>
-        <label>Fraction
-          <input id="rule-fraction" type="number" min="0" max="1" step="0.05">
-        </label>
-        <label>Minimum scans
-          <input id="rule-min" type="number" min="0" max="28" step="1">
-        </label>
-        <label>Hour from
-          <input id="rule-h0" type="number" min="0" max="23" step="1">
-        </label>
-        <label>Hour to
-          <input id="rule-h1" type="number" min="0" max="23" step="1">
-        </label>
-      </div>
-
-      <div id="model-controls" class="model-grid"></div>
-      <p class="group-row">
-        <button type="button" id="group-classifiers">Classifiers</button>
-        <button type="button" id="group-segmenters">Segmenters</button>
-        <button type="button" id="th-reset-all">Reset thresholds</button>
-      </p>
-
-      <div class="view-controls">
-        <label>Colour
-          <select id="view-mode">
-            <option value="agreement">Agreement</option>
-            <option value="pass">One model, pass or fail</option>
-            <option value="score">One model, score</option>
-          </select>
-        </label>
-        <label>Colour model
-          <select id="view-model"></select>
-        </label>
-        <label>Sort
-          <select id="sort-key">
-            <option value="date">Date</option>
-            <option value="allpass">All-pass fraction</option>
-            <option value="mean">Mean score</option>
-          </select>
-        </label>
-        <label>Sort model
-          <select id="sort-model"></select>
-        </label>
-      </div>
-
-      <div class="filters">
-        <label class="check"><input type="checkbox" id="f-qualifies"> Qualifies</label>
-        <label>Status
-          <select id="f-status">
-            <option value="all">All statuses</option>
-            <option value="complete">Complete</option>
-            <option value="partial">Partial</option>
-            <option value="gap-skipped">Gap-skipped</option>
-            <option value="absent">No files</option>
-          </select>
-        </label>
-        <label>Month
-          <select id="f-month">
-            <option value="all">All months</option>
-          </select>
-        </label>
-        <label class="check"><input type="checkbox" id="f-annotation"> Annotation set</label>
-        <label>At least k models pass
-          <input id="f-k" type="number" min="0" max="6" step="1">
-        </label>
-        <label>Search
-          <input id="scan-search" type="search" placeholder="Night or scan" autocomplete="off" spellcheck="false">
-        </label>
-        <button type="button" id="scan-go">Go</button>
-      </div>
-      <p id="find-error" class="small" role="alert"></p>
-      <p id="shown-count"></p>
-      <p id="result-line"></p>
-      <p id="legend"></p>
-      <p id="paint-ms" class="small" hidden></p>
-
-      <div class="explore-wrap">
-        <div class="grid-col">
-          <div class="tabs">
-            <button type="button" id="tab-2021">2021</button>
-            <button type="button" id="tab-2022">2022</button>
-          </div>
-          <div id="grid-scroll">
-            <div id="grid"></div>
-          </div>
-          <p id="grid-ready" class="small"></p>
-        </div>
-        <aside id="scan-panel">
-          <div id="panel-head">
-            <b id="panel-id"></b>
-            <span id="panel-when"></span>
-            <b id="selected-night">none</b>
-            <span id="panel-qual"></span>
-            <div class="nav-row">
-              <button type="button" id="prev-night">Night −</button>
-              <button type="button" id="prev-scan">Scan −</button>
-              <button type="button" id="next-scan">Scan +</button>
-              <button type="button" id="next-night">Night +</button>
-            </div>
-          </div>
-          <div id="viewer"></div>
-          <table class="v2-table" id="panel-scores"></table>
-          <table class="v2-table" id="mask-stats"></table>
-          <p id="mask-area-note"></p>
-        </aside>
-      </div>
-
+      <p class="lede">Every scored scan. Open one to inspect the layers and move the threshold.</p>
+      <p class="small">Previews are 480×480 px (block-max downsampled from 960). There is no S-band ground truth. Full-resolution areas and Dice at 0.15 come from the stored mask counts.</p>
+      <p id="selected-night" hidden>none</p>
+      <div class="ctrls" id="ctrls"></div>
+      <div class="ctrls cuts" id="cuts"></div>
+      <div class="chips" id="presets"></div>
+      <div class="small" id="count" style="margin-top:8px"></div>
+      <div id="body"></div>
+      <p class="small" id="mask-area-note"></p>
       <h2>Corrections</h2>
       <ul id="active-corrections"></ul>
+      <div id="modal"></div>
     </main>
   </div>
 </div>

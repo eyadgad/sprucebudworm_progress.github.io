@@ -1,0 +1,26 @@
+{
+  "format": "sbs1-gzip",
+  "magic": "SBS1",
+  "header_size": 12,
+  "width": 480,
+  "height": 480,
+  "thumbnail_width": 120,
+  "thumbnail_height": 120,
+  "model_order": [
+    "e1",
+    "e4",
+    "e1e4"
+  ],
+  "reflectivity": [
+    "m03",
+    "max6"
+  ],
+  "reflectivity_source_m03": "cache dbzh_m03 block-max categories",
+  "reflectivity_source_max6": "max DBZH of the six lowest dop_elevs, one volume at a time",
+  "quantisation": "(block_max(probability) * 255) truncated to uint8; a block whose code would fall at or below 0.15*255 while the full-resolution mask is positive is stored as 39",
+  "pack_path": "packs/{ts}.sbw.gz",
+  "thumbnail_path": "thumbs/{ts}.webp",
+  "version": "sbs1-fe83806da848",
+  "pixel_threshold": 0.15,
+  "decision": "uint8 > threshold * 255"
+}
