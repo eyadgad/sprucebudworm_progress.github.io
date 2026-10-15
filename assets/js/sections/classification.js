@@ -207,16 +207,25 @@ export async function render(mount) {
   swin.forEach(m => {
     const v = splitBlock(m, 'val')?.confusion;
     const t = splitBlock(m, 'test')?.confusion;
-    const box = document.createElement('div');
-    box.innerHTML = `<h3>${esc(m.display)}</h3>
-      <p class="small">Validation (left) and test (right) at t = ${rate(m.threshold)}.</p>
-      <div class="two">
-        ${v ? confusion({...v, title: m.display + ' val', unit: 'scans',
-            positiveLabel: 'plume', negativeLabel: 'quiet'}) : ''}
-        ${t ? confusion({...t, title: m.display + ' test', unit: 'scans',
-            positiveLabel: 'plume', negativeLabel: 'quiet'}) : ''}
-      </div>`;
-    swinCm.appendChild(box);
+    const head = document.createElement('div');
+    head.style.gridColumn = '1 / -1';
+    head.innerHTML = `<h3>${esc(m.display)}</h3>
+      <p class="small">Validation (left) and test (right) at t = ${rate(m.threshold)}.</p>`;
+    swinCm.appendChild(head);
+    // The matrices themselves are the grid cells, so a model card does not
+    // halve them again inside the two-column grid.
+    if (v) {
+      const cell = document.createElement('div');
+      cell.innerHTML = confusion({...v, title: m.display + ' val', unit: 'scans',
+          positiveLabel: 'plume', negativeLabel: 'quiet'});
+      swinCm.appendChild(cell);
+    }
+    if (t) {
+      const cell = document.createElement('div');
+      cell.innerHTML = confusion({...t, title: m.display + ' test', unit: 'scans',
+          positiveLabel: 'plume', negativeLabel: 'quiet'});
+      swinCm.appendChild(cell);
+    }
   });
 
   const candCm = mount.querySelector('#cand-cm');

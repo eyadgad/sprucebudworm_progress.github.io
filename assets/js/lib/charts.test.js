@@ -57,6 +57,9 @@ const bar = barChart({cats: ['train', 'val', 'test'],
            {label: 'swarm free', c: '#2', values: [345, 94, 34]}],
   stacked: true, ylabel: 'scenes', xlabel: 'data split', W: 420, H: 300, inlineLegend: true});
 ok('barChart renders the x-axis label', bar.includes('data split'));
+ok('barChart caps its painted width at 1.15× the viewBox', bar.includes('max-width:483px'));
+ok('confusion caps its painted width at 1.15× the viewBox',
+   confusion({tp: 1, fp: 1, fn: 1, tn: 1}).includes('max-width:495px'));
 ok('barChart renders the y-axis label', bar.includes('scenes') && hasYLabel(bar));
 ok('barChart inline legend names every series',
    bar.includes('with swarm') && bar.includes('swarm free'));

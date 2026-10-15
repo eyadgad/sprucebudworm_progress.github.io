@@ -1,5 +1,6 @@
 import { initShell, esc } from "./shell.js";
 import { boot, getState, onChange } from "./state.js";
+import { chartFrame } from "../../assets/js/lib/charts.js";
 
 initShell("analysis");
 
@@ -299,7 +300,7 @@ function histSvg(modelId, cut) {
     return `<rect class="bar" x="${(i * bw).toFixed(2)}" y="${(h - bh).toFixed(2)}" width="${(bw - 0.35).toFixed(2)}" height="${Math.max(0, bh).toFixed(2)}" ${attr(`hist|${modelId}|${i}`, count, String(count))}><title>${count}</title></rect>`;
   }).join("");
   const x = (Math.min(1, Math.max(0, cut)) * w).toFixed(2);
-  return `<svg viewBox="0 0 ${w} ${h}" role="img">${bars}<line class="cut" x1="${x}" y1="0" x2="${x}" y2="${h}"></line></svg>`;
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" ${chartFrame(w)} preserveAspectRatio="xMidYMid meet">${bars}<line class="cut" x1="${x}" y1="0" x2="${x}" y2="${h}"></line></svg>`;
 }
 
 function smallHist(prefix, a, b) {
@@ -312,7 +313,7 @@ function smallHist(prefix, a, b) {
     const bh = (count / max) * (h - 6);
     return `<rect class="bar" x="${i * 10}" y="${(h - bh).toFixed(2)}" width="9.4" height="${Math.max(0, bh).toFixed(2)}" ${attr(`${prefix}|${a}|${b}|${i}`, count, String(count))}><title>${count}</title></rect>`;
   }).join("");
-  return `<svg viewBox="0 0 ${w} ${h}" role="img">${bars}</svg>`;
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" ${chartFrame(w)} preserveAspectRatio="xMidYMid meet">${bars}</svg>`;
 }
 
 function matrix(prefix, caption) {

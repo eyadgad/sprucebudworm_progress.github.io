@@ -45,8 +45,15 @@ function yAxis(f, lo, hi, label, tk) {
   if (label) g += `<text transform="translate(12,${(f.y0+f.y1)/2}) rotate(-90)" text-anchor="middle" class="axlab">${esc(label)}</text>`;
   return g;
 }
+/* A viewBox SVG with no width paints at 100% of its box, so the type scales
+   with the page. Cap the painted width at 1.15× the viewBox; width:100% still
+   shrinks it on a narrow screen. */
+export function chartFrame(viewBoxWidth) {
+  const cap = Math.round(Number(viewBoxWidth) * 115 / 100);
+  return `style="display:block;width:100%;max-width:${cap}px;height:auto;margin-inline:auto"`;
+}
 const wrap = (f, g, aria) =>
-  `<svg viewBox="0 0 ${f.W} ${f.H}" role="img" aria-label="${esc(aria)}" preserveAspectRatio="xMidYMid meet">${g}</svg>`;
+  `<svg viewBox="0 0 ${f.W} ${f.H}" role="img" aria-label="${esc(aria)}" ${chartFrame(f.W)} preserveAspectRatio="xMidYMid meet">${g}</svg>`;
 
 export function legend(items) {
   return `<div class="legend">` + items.map(i =>
@@ -353,7 +360,7 @@ export function confusion({
   g += cell(214, 44, fn, 'FN', 'var(--fn)', `missed ${positiveLabel} ${unit}`);
   g += cell(56, 126, fp, 'FP', 'var(--fp)', `false-alarm ${unit}`);
   g += cell(214, 126, tn, 'TN', 'var(--tn)', `correctly predicted ${negativeLabel} ${unit}`);
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title||'confusion matrix')} (${esc(unit)}): TP ${tp}, FP ${fp}, FN ${fn}, TN ${tn}">${g}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title||'confusion matrix')} (${esc(unit)}): TP ${tp}, FP ${fp}, FN ${fn}, TN ${tn}" ${chartFrame(W)} preserveAspectRatio="xMidYMid meet">${g}</svg>`;
 }
 
 /* ---------------- parallel coordinates ---------------- */

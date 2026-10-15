@@ -5,6 +5,7 @@
    model and an accessible SVG. */
 
 import { esc } from './metrics.js';
+import { chartFrame } from './charts.js';
 
 const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -139,7 +140,7 @@ export function scanCoverageChart(scenes, selectedYear) {
   }).join('');
   const midnightX = left + 10 * cellW;
 
-  return {model, svg: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="${titleId} ${descId}">
+  return {model, svg: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="${titleId} ${descId}" ${chartFrame(W)} preserveAspectRatio="xMidYMid meet">
     <title id="${titleId}">${esc(aria)}</title>
     <desc id="${descId}">Dates are rows, newest first. Half-hour UTC times from 19:00 through 11:00 are columns. Green boxes contain a spruce budworm swarm and blue boxes are swarm free. Each box has a coloured circle giving its train, validation, or test assignment. The exact records are listed in the table below.</desc>
     <rect x="${left}" y="${top}" width="${plotW}" height="${plotH}" rx="2" fill="var(--panel2)"/>
