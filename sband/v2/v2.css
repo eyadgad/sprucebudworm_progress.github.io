@@ -44,7 +44,7 @@
 .side a.nav{min-width:0;overflow-wrap:anywhere}
 .v2-table th{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .explore-ui input,.explore-ui select,.explore-ui button{min-width:0;max-width:100%}
-.rule-form,.view-controls,.filters,.group-row{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end;margin:8px 0}
+.rule-form,.view-controls,.filters,.group-row{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:flex-end;margin:2px 0}
 .rule-form label,.view-controls label,.filters label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);min-width:0;flex:1 1 9rem;max-width:100%}
 .rule-form input,.view-controls select,.filters input,.filters select,.rule-form select{width:100%}
 .filters label.check,.group-row{align-items:center}
@@ -54,7 +54,45 @@
 .model-ctl input[type=range]{width:100%;margin:4px 0}
 .th-line{display:flex;gap:6px;align-items:center}
 .th-line input{width:6.5rem}
-.explore-wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,280px);gap:14px;align-items:start}
+.explore-wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,420px);gap:14px;align-items:start}
+.explore-ui h1{margin:2px 0 6px;font-size:1.35rem}
+#rule-text,#result-line{margin:0 0 6px}
+.th-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 18px;margin:4px 0}
+.th-row{display:grid;grid-template-columns:minmax(0,1.15fr) auto minmax(0,1.5fr) auto auto;gap:6px;align-items:center;min-width:0}
+.th-cell{display:flex;gap:6px;align-items:center;min-width:0}
+.th-cell input[type=range]{width:88px;min-width:0}
+.th-num{width:4.8rem}
+.npass{font-family:var(--mono)}
+.q-yes{color:var(--ok);font-weight:700}
+.q-no{color:var(--bad)}
+.erow.is-qual{box-shadow:inset 4px 0 0 var(--ok)}
+.grp{font-family:var(--mono);font-size:12px;color:var(--ink2)}
+.msum.fail-rule{color:var(--bad);font-weight:700}
+.qual-link{border:0;background:transparent;padding:0 2px;font-family:var(--mono);cursor:pointer}
+.agree-ramp{display:inline-block;width:112px;height:12px;border-radius:99px;vertical-align:middle;background:linear-gradient(90deg,rgba(120,130,142,.28),rgba(31,122,84,.62))}
+.slot-head{position:sticky;top:46px;z-index:4;background:var(--paper);padding:2px 0}
+.band-label{display:none}
+.nav-row,.viewer-bar,.mask-picks{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end;margin:6px 0}
+.viewer-bar label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted);min-width:0;flex:1 1 7rem}
+.stages{display:grid;gap:8px;min-width:0}
+.stages.side{grid-template-columns:repeat(auto-fit,minmax(min(120px,100%),1fr))}
+.stage{position:relative;min-width:0;margin:0}
+.stage .dbzh-canvas,.stage .deco{width:100%;height:auto;display:block;max-width:100%}
+.stage .mask-canvas,.stage .deco,#north-arrow,#scalebar{position:absolute}
+.stage .mask-canvas{left:0;top:0;width:100%;height:100%;pointer-events:none}
+.stage .deco{inset:0;width:100%;height:100%;pointer-events:none}
+.stage .deco circle{fill:none;stroke:rgba(255,255,255,.8);stroke-width:2}
+.stage .deco text{fill:#fff;font:18px var(--mono)}
+#north-arrow{top:6px;right:6px;width:28px;height:38px}
+#north-arrow polygon{fill:#fff}
+#north-arrow text{font:700 13px var(--sans);fill:#fff;text-anchor:middle}
+#scalebar{left:8px;right:8px;bottom:8px;color:#fff;font:600 12px/1.2 var(--mono);text-shadow:0 1px 2px #000}
+#scalebar i{display:block;width:calc(100% * 100 / 960);height:4px;background:#fff;margin-bottom:2px}
+.cbar-wrap{display:flex;gap:8px;align-items:center;margin:8px 0;min-width:0}
+.cbar-ramp{width:14px;flex:0 0 14px;height:110px;border-radius:7px;background:linear-gradient(to top,rgb(11,28,64),rgb(20,90,140),rgb(30,150,90),rgb(220,200,40),rgb(180,40,30))}
+.cbar-labels{display:flex;flex-direction:column;justify-content:space-between;height:110px;font:11px var(--mono)}
+#clip-note{margin:0;font-size:12px;color:var(--muted)}
+.stage figcaption{margin:2px 0 0;font-size:12px}
 .grid-col,#scan-panel,.slots,.slot-head,.sum{min-width:0}
 #scan-panel{position:sticky;top:58px}
 .slot-head,.slots{display:grid;grid-template-columns:repeat(10,minmax(0,1fr)) 3px repeat(18,minmax(0,1fr));gap:2px}
@@ -67,14 +105,14 @@
 .sh b{display:block;font-weight:550}
 .scell{appearance:none;box-sizing:border-box;width:100%;min-width:0;margin:0;padding:2px 0;border:0;border-radius:3px;background:var(--panel2);color:var(--ink);font:600 10px/1.15 var(--mono);cursor:pointer}
 .scell.hatch{cursor:default;color:var(--muted);background:repeating-linear-gradient(135deg,var(--panel2),var(--panel2) 3px,var(--hair) 3px,var(--hair) 4px)}
-.scell.ag-all{background:rgba(31,122,84,.28)}
-.scell.ag-none{background:rgba(179,55,47,.28)}
-.scell.ag-some{background:rgba(101,118,136,.22)}
+.scell.ag-all{background:rgba(31,122,84,.62)}
+.scell.ag-none{background:rgba(179,55,47,.38)}
+.scell.ag-some{background:color-mix(in srgb, rgba(31,122,84,.62) calc(var(--agree, .5) * 100%), rgba(120,130,142,.22))}
 .scell.score{background:hsl(210 45% calc(92% - (var(--score) * 55%)))}
 .scell.on{outline:2px solid var(--accent);outline-offset:-1px}
 .glyph{display:block;text-align:center}
 .night-pick{border:0;background:transparent;padding:0;cursor:pointer;text-align:left}
-#legend{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+#legend{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;margin:2px 0 4px;font-size:13px}
 .sw{display:inline-block;min-width:1.6rem;padding:1px 4px;border-radius:4px;text-align:center;font:600 11px/1.3 var(--mono)}
 .sw.ag-all{background:rgba(31,122,84,.28)}
 .sw.ag-none{background:rgba(179,55,47,.28)}
@@ -95,8 +133,17 @@
   .card .v{font-size:20px}
   .slot-head,.slots{grid-template-columns:repeat(7,minmax(0,1fr))}
   .slot-head .midnight-bar,.slots .midnight-bar{display:none}
+  .band-label{display:block;grid-column:1 / -1;font:10px var(--mono);color:var(--muted);padding-top:3px}
   .sh,.scell{font-size:9px}
+  .th-grid{grid-template-columns:minmax(0,1fr)}
+  .th-row{grid-template-columns:minmax(0,1fr) auto}
+  .th-cell{grid-column:1 / -1}
+  .th-cell input[type=range]{width:100%}
+  .mask-picks{display:grid;grid-template-columns:minmax(0,1fr);width:100%}
+  .mask-picks label.check{max-width:100%}
+  .stages.side{grid-template-columns:minmax(0,1fr)}
   .rule-form label,.view-controls label,.filters label,.model-ctl{flex:1 1 100%;max-width:100%}
   .model-grid{grid-template-columns:minmax(0,1fr)}
   .explore-ui select,.explore-ui input{width:100%}
+  .explore-ui input[type=checkbox]{width:auto}
 }

@@ -102,6 +102,7 @@
       </div>
       <p id="find-error" class="small" role="alert"></p>
       <p id="shown-count"></p>
+      <p id="result-line"></p>
       <p id="legend"></p>
       <p id="paint-ms" class="small" hidden></p>
 
@@ -120,7 +121,14 @@
           <p id="panel-id"></p>
           <p id="panel-when"></p>
           <p id="panel-qual"></p>
+          <div class="nav-row">
+            <button type="button" id="prev-night">Previous night</button>
+            <button type="button" id="prev-scan">Previous scan</button>
+            <button type="button" id="next-scan">Next scan</button>
+            <button type="button" id="next-night">Next night</button>
+          </div>
           <table class="v2-table" id="panel-scores"></table>
+          <div id="viewer"></div>
           <p id="mask-area-note"></p>
         </aside>
       </div>

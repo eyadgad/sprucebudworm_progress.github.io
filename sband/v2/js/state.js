@@ -45,6 +45,13 @@ function defaultsFrom(doc) {
     selection: { year: "2021", night: "", scan: "" },
     view: { mode: "agreement", model: ids[0] || "" },
     sort: { key: "date", model: ids[0] || "" },
+    viewer: {
+      tilt: "m03",
+      mode: "overlay",
+      only: "attunet_e1",
+      masks: { attunet_e1: true, attunet_e4: true, attunet_e1e4: true },
+      opacity: { attunet_e1: 0.6, attunet_e4: 0.6, attunet_e1e4: 0.6 },
+    },
     ids,
   };
 }
@@ -59,6 +66,11 @@ function blankCopy(base) {
     selection: { ...base.selection },
     view: { ...base.view },
     sort: { ...base.sort },
+    viewer: {
+      ...base.viewer,
+      masks: { ...base.viewer.masks },
+      opacity: { ...base.viewer.opacity },
+    },
     ids: base.ids,
   };
 }
@@ -85,7 +97,7 @@ function hashParams() {
   const raw = location.hash.replace(/^#/, "");
   if (!raw) return null;
   const q = new URLSearchParams(raw);
-  const known = ["y", "n", "night", "s", "th", "inc", "rule", "fq", "fs", "fm", "fa", "fk", "cx", "cm", "cid", "sk", "sid"];
+  const known = ["y", "n", "night", "s", "th", "inc", "rule", "fq", "fs", "fm", "fa", "fk", "cx", "cm", "cid", "sk", "sid", "tv", "vm", "vo", "vk", "vp"];
   return known.some(k => q.has(k)) ? q : null;
 }
 
@@ -160,6 +172,22 @@ function applyStored(base, stored) {
     }
     if (typeof stored.sort.model === "string" && stored.sort.model in next.thresholds) next.sort.model = stored.sort.model;
   }
+  if (stored.viewer && typeof stored.viewer === "object") {
+    if (stored.viewer.tilt === "m03" || stored.viewer.tilt === "p04") next.viewer.tilt = stored.viewer.tilt;
+    if (["overlay", "side", "inter", "union", "only"].includes(stored.viewer.mode)) next.viewer.mode = stored.viewer.mode;
+    if (typeof stored.viewer.only === "string" && stored.viewer.only in next.viewer.masks) next.viewer.only = stored.viewer.only;
+    if (stored.viewer.masks) {
+      for (const id of Object.keys(next.viewer.masks)) {
+        if (typeof stored.viewer.masks[id] === "boolean") next.viewer.masks[id] = stored.viewer.masks[id];
+      }
+    }
+    if (stored.viewer.opacity) {
+      for (const id of Object.keys(next.viewer.opacity)) {
+        const v = Number(stored.viewer.opacity[id]);
+        if (Number.isFinite(v)) next.viewer.opacity[id] = Math.min(1, Math.max(0, v));
+      }
+    }
+  }
   return next;
 }
 
@@ -210,6 +238,22 @@ function applyHash(base, q) {
     if (key === "date" || key === "allpass" || key === "mean") next.sort.key = key;
   }
   if (q.has("sid") && q.get("sid") in next.thresholds) next.sort.model = q.get("sid");
+  if (q.has("tv") && (q.get("tv") === "m03" || q.get("tv") === "p04")) next.viewer.tilt = q.get("tv");
+  if (q.has("vm") && ["overlay", "side", "inter", "union", "only"].includes(q.get("vm"))) next.viewer.mode = q.get("vm");
+  if (q.has("vo") && q.get("vo") in next.viewer.masks) next.viewer.only = q.get("vo");
+  if (q.has("vk")) {
+    const on = new Set(q.get("vk").split(",").filter(Boolean));
+    for (const id of Object.keys(next.viewer.masks)) next.viewer.masks[id] = on.has(id);
+  }
+  if (q.has("vp")) {
+    for (const part of q.get("vp").split(",")) {
+      const i = part.indexOf(":");
+      if (i < 0) continue;
+      const id = part.slice(0, i);
+      const v = Number(part.slice(i + 1));
+      if (id in next.viewer.opacity && Number.isFinite(v)) next.viewer.opacity[id] = Math.min(1, Math.max(0, v));
+    }
+  }
   return next;
 }
 
@@ -232,6 +276,12 @@ function writeHash() {
   q.set("cid", state.view.model || "");
   q.set("sk", state.sort.key);
   q.set("sid", state.sort.model || "");
+  const v = state.viewer;
+  q.set("tv", v.tilt);
+  q.set("vm", v.mode);
+  q.set("vo", v.only || "");
+  q.set("vk", Object.keys(v.masks).filter(id => v.masks[id]).join(","));
+  q.set("vp", Object.keys(v.opacity).map(id => `${id}:${v.opacity[id]}`).join(","));
   const url = `${location.pathname}${location.search}#${q.toString()}`;
   history.replaceState(null, "", url);
 }

@@ -1,5 +1,6 @@
 import { initShell } from "./shell.js";
 import { boot, getState, onChange, patch } from "./state.js";
+import { bindViewer, updateViewer } from "./viewer.js";
 
 initShell("explore");
 
@@ -142,12 +143,25 @@ function badgeHtml(night, dropped) {
   return bits.join("");
 }
 
+function withBands(pieces) {
+  let html = "";
+  for (let i = 0; i < pieces.length; i++) {
+    if (i % 7 === 0) {
+      const [hour, minute] = SLOTS[i];
+      html += `<span class="band-label">${pad(hour)}:${pad(minute)}</span>`;
+    }
+    html += pieces[i];
+    if (i === 9) html += `<span class="midnight-bar" title="Midnight UTC"></span>`;
+  }
+  return html;
+}
+
 function slotHeads() {
   const bits = SLOTS.map(([hour, minute]) => {
     const label = `${pad(hour)}:${pad(minute)} UTC (${edtClock(hour, minute)})`;
     return `<span class="sh" data-hour="${hour}" data-minute="${minute}" title="${label}"><b>${pad(hour)}:${pad(minute)}</b></span>`;
   });
-  return `${bits.slice(0, 10).join("")}<span class="midnight-bar" title="Midnight UTC"></span>${bits.slice(10).join("")}`;
+  return withBands(bits);
 }
 
 function rowHtml(night, scans, dropped) {
@@ -167,16 +181,20 @@ function rowHtml(night, scans, dropped) {
     }
     return `<button type="button" class="scell" data-scan="${scan.id}" data-hour="${hour}" data-minute="${minute}" data-night="${night.night}" data-p-e1="${scan.p_e1}" data-p-e4="${scan.p_e4}" data-p-e1e4="${scan.p_e1e4}" data-a-e1="${scan.area_e1_km2}" data-a-e4="${scan.area_e4_km2}" data-a-e1e4="${scan.area_e1e4_km2}" data-insect="${scan.insect}" data-rain="${scan.rain}"><span class="glyph"></span>${extra}</button>`;
   });
-  const slots = `${buttons.slice(0, 10).join("")}<span class="midnight-bar" title="Midnight UTC"></span>${buttons.slice(10).join("")}`;
-  const models = modelList.map(m => `<span class="msum" data-model="${m.id}"></span>`).join("");
+  const slots = withBands(buttons);
+  let family = "";
+  const models = modelList.map(m => {
+    const grp = m.family === family ? "" : `<span class="grp">${family ? "| " : ""}${m.family === "classifier" ? "Swin" : "AttUNet"}</span>`;
+    family = m.family;
+    return `${grp}<span class="msum" data-model="${m.id}"></span>`;
+  }).join("");
   const why = whyText(night, dropped);
   return `<article class="erow" data-night="${night.night}" data-year="${night.night.slice(0, 4)}" data-status="${night.status}" data-role="${night.annotation_role || ""}">
     <div class="sum">
       <button type="button" class="night-link night-pick" data-night="${night.night}">${night.night}</button>
       ${badgeHtml(night, dropped)}
       <span data-part="qual"></span>
-      <span data-part="scored"></span>
-      <span data-part="all"></span>
+      <span data-part="window"></span>
       ${models}
     </div>
     <p class="why"${why ? "" : " hidden"}>${why}</p>
@@ -212,8 +230,7 @@ function bindRows() {
     const scans = [];
     row._sum = {
       qual: row.querySelector('[data-part="qual"]'),
-      scored: row.querySelector('[data-part="scored"]'),
-      all: row.querySelector('[data-part="all"]'),
+      window: row.querySelector('[data-part="window"]'),
       models: Object.fromEntries(modelList.map(m => [m.id, row.querySelector(`.msum[data-model="${m.id}"]`)])),
     };
     for (const el of row.querySelectorAll(".slots > .scell")) {
@@ -232,46 +249,47 @@ function bindRows() {
 
 function nightStats(scans, st, inc) {
   const pass = {};
+  const winPass = {};
   const mean = {};
+  const rule = st.nightRule;
   for (const m of modelList) {
     let n = 0;
+    let w = 0;
     let sum = 0;
     const t = st.thresholds[m.id];
     for (const scan of scans) {
       const v = scoreOf(scan, m);
       sum += v;
-      if (v >= t) n++;
+      if (v >= t) {
+        n++;
+        if (inWindow(scan.hour, rule)) w++;
+      }
     }
     pass[m.id] = n;
+    winPass[m.id] = w;
     mean[m.id] = scans.length ? sum / scans.length : 0;
   }
   let nAll = 0;
+  let winAll = 0;
   let maxK = 0;
+  let nWindow = 0;
   for (const scan of scans) {
+    const inside = inWindow(scan.hour, rule);
+    if (inside) nWindow++;
     let k = 0;
     for (const m of inc) if (scoreOf(scan, m) >= st.thresholds[m.id]) k++;
     if (k > maxK) maxK = k;
-    if (inc.length && k === inc.length) nAll++;
-  }
-  const win = [];
-  for (const scan of scans) if (inWindow(scan.hour, st.nightRule)) win.push(scan);
-  let qualifies = false;
-  if (inc.length && win.length >= st.nightRule.minScans) {
-    if (st.nightRule.mode === "allpass") {
-      let share = 0;
-      for (const scan of win) {
-        if (inc.every(m => scoreOf(scan, m) >= st.thresholds[m.id])) share++;
-      }
-      qualifies = share / win.length >= st.nightRule.fraction;
-    } else {
-      qualifies = inc.every(m => {
-        let n = 0;
-        for (const scan of win) if (scoreOf(scan, m) >= st.thresholds[m.id]) n++;
-        return n / win.length >= st.nightRule.fraction;
-      });
+    if (inc.length && k === inc.length) {
+      nAll++;
+      if (inside) winAll++;
     }
   }
-  return { pass, mean, nAll, maxK, nScored: scans.length, qualifies };
+  let qualifies = false;
+  if (inc.length && nWindow >= rule.minScans) {
+    if (rule.mode === "allpass") qualifies = winAll / nWindow >= rule.fraction;
+    else qualifies = inc.every(m => winPass[m.id] / nWindow >= rule.fraction);
+  }
+  return { pass, winPass, mean, nAll, winAll, maxK, nScored: scans.length, nWindow, qualifies };
 }
 
 function matches(row, stat, st) {
@@ -323,10 +341,14 @@ function paintCell(item, st, inc) {
   for (const m of inc) if (scoreOf(scan, m) >= st.thresholds[m.id]) k++;
   const n = inc.length;
   const text = n ? `${k}/${n}` : "–";
-  const base = !n || (k > 0 && k < n) ? "scell ag-some" : k === n ? "scell ag-all" : "scell ag-none";
+  let base = "scell ag-some";
+  if (!n || k === 0) base = n ? "scell ag-none" : "scell ag-some";
+  else if (k === n) base = "scell ag-all";
   if (glyph.textContent !== text) glyph.textContent = text;
   setClass(el, base, selected);
   el.style.removeProperty("--score");
+  if (n && k > 0 && k < n) el.style.setProperty("--agree", String(k / n));
+  else el.style.removeProperty("--agree");
 }
 
 function paintFast() {
@@ -335,6 +357,8 @@ function paintFast() {
   const t0 = performance.now();
   let nMatch = 0;
   let nScans = 0;
+  const globalPass = Object.fromEntries(modelList.map(m => [m.id, 0]));
+  const qualNights = [];
   for (const item of cells) paintCell(item, st, inc);
   for (const row of rows) {
     const stat = nightStats(row._scans, st, inc);
@@ -343,18 +367,30 @@ function paintFast() {
     row.dataset.qualifies = stat.qualifies ? "1" : "0";
     row.dataset.nScored = String(stat.nScored);
     row.dataset.nAll = String(stat.nAll);
+    row.dataset.nWindow = String(stat.nWindow);
     row.dataset.match = match ? "1" : "0";
-    row._sum.qual.textContent = stat.qualifies ? "qualifies ✓" : "qualifies —";
-    row._sum.scored.textContent = `${stat.nScored} scored`;
-    row._sum.all.textContent = `all ${stat.nAll}/${stat.nScored}`;
-    row._sum.all.dataset.all = String(stat.nAll);
+    row.classList.toggle("is-qual", stat.qualifies);
+    row._sum.qual.textContent = stat.qualifies ? "✓ qualifies" : "✗ does not qualify";
+    row._sum.qual.className = stat.qualifies ? "q-yes" : "q-no";
+    const a = pad(st.nightRule.hourStart);
+    const b = pad(st.nightRule.hourEnd);
+    row._sum.window.textContent = `${stat.nWindow} in ${a}–${b}`;
+    row._sum.window.title = `Whole night: ${stat.nScored} scored, ${stat.nAll} all-pass. The rule uses ${stat.nWindow} scans in ${a}–${b} UTC.`;
     for (const m of modelList) {
       const el = row._sum.models[m.id];
-      el.hidden = !st.included[m.id];
+      const on = !!st.included[m.id];
+      el.hidden = !on;
       el.dataset.pass = String(stat.pass[m.id]);
-      el.textContent = `${m.short} ${stat.pass[m.id]}/${stat.nScored}`;
+      el.dataset.win = String(stat.winPass[m.id]);
+      const frac = stat.nWindow ? stat.winPass[m.id] / stat.nWindow : 0;
+      const fails = on && st.nightRule.mode === "every" && (!stat.nWindow || frac < st.nightRule.fraction);
+      el.classList.toggle("fail-rule", fails);
+      el.textContent = stat.nWindow ? `${m.short} ${stat.winPass[m.id]}/${stat.nWindow}` : `${m.short} —`;
+      el.title = `Whole night ${stat.pass[m.id]}/${stat.nScored}. Window ${stat.nWindow ? `${stat.winPass[m.id]}/${stat.nWindow}` : "none"}.`;
       row.setAttribute(`data-mean-${m.id}`, String(stat.mean[m.id]));
+      globalPass[m.id] += stat.pass[m.id];
     }
+    if (stat.qualifies) qualNights.push(row.dataset.night);
     if (match) {
       nMatch++;
       nScans += stat.nScored;
@@ -368,6 +404,8 @@ function paintFast() {
   paintPanel(st, inc);
   document.getElementById("rule-text").textContent = ruleSentence(st.nightRule);
   document.getElementById("shown-count").textContent = `${nMatch} nights match, ${nScans} scans`;
+  paintResults(qualNights, globalPass);
+  paintPassing(globalPass);
   document.getElementById("selected-night").textContent = st.selection.night || "none";
   const ms = performance.now() - t0;
   const mark = document.getElementById("paint-ms");
@@ -411,7 +449,16 @@ function paintLegend(st, inc) {
     el.innerHTML = `<span class="ramp" title="Low score to high score"></span> ${model.label} ${unit}, continuous scale from low (light) to high (dark). The cell prints the score. Probabilities below 0.001 use scientific notation. <span class="sw hatch">–</span> No scan.`;
     return;
   }
-  el.innerHTML = `<span class="sw ag-all">${n}/${n}</span> All included models pass. <span class="sw ag-some">${n ? Math.ceil(n / 2) : 0}/${n}</span> Some included models pass. The cell shows k/n. <span class="sw ag-none">0/${n}</span> No included model passes. <span class="sw hatch">–</span> No scan. Colour repeats the count; it is never the only signal.`;
+  el.innerHTML = `<span class="sw ag-none">0/${n}</span> No included model passes. <span class="agree-ramp" title="Neutral to green"></span> Some included models pass. The cell shows k/n. <span class="sw ag-all">${n}/${n}</span> All included models pass. <span class="sw hatch">–</span> No scan.`;
+}
+
+function paintResults(qualNights, globalPass) {
+  const el = document.getElementById("result-line");
+  if (!el) return;
+  qualNights.sort();
+  const links = qualNights.map(night => `<button type="button" class="qual-link" data-night="${night}">${night}</button>`).join(" ");
+  const passes = modelList.map(m => `<span data-pass-model="${m.id}">${m.label} ${globalPass[m.id]}</span>`).join(" · ");
+  el.innerHTML = `<b>${qualNights.length} nights qualify</b> ${links || "none"}. <span class="pass-line">Scans passing: ${passes}</span>`;
 }
 
 function paintGroups(st) {
@@ -434,6 +481,10 @@ function paintPanel(st) {
     when.textContent = "";
     qual.textContent = "";
     table.innerHTML = "";
+    if (paintPanel.sig !== "none") {
+      paintPanel.sig = "none";
+      updateViewer(null, st);
+    }
     return;
   }
   const utc = utcFromStamp(scan.id);
@@ -442,7 +493,7 @@ function paintPanel(st) {
   idEl.textContent = String(scan.id);
   when.textContent = `${utc.hm} UTC on ${utc.date}. ${edt.hm} EDT on ${edt.date}. Night ${night}.`;
   const row = document.querySelector(`.erow[data-night="${night}"]`);
-  qual.textContent = row?.dataset.qualifies === "1" ? "This night qualifies ✓" : "This night does not qualify";
+  qual.textContent = row?.dataset.qualifies === "1" ? "✓ qualifies" : "✗ does not qualify";
   const body = modelList.map(m => {
     const value = scoreOf(scan, m);
     const threshold = st.thresholds[m.id];
@@ -452,6 +503,11 @@ function paintPanel(st) {
     return `<tr data-model="${m.id}" data-pass="${ok ? "1" : "0"}"><td>${m.label}</td><td>${shown}</td><td>${cut}</td><td>${ok ? "pass" : "fail"}</td></tr>`;
   }).join("");
   table.innerHTML = `<thead><tr><th>Model</th><th>Score</th><th>Threshold</th><th>Call</th></tr></thead><tbody>${body}</tbody>`;
+  const sig = `${st.selection.scan}|${st.viewer.tilt}|${st.viewer.mode}|${st.viewer.only}|${Object.entries(st.viewer.masks).map(([id, on]) => on ? id : "").join(",")}|${Object.values(st.viewer.opacity).join(",")}`;
+  if (sig !== paintPanel.sig) {
+    paintPanel.sig = sig;
+    updateViewer(scan, st);
+  }
 }
 
 function fillTip(el) {
@@ -487,6 +543,69 @@ function showYear(year) {
   if (b) b.hidden = y !== "2022";
   document.getElementById("tab-2021").classList.toggle("on", y === "2021");
   document.getElementById("tab-2022").classList.toggle("on", y === "2022");
+}
+
+function scanOrder() {
+  const ids = [];
+  for (const year of ["2021", "2022"]) {
+    const section = document.getElementById(`year-${year}`);
+    if (!section) continue;
+    for (const cell of section.querySelectorAll(".erow .slots > .scell[data-scan]")) {
+      ids.push({
+        id: cell.dataset.scan,
+        night: cell.dataset.night,
+        hour: Number(cell.dataset.hour),
+        minute: Number(cell.dataset.minute),
+      });
+    }
+  }
+  return ids;
+}
+
+function selectScan(entry) {
+  if (!entry) return;
+  patch(s => {
+    s.selection.scan = entry.id;
+    s.selection.night = entry.night;
+    s.selection.year = entry.night.slice(0, 4);
+  });
+  showYear(entry.night.slice(0, 4));
+  const cell = document.querySelector(`.slots > .scell[data-scan="${entry.id}"]`);
+  cell?.scrollIntoView({ block: "nearest", behavior: "instant" });
+}
+
+function stepScan(dir) {
+  const order = scanOrder();
+  if (!order.length) return;
+  const cur = getState().selection.scan;
+  let index = order.findIndex(s => s.id === cur);
+  if (index < 0) index = dir > 0 ? -1 : order.length;
+  selectScan(order[index + dir]);
+}
+
+function stepNight(dir) {
+  const order = [...document.querySelectorAll(".erow")].map(row => row.dataset.night);
+  const st = getState();
+  let index = order.indexOf(st.selection.night);
+  if (index < 0) index = dir > 0 ? -1 : order.length;
+  const night = order[index + dir];
+  if (!night) return;
+  const scan = st.selection.scan ? scanById.get(st.selection.scan) : null;
+  const row = document.querySelector(`.erow[data-night="${night}"]`);
+  let cell = null;
+  if (scan) {
+    cell = row.querySelector(`.slots > .scell[data-hour="${scan.hour}"][data-minute="${scan.minute}"][data-scan]`);
+  }
+  if (!cell) cell = row.querySelector(".slots > .scell[data-scan]");
+  if (cell) selectScan({ id: cell.dataset.scan, night });
+  else {
+    patch(s => {
+      s.selection.night = night;
+      s.selection.scan = "";
+      s.selection.year = night.slice(0, 4);
+    });
+    showYear(night.slice(0, 4));
+  }
 }
 
 function reveal(night) {
@@ -564,18 +683,27 @@ function buildControls() {
   const options = modelList.map(m => `<option value="${m.id}">${m.label}</option>`).join("");
   document.getElementById("view-model").innerHTML = options;
   document.getElementById("sort-model").innerHTML = options;
-  document.getElementById("model-controls").innerHTML = modelList.map(m => {
+  const body = modelList.map(m => {
     const prob = m.family === "classifier";
-    return `<div class="model-ctl">
+    return `<div class="th-row">
       <label class="check"><input type="checkbox" class="inc" data-model="${m.id}"> ${m.label}</label>
-      <p class="tiny">${m.input}</p>
-      <input type="range" class="th-range" data-model="${m.id}" min="0" max="${prob ? 1 : 80000}" step="${prob ? 0.01 : 1}">
-      <span class="th-line">
+      <span class="tiny">${prob ? "probability" : "area km²"}</span>
+      <span class="th-cell">
+        <input type="range" class="th-range" data-model="${m.id}" min="0" max="${prob ? 1 : 80000}" step="${prob ? 0.01 : 1}">
         <input type="number" class="th-num" data-model="${m.id}" min="0" step="${prob ? 0.01 : 0.25}">
-        <button type="button" class="th-reset" data-model="${m.id}">Reset</button>
       </span>
+      <span class="npass" data-model="${m.id}"></span>
+      <button type="button" class="th-reset" data-model="${m.id}">Reset</button>
     </div>`;
   }).join("");
+  document.getElementById("model-controls").innerHTML = `<div class="th-grid">${body}</div>`;
+}
+
+function paintPassing(globalPass) {
+  for (const m of modelList) {
+    const el = document.querySelector(`.npass[data-model="${m.id}"]`);
+    if (el) el.textContent = String(globalPass[m.id]);
+  }
 }
 
 function wire() {
@@ -693,6 +821,40 @@ function wire() {
     const cell = event.target.closest(".scell");
     if (cell && !cell.classList.contains("extra") && cell.closest(".slots")) fillTip(cell);
   });
+  document.getElementById("result-line").addEventListener("click", event => {
+    const link = event.target.closest(".qual-link");
+    if (!link) return;
+    patch(s => {
+      s.selection.night = link.dataset.night;
+      s.selection.scan = "";
+      s.selection.year = link.dataset.night.slice(0, 4);
+    });
+    reveal(link.dataset.night);
+  });
+  document.getElementById("prev-scan").addEventListener("click", () => stepScan(-1));
+  document.getElementById("next-scan").addEventListener("click", () => stepScan(1));
+  document.getElementById("prev-night").addEventListener("click", () => stepNight(-1));
+  document.getElementById("next-night").addEventListener("click", () => stepNight(1));
+  document.addEventListener("keydown", event => {
+    const tag = document.activeElement?.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if (event.key === "ArrowRight") { event.preventDefault(); stepScan(1); }
+    else if (event.key === "ArrowLeft") { event.preventDefault(); stepScan(-1); }
+    else if (event.key === "ArrowDown") { event.preventDefault(); stepNight(1); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); stepNight(-1); }
+  });
+  window.__setViewer = (mode, on, only) => {
+    patch(s => {
+      s.viewer.mode = mode;
+      if (only) s.viewer.only = only;
+      for (const id of Object.keys(s.viewer.masks)) s.viewer.masks[id] = on.includes(id);
+    });
+  };
+  bindViewer(document.getElementById("viewer"), { patch, getState, nextId: id => {
+    const order = scanOrder();
+    const index = order.findIndex(s => s.id === id);
+    return index >= 0 && order[index + 1] ? order[index + 1].id : "";
+  } });
 }
 
 function prepareModels(doc) {
