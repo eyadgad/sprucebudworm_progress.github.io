@@ -1,5 +1,5 @@
 import { initShell, esc } from "./shell.js";
-import { boot, getState, onChange } from "./state.js";
+import { boot, getState, mountClassificationCutoff, onChange } from "./state.js";
 import { chartFrame } from "../../assets/js/lib/charts.js";
 
 initShell("analysis");
@@ -227,7 +227,7 @@ function compute(st) {
       ));
     }
   }
-  const included = modelList.filter(model => st.included[model.id]);
+  const included = modelList.filter(model => model.family === "classifier" && st.included[model.id]);
   let qual = 0;
   for (const group of groups.values()) if (qualifies(group, included, st.thresholds, st.nightRule)) qual++;
   out.qual_nights = qual;
@@ -299,8 +299,8 @@ function histSvg(modelId, cut) {
     const bh = (count / max) * (h - 8);
     return `<rect class="bar" x="${(i * bw).toFixed(2)}" y="${(h - bh).toFixed(2)}" width="${(bw - 0.35).toFixed(2)}" height="${Math.max(0, bh).toFixed(2)}" ${attr(`hist|${modelId}|${i}`, count, String(count))}><title>${count}</title></rect>`;
   }).join("");
-  const x = (Math.min(1, Math.max(0, cut)) * w).toFixed(2);
-  return `<svg viewBox="0 0 ${w} ${h}" role="img" ${chartFrame(w)} preserveAspectRatio="xMidYMid meet">${bars}<line class="cut" x1="${x}" y1="0" x2="${x}" y2="${h}"></line></svg>`;
+  const mark = cut == null ? "" : `<line class="cut" x1="${(Math.min(1, Math.max(0, cut)) * w).toFixed(2)}" y1="0" x2="${(Math.min(1, Math.max(0, cut)) * w).toFixed(2)}" y2="${h}"></line>`;
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" ${chartFrame(w)} preserveAspectRatio="xMidYMid meet">${bars}${mark}</svg>`;
 }
 
 function smallHist(prefix, a, b) {
@@ -316,14 +316,15 @@ function smallHist(prefix, a, b) {
   return `<svg viewBox="0 0 ${w} ${h}" role="img" ${chartFrame(w)} preserveAspectRatio="xMidYMid meet">${bars}</svg>`;
 }
 
-function matrix(prefix, caption) {
-  const head = modelList.map(model => {
+function matrix(prefix, caption, models) {
+  const list = models || modelList.filter(model => model.family === "classifier");
+  const head = list.map(model => {
     const off = lastFlat[`included|${model.id}`] ? "" : " ex";
     return `<th class="${off}" title="${esc(model.label)}">${esc(model.label)}</th>`;
   }).join("");
-  const body = modelList.map(row => {
+  const body = list.map(row => {
     const off = lastFlat[`included|${row.id}`] ? "" : " ex";
-    const cells = modelList.map(col => {
+    const cells = list.map(col => {
       const pct = lastFlat[`${prefix}|${row.id}|${col.id}|pct`];
       const kappa = lastFlat[`${prefix}|${row.id}|${col.id}|kappa`];
       return `<td class="${off}"><b ${attr(`${prefix}|${row.id}|${col.id}|pct`, pct, pctShow(pct))}>${pctShow(pct)}</b><span class="kap" ${attr(`${prefix}|${row.id}|${col.id}|kappa`, kappa, kapShow(kappa))}>${kapShow(kappa)}</span></td>`;
@@ -338,7 +339,7 @@ function pctInt(rate) {
 }
 
 function hourTable() {
-  const rows = modelList.map(model => {
+  const rows = modelList.filter(model => model.family === "classifier").map(model => {
     const cells = HOURS.map(hour => {
       const rate = lastFlat[`hour|${model.id}|${hour}|rate`];
       const show = pctInt(rate);
@@ -355,7 +356,7 @@ function hourTable() {
 
 function monthTable() {
   const months = [...new Set(lastRows.map(scan => scan.month))].sort();
-  const rows = modelList.map(model => {
+  const rows = modelList.filter(model => model.family === "classifier").map(model => {
     const cells = months.map(month => {
       const rate = lastFlat[`month|${model.id}|${month}|rate`];
       const show = pctInt(rate);
@@ -372,14 +373,8 @@ function paintScatter() {
   if (!host || !canvas) return;
   const cls = modelList.find(model => model.id === scatterCls) || modelList[0];
   const seg = modelList.find(model => model.id === scatterSeg) || modelList.find(model => model.family === "segmenter");
-  const parts = ["both", "neither", "a_only", "b_only", "n"];
   const quad = document.getElementById("quads");
-  quad.innerHTML = parts.map(part => {
-    const key = `agree_scan|${cls.id}|${seg.id}|${part}`;
-    const value = lastFlat[key];
-    const label = { both: "both pass", neither: "both fail", a_only: "classifier only", b_only: "segmenter only", n: "scans" }[part];
-    return `<span ${attr(key, value, String(value))}>${label} ${value}</span>`;
-  }).join(" · ");
+  if (quad) quad.textContent = "";
   const cssW = host.clientWidth || 320;
   const cssH = 220;
   const dpr = window.devicePixelRatio || 1;
@@ -397,7 +392,6 @@ function paintScatter() {
   const x1 = cssW - padR;
   const y1 = padT;
   const clsCut = Number(getState().thresholds[cls.id]);
-  const segCut = Number(getState().thresholds[seg.id]);
   const yOf = km => {
     const z = Math.min(AREA_HI, Math.max(AREA_LO, Math.log10(Math.max(km, 0.25))));
     const t = (z - AREA_LO) / (AREA_HI - AREA_LO);
@@ -419,8 +413,6 @@ function paintScatter() {
   g.beginPath();
   g.moveTo(xOf(clsCut), y1);
   g.lineTo(xOf(clsCut), y0);
-  g.moveTo(x0, yOf(segCut));
-  g.lineTo(x1, yOf(segCut));
   g.stroke();
   g.fillStyle = "currentColor";
   g.font = "11px sans-serif";
@@ -441,27 +433,28 @@ function render(st) {
   lastFlat = flat;
   window.__analysis = flat;
   const stateLine = modelList.map(model => {
-    const on = st.included[model.id] ? "included" : "excluded";
-    const cut = model.family === "classifier" ? Number(st.thresholds[model.id]).toFixed(2) : String(st.thresholds[model.id]);
+    if (model.family !== "classifier") return `<span>${esc(model.label)} inspection only</span>`;
+    const cut = Number(st.thresholds[model.id]).toFixed(2);
     const pass = flat[`pass_count|${model.id}`];
-    return `<span class="${st.included[model.id] ? "" : "off"}">${esc(model.label)} <b ${attr(`threshold|${model.id}`, st.thresholds[model.id], cut)}>${cut}</b> ${on}, <b ${attr(`pass_count|${model.id}`, pass, String(pass))}>${pass}</b> pass</span>`;
+    return `<span>${esc(model.label)} <b ${attr(`threshold|${model.id}`, st.thresholds[model.id], cut)}>${cut}</b>, <b ${attr(`pass_count|${model.id}`, pass, String(pass))}>${pass}</b> pass</span>`;
   }).join("");
   document.getElementById("state-line").innerHTML = stateLine;
   const rule = st.nightRule;
-  document.getElementById("rule-line").innerHTML = `Night rule from shared state: ${esc(rule.mode)}, fraction <span ${attr("rule_fraction", rule.fraction, String(rule.fraction))}>${rule.fraction}</span>, at least <span ${attr("rule_min", rule.minScans, String(rule.minScans))}>${rule.minScans}</span> scans, hours <span ${attr("rule_h0", rule.hourStart, pad(rule.hourStart))}>${pad(rule.hourStart)}</span>–<span ${attr("rule_h1", rule.hourEnd, pad(rule.hourEnd))}>${pad(rule.hourEnd)}</span> UTC.`;
+  document.getElementById("rule-line").innerHTML = `Night rule: each classifier, fraction <span ${attr("rule_fraction", rule.fraction, String(rule.fraction))}>${rule.fraction}</span>, at least <span ${attr("rule_min", rule.minScans, String(rule.minScans))}>${rule.minScans}</span> scans, hours <span ${attr("rule_h0", rule.hourStart, pad(rule.hourStart))}>${pad(rule.hourStart)}</span>–<span ${attr("rule_h1", rule.hourEnd, pad(rule.hourEnd))}>${pad(rule.hourEnd)}</span> UTC.`;
   document.getElementById("distributions").innerHTML = modelList.map(model => {
-    const axis = model.family === "classifier" ? "Logit of probability. Line is the threshold." : "Log of mask area, km². Line is the threshold.";
-    return `<article class="chart"><h3>${esc(model.label)}</h3><p class="small">${axis}</p>${histSvg(model.id, flat[`threshold_frac|${model.id}`])}</article>`;
+    const classifier = model.family === "classifier";
+    const axis = classifier ? "Logit of probability. Line is the classification cutoff." : "Log of mask area, km². No pass cutoff.";
+    return `<article class="chart"><h3>${esc(model.label)}</h3><p class="small">${axis}</p>${histSvg(model.id, classifier ? flat[`threshold_frac|${model.id}`] : null)}</article>`;
   }).join("");
   const clsOpts = modelList.filter(model => model.family === "classifier").map(model => `<option value="${model.id}">${esc(model.label)}</option>`).join("");
   const segOpts = modelList.filter(model => model.family === "segmenter").map(model => `<option value="${model.id}">${esc(model.label)}</option>`).join("");
   document.getElementById("compare").innerHTML = `
-    <p class="pair-note">Percentage is the share of calls that match. κ is Cohen's kappa. An excluded model stays in the matrix and is marked in grey. <span ${attr("n_scans", flat.n_scans, String(flat.n_scans))}>${flat.n_scans}</span> scans. <span ${attr("night_n", flat.night_n, String(flat.night_n))}>${flat.night_n}</span> nights have enough window scans for a night call. A night call is that model's own fraction, not the joint rule. Nights with too few window scans are left out.</p>
+    <p class="pair-note">Percentage is the share of classifier calls that match. κ is Cohen's kappa. The matrix is the three classifiers. <span ${attr("n_scans", flat.n_scans, String(flat.n_scans))}>${flat.n_scans}</span> scans. <span ${attr("night_n", flat.night_n, String(flat.night_n))}>${flat.night_n}</span> nights have enough window scans for a night call. A night call is that classifier's own fraction. Nights with too few window scans are left out.</p>
     ${matrix("agree_scan", "Scan agreement")}
     ${matrix("agree_night", "Night agreement")}
     <div id="scatter-card" class="chart scatter-wrap">
       <h3>Classifier probability against segmenter area</h3>
-      <p class="pair-note">Probability is on a logit axis. Mask area is on a log axis, in km². An area of 0 is drawn at 0.25 km², which is one pixel. Both lines are the current thresholds.</p>
+      <p class="pair-note">Probability is on a logit axis. Mask area is on a log axis, in km². An area of 0 is drawn at 0.25 km², which is one pixel. The line is the classification cutoff. Area has no pass cutoff.</p>
       <p class="pair-note">
         <label>Classifier <select id="scatter-cls">${clsOpts}</select></label>
         <label>Segmenter <select id="scatter-seg">${segOpts}</select></label>
@@ -483,7 +476,7 @@ function render(st) {
     <p class="pair-note">Training-hour confound: on C-band, every scan at 19–23 UTC and at 09–11 UTC is label 1. Negatives occur only at 00–08 UTC. This scored set has <span ${attr("confound_09_11", flat.confound_09_11, String(flat.confound_09_11))}>${flat.confound_09_11}</span> scans at 09–11 UTC.</p>
     ${hourTable()}
     ${monthTable()}
-    <p class="frac-note"><span ${attr("qual_nights", flat.qual_nights, String(flat.qual_nights))}>${flat.qual_nights}</span> nights qualify at the current fraction. Counts below use the same included models, window and minimum, and only change the fraction.</p>
+    <p class="frac-note"><span ${attr("qual_nights", flat.qual_nights, String(flat.qual_nights))}>${flat.qual_nights}</span> nights qualify at the current fraction. A night qualifies when each classifier passes at least that fraction of its 00–08 UTC scans, and the night has at least 10 of those scans. Segmenters are not part of the rule.</p>
     <p class="state-line">${steps.join("")}</p>`;
   const segCards = PAIRS.map(([a, b]) => {
     const diceMed = flat[`dice|${a}|${b}|median`];
@@ -548,6 +541,7 @@ async function main() {
     return { ...scan, hour: Number(scan.hour), month: `${id.slice(0, 4)}-${id.slice(4, 6)}` };
   });
   boot(models);
+  mountClassificationCutoff(document.getElementById("cls-cut-mount"));
   onChange(() => render(getState()));
   render(getState());
   if (landSegmentation) {

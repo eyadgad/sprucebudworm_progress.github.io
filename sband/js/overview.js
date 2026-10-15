@@ -1,5 +1,5 @@
 import { esc, initShell } from "./shell.js";
-import { addCorrection, boot, exportCorrections, getState, onChange, resetCorrections } from "./state.js";
+import { addCorrection, boot, exportCorrections, getState, mountClassificationCutoff, onChange, resetCorrections } from "./state.js";
 
 initShell("overview");
 
@@ -211,10 +211,12 @@ function renderQuestionable() {
 
 function renderModels() {
   const body = [...models.classifiers, ...models.segmenters].map(m => {
-    const cut = m.family === "classifier"
+    const classifier = m.family === "classifier";
+    const cut = classifier
       ? `${Number(m.default_threshold).toFixed(2)} probability`
-      : `${num(m.threshold_km2)} km² (${num(m.threshold_pixels)} px)`;
-    return `<tr><td>${esc(m.id)}</td><td>${esc(m.input)}</td><td>${esc(m.score === "probability" ? "Probability, 0–1" : "Mask area, km²")}</td><td>${cut}</td><td>${esc(m.pass_rule)}</td></tr>`;
+      : "not a pass/fail";
+    const rule = classifier ? m.pass_rule : "not a pass or fail";
+    return `<tr><td>${esc(m.id)}</td><td>${esc(m.input)}</td><td>${esc(m.score === "probability" ? "Probability, 0–1" : "Mask area, km²")}</td><td>${cut}</td><td>${esc(rule)}</td></tr>`;
   }).join("");
   document.getElementById("models-table").innerHTML = `
     <p>${esc(models.label)}</p>
@@ -223,7 +225,7 @@ function renderModels() {
       <tbody>${body}</tbody>
     </table>
     <p id="mask-area-note">${esc(models.mask_area_note || "")}</p>
-    <p class="small">The 0.15 rule is a fixed pixel cut (probability &gt; 0.15). It is not a scan threshold. Classifier calls use ≥. Segmenter area calls use ≥ the Youden cut above.</p>`;
+    <p class="small">The 0.15 rule is a fixed pixel cut (probability &gt; 0.15). It is not a scan threshold. Classifiers share one cutoff, default 0.5. Youden cuts are not used for the classifiers. Segmenters are for masks, area and overlap only. They do not pass or fail a scan or a night.</p>`;
 }
 
 function renderVariables(dataset) {
@@ -341,6 +343,7 @@ async function main() {
   }
   onChange(() => { renderGrid(); renderQuestionable(); });
   boot(models);
+  mountClassificationCutoff(document.getElementById("cls-cut-mount"));
   renderExample();
   renderVariables(dataset);
   renderModels();

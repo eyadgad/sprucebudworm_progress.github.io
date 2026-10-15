@@ -23,11 +23,12 @@
     <main id="main" class="explore-page" tabindex="-1">
       <p id="corrections-banner" class="banner" hidden></p>
       <h1>S-band explore</h1>
-      <p class="lede">One row per night and one cell per half-hour scan. Green means every selected model passes. Red means at least one fails.</p>
+      <p class="lede">One row per night and one cell per half-hour scan. Green means all three classifiers pass the classification cutoff. Red means at least one classifier fails.</p>
       <p class="small">There is no S-band ground truth. Full-resolution areas and Dice at 0.15 come from the stored mask counts. The viewer previews are 480×480 px, block-max downsampled from 960.</p>
       <p id="selected-night" hidden>none</p>
       <div class="ctrls" id="ctrls"></div>
       <div class="ctrls cuts" id="cuts"></div>
+      <div class="chips" id="presets"></div>
       <div id="legend"></div>
       <p class="small" id="hour-caveat"></p>
       <div class="small" id="count"></div>

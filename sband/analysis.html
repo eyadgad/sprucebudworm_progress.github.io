@@ -23,7 +23,8 @@
     <main id="main" class="analysis-ui" tabindex="-1">
       <p id="corrections-banner" class="banner" hidden></p>
       <h1>S-band analysis</h1>
-      <p class="lede">Charts use the thresholds and included models from the shared state. S-band has no labels, so every figure is agreement between models.</p>
+      <p class="lede">Charts use the shared classification cutoff. S-band has no labels, so classifier figures are agreement between models. Classifiers share one cutoff, default 0.5. Youden cuts are not used for the classifiers. Segmenters are for masks, area and overlap only. They do not pass or fail a scan or a night.</p>
+      <div id="cls-cut-mount" class="ctrls cuts"></div>
       <div id="state-line" class="state-line"></div>
       <p id="rule-line"></p>
       <h2>Distributions</h2>

@@ -7,7 +7,7 @@ import { DataTable } from "../../assets/js/lib/table.js";
 import { esc } from "../../assets/js/lib/metrics.js";
 import { Modal } from "../../assets/js/lib/ui.js";
 import { assetUrl, fetchSbandPack, SbandPackCache, validatePackMeta } from "./pack.js";
-import { boot, getState, patch } from "./state.js";
+import { boot, getState, mountClassificationCutoff, patch } from "./state.js";
 import { initShell } from "./shell.js";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -138,31 +138,48 @@ async function main() {
     qualifies: !!exp.qualifies,
     annotation: !!exp.annotation,
     q: exp.q || "",
-    colour: exp.colour || "all6",
+    colour: ["cls", "swin_e1", "swin_e4", "swin_e1e4"].includes(exp.colour) ? exp.colour : "cls",
     view: exp.view || "grid",
-    cell: exp.cell || "72",
+    cell: ["fit", "48", "72", "110"].includes(String(exp.cell)) ? String(exp.cell) : "fit",
     sort: "time",
     dir: 1,
     cuts: Object.fromEntries(modelList.map(m => [m.id, Number.isFinite(Number(shared.thresholds?.[m.id])) ? Number(shared.thresholds[m.id]) : m.cut])),
   };
 
   const passes = (scan, model) => Number(scan[model.scoreKey]) >= state.cuts[model.id];
-  const kOf = scan => modelList.reduce((n, m) => n + (passes(scan, m) ? 1 : 0), 0);
+  const kOf = scan => classifiers.reduce((n, m) => n + (passes(scan, m) ? 1 : 0), 0);
 
   function colourPass(scan) {
-    if (state.colour === "all6") return modelList.every(m => passes(scan, m));
-    if (state.colour === "cls") return classifiers.every(m => passes(scan, m));
-    if (state.colour === "seg") return segmenters.every(m => passes(scan, m));
+    if (state.colour !== "swin_e1" && state.colour !== "swin_e4" && state.colour !== "swin_e1e4") {
+      return classifiers.every(m => passes(scan, m));
+    }
     const model = byId.get(state.colour);
     return !!model && passes(scan, model);
   }
 
   function colourWords() {
-    if (state.colour === "all6") return "Colour rule: green when all six models pass their cutoffs, red when at least one fails.";
-    if (state.colour === "cls") return "Colour rule: green when all three classifiers pass, red when at least one classifier fails.";
-    if (state.colour === "seg") return "Colour rule: green when all three segmenters pass, red when at least one segmenter fails.";
-    const model = byId.get(state.colour);
-    return model ? `Colour rule: green when ${model.label} passes its cutoff, red when it fails.` : "";
+    if (state.colour === "swin_e1" || state.colour === "swin_e4" || state.colour === "swin_e1e4") {
+      const model = byId.get(state.colour);
+      return model ? `Colour rule: green when ${model.label} passes the classification cutoff, red when it fails.` : "";
+    }
+    return "Colour rule: green when all three classifiers pass the classification cutoff, red when at least one fails.";
+  }
+
+  let fitPx = 48;
+  function cellPx() {
+    return state.cell === "fit" ? fitPx : Number(state.cell);
+  }
+  function measureFit() {
+    const grid = document.querySelector("#body .night-grid");
+    if (!grid) return;
+    const sum = grid.querySelector(".ng-sum");
+    if (!sum) return;
+    const sumW = sum.getBoundingClientRect().width;
+    const gridW = grid.clientWidth || document.getElementById("body").clientWidth;
+    // 29 tracks, 1 px gaps, 1 px padding each side, and a 3 px midnight bar.
+    const avail = gridW - sumW - 28 - 2 - 3;
+    fitPx = Math.max(32, Math.min(110, Math.floor(avail / 28)));
+    grid.style.setProperty("--cell", `${fitPx}px`);
   }
 
   let qualifying = new Map();
@@ -190,8 +207,12 @@ async function main() {
     for (const night of nights) {
       const list = (byNight.get(night.night) || []).filter(scan => inWindow(scan.hour));
       const counts = {};
-      for (const model of modelList) counts[model.id] = list.filter(scan => passes(scan, model)).length;
-      const ok = list.length >= 10 && modelList.every(model => counts[model.id] / list.length >= 0.5);
+      for (const model of classifiers) counts[model.id] = list.filter(scan => passes(scan, model)).length;
+      for (const model of segmenters) {
+        const vals = list.map(scan => Number(scan[model.scoreKey])).filter(Number.isFinite).sort((a, b) => a - b);
+        counts[model.id] = vals.length ? vals[Math.floor((vals.length - 1) / 2)] : null;
+      }
+      const ok = list.length >= 10 && classifiers.every(model => counts[model.id] / list.length >= 0.5);
       qualifying.set(night.night, ok);
       windowCounts.set(night.night, { n: list.length, counts, qualifies: ok });
     }
@@ -222,7 +243,7 @@ async function main() {
     const out = [];
     for (const scan of scans) {
       const meta = nightById.get(scan.night);
-      if (!meta || !nightVisible(meta) || !queryOk(scan)) continue;
+      if (!meta || !nightVisible(meta) || !queryOk(scan) || !presetOk(scan)) continue;
       out.push(scan);
     }
     return out.sort((a, b) => a.id - b.id);
@@ -307,23 +328,21 @@ async function main() {
   });
   ctrls.appendChild(ann);
   addSelect("Colour by", "s_colour", [
-    ["all6", "All six models"],
     ["cls", "All classifiers"],
-    ["seg", "All segmenters"],
-    ...modelList.map(m => [m.id, m.label]),
+    ...classifiers.map(m => [m.id, m.label]),
   ], state.colour, value => { state.colour = value; saveFilters(); draw(); });
   addSelect("View", "s_view", [["grid", "Night grid"], ["thumbs", "Thumbnails"], ["table", "Table"]], state.view, value => {
     state.view = value;
     saveFilters();
     draw();
   });
-  addSelect("Cell size", "s_cell", [["48", "Small 48"], ["72", "Medium 72"], ["110", "Large 110"]], state.cell, value => {
+  addSelect("Cell size", "s_cell", [["fit", "Fit"], ["48", "Small 48"], ["72", "Medium 72"], ["110", "Large 110"]], state.cell, value => {
     state.cell = value;
     saveFilters();
     draw();
   });
   addSelect("Sort by", "s_sort", [
-    ["time", "Time"], ["k", "k/6 passing"],
+    ["time", "Time"], ["k", "k/3 passing"],
     ...modelList.map(m => [m.scoreKey, m.label]),
   ], state.sort, value => { state.sort = value; draw(); });
   addSelect("Order", "s_dir", [["1", "Low / early first"], ["-1", "High / late first"]], String(state.dir), value => {
@@ -342,34 +361,37 @@ async function main() {
   ctrls.appendChild(search);
 
   const cuts = mount.querySelector("#cuts");
-  for (const model of modelList) {
-    const wrap = document.createElement("label");
-    wrap.className = "cut";
-    wrap.innerHTML = `${esc(model.label)}<input class="th-num" data-model="${model.id}" type="number" min="${model.min}" max="${model.max}" step="${model.step}" value="${state.cuts[model.id]}" aria-invalid="false">`;
-    const input = wrap.querySelector("input");
-    const applyCut = () => {
-      const raw = input.value.trim();
-      const value = Number(raw);
-      const min = Number(input.min);
-      const max = Number(input.max);
-      const ok = raw !== "" && Number.isFinite(value) && value >= min && value <= max;
-      input.classList.toggle("invalid", !ok);
-      input.setAttribute("aria-invalid", ok ? "false" : "true");
-      if (!ok) return;
-      state.cuts[model.id] = value;
-      patch(s => { s.thresholds[model.id] = value; });
-      recomputeNights();
+  mountClassificationCutoff(cuts, value => {
+    for (const model of classifiers) state.cuts[model.id] = value;
+    recomputeNights();
+    draw();
+    if (curId) renderOpenPanels();
+  });
+  let preset = "all";
+  const presets = document.getElementById("presets");
+  const PRESETS = [
+    ["all", "All scans"],
+    ["pass", "All classifiers pass"],
+    ["disagree", "Classifiers disagree"],
+    ["none", "No classifier passes"],
+  ];
+  function presetOk(scan) {
+    const k = kOf(scan);
+    if (preset === "pass") return k === 3;
+    if (preset === "disagree") return k > 0 && k < 3;
+    if (preset === "none") return k === 0;
+    return true;
+  }
+  if (presets) {
+    presets.innerHTML = PRESETS.map(([key, label]) =>
+      `<button type="button" class="chip${key === preset ? " on" : ""}" data-p="${key}">${esc(label)}</button>`).join("");
+    presets.addEventListener("click", event => {
+      const button = event.target.closest("[data-p]");
+      if (!button) return;
+      preset = button.dataset.p;
+      presets.querySelectorAll(".chip").forEach(el => el.classList.toggle("on", el === button));
       draw();
-      if (curId) renderOpenPanels();
-    };
-    input.addEventListener("input", applyCut);
-    input.addEventListener("blur", () => {
-      if (!input.classList.contains("invalid")) return;
-      input.value = String(state.cuts[model.id]);
-      input.classList.remove("invalid");
-      input.setAttribute("aria-invalid", "false");
     });
-    cuts.appendChild(wrap);
   }
 
   const thumbUrl = ts => assetUrl(packMeta.thumbnail_path, ts, packMeta.thumbnail_version || packMeta.version);
@@ -400,8 +422,8 @@ async function main() {
     const qualBox = document.getElementById("s_qual");
     if (qualBox) qualBox.checked = state.qualifies;
     document.getElementById("legend").innerHTML =
-      `<span class="swatch-key"><i class="chip-sw pass"></i> all selected models pass</span>` +
-      `<span class="swatch-key"><i class="chip-sw fail"></i> at least one fails</span>` +
+      `<span class="swatch-key"><i class="chip-sw pass"></i> classifiers pass</span>` +
+      `<span class="swatch-key"><i class="chip-sw fail"></i> a classifier fails</span>` +
       `<span class="swatch-key"><i class="chip-sw hatch"></i> no scan</span>` +
       `<span id="colour-rule">${esc(colourWords())}</span>`;
     document.getElementById("hour-caveat").textContent =
@@ -435,17 +457,26 @@ async function main() {
     if (!scan || !queryOk(scan)) {
       return `<div class="gcell hatch" data-pass="h" data-key="${esc(night.night)}|${slot}" data-night="${esc(night.night)}" title="No scan at ${slot} UTC"></div>`;
     }
+    if (!presetOk(scan)) {
+      return `<div class="gcell hatch" data-pass="h" data-key="${esc(night.night)}|${slot}" data-night="${esc(night.night)}" title="Hidden by the preset"></div>`;
+    }
     const ok = colourPass(scan);
     const when = stamp(scan.id);
     const glyph = ok ? "✓" : "✗";
     const word = ok ? "pass" : "fail";
-    return `<button type="button" class="gcell ${ok ? "pass" : "fail"}" data-pass="${ok ? "1" : "0"}" data-ts="${scan.id}" data-night="${esc(scan.night)}" data-slot="${slot}" title="${esc(when.title)} ${word}"><img alt="" width="${state.cell}" height="${state.cell}" loading="lazy" decoding="async" src="${esc(thumbUrl(scan.id))}"><span class="glyph" aria-hidden="true">${glyph}</span></button>`;
+    const px = cellPx();
+    return `<button type="button" class="gcell ${ok ? "pass" : "fail"}" data-pass="${ok ? "1" : "0"}" data-ts="${scan.id}" data-night="${esc(scan.night)}" data-slot="${slot}" title="${esc(when.title)} ${word}"><span class="frame"><img alt="" width="${px}" height="${px}" loading="lazy" decoding="async" src="${esc(thumbUrl(scan.id))}"></span><span class="badge" aria-hidden="true">${glyph}</span></button>`;
   }
 
   function rowHtml(night) {
     const stat = windowCounts.get(night.night) || { n: 0, counts: {}, qualifies: false };
-    const swin = classifiers.map(model => `${model.key} ${stat.n ? `${stat.counts[model.id] || 0}/${stat.n}` : "—"}`).join(" · ");
-    const att = segmenters.map(model => `${model.key} ${stat.n ? `${stat.counts[model.id] || 0}/${stat.n}` : "—"}`).join(" · ");
+    const countCell = (key, text) => `<span><small>${esc(key)}</small>${text}</span>`;
+    const swin = classifiers.map(model => countCell(model.key, stat.n ? `${stat.counts[model.id] || 0}/${stat.n}` : "—")).join("");
+    const att = segmenters.map(model => {
+      const med = stat.counts[model.id];
+      const show = med == null ? "—" : `${Math.round(med).toLocaleString("en-US")}`;
+      return countCell(model.key, show);
+    }).join("");
     const cells = SLOTS.slice(0, 10).map(([h, m]) => cellHtml(night, h, m)).join("") +
       `<span class="midnight-bar" title="Midnight UTC"></span>` +
       SLOTS.slice(10).map(([h, m]) => cellHtml(night, h, m)).join("");
@@ -453,8 +484,8 @@ async function main() {
       <div class="ng-sum">
         <div class="ng-id"><b>${esc(night.night)}</b> <span class="${stat.qualifies ? "q-yes" : "q-no"}">${stat.qualifies ? "✓" : "✗"}</span></div>
         <div class="ng-meta">${esc(night.status)}${stat.n ? ` · ${stat.n} in 00–08` : ""}</div>
-        <div class="ng-counts" title="Swin passes in 00–08 UTC">Swin ${swin}</div>
-        <div class="ng-counts" title="AttUNet passes in 00–08 UTC">Att ${att}</div>
+        <div class="ng-line" title="Classifier passes in 00–08 UTC"><b>Swin</b>${swin}</div>
+        <div class="ng-line" title="Median mask area, km², in 00–08 UTC. Not a pass or fail."><b>Att</b>${att}</div>
       </div>
       <div class="ng-slots">${cells}</div>
     </div>`;
@@ -462,10 +493,11 @@ async function main() {
 
   function drawGrid(body) {
     const visible = nights.filter(nightVisible);
-    body.innerHTML = `<div id="grid-scroll" data-ready="0"><div class="night-grid" style="--cell:${Number(state.cell)}px" data-colour="${esc(state.colour)}">
+    body.innerHTML = `<div id="grid-scroll" data-ready="0"><div class="night-grid${state.cell === "fit" ? " is-fit" : ""}" style="--cell:${cellPx()}px" data-colour="${esc(state.colour)}">
       <div class="ng-row ng-head"><div class="ng-sum">Night · 00–08 UTC</div><div class="ng-slots">${slotHeads()}</div></div>
       <div id="ng-body"></div>
     </div></div>`;
+    if (state.cell === "fit") measureFit();
     const scroller = body.querySelector("#grid-scroll");
     const host = body.querySelector("#ng-body");
     scroller.addEventListener("click", event => {
@@ -486,7 +518,10 @@ async function main() {
       host.insertAdjacentHTML("beforeend", visible.slice(index, index + chunk).map(rowHtml).join(""));
       index += chunk;
       if (index < visible.length) requestAnimationFrame(paintChunk);
-      else scroller.dataset.ready = "1";
+      else {
+        if (state.cell === "fit") measureFit();
+        scroller.dataset.ready = "1";
+      }
     };
     paintChunk();
   }
@@ -502,7 +537,7 @@ async function main() {
       return `<button type="button" class="scell ${ok ? "pass" : "fail"}" data-ts="${scan.id}" data-pass="${ok ? "1" : "0"}">
         <img class="im" width="120" height="120" loading="lazy" decoding="async" alt="" src="${esc(thumbUrl(scan.id))}">
         <span class="cap"><b>${when.hm}</b> <span class="m">${when.day}</span><br>
-        <span class="glyph">${ok ? "✓" : "✗"}</span> <span class="kbadge">${kOf(scan)}/6</span></span>
+        <span class="glyph">${ok ? "✓" : "✗"}</span> <span class="kbadge">${kOf(scan)}/3</span></span>
       </button>`;
     }).join("") + `</div>
       <p class="small" style="margin-top:10px">Thumbnails are −0.3° reflectivity, with no mask. The border is the colour rule. ${matched.length > 120 ? `Showing the first 120 of ${matched.length.toLocaleString("en-US")}.` : ""}</p>`;
@@ -529,7 +564,7 @@ async function main() {
           key: m.id, label: m.label,
           fmt: v => m.family === "classifier" ? fmtProb(v) : fmtKm(v),
         })),
-        { key: "k", label: "k/6", fmt: v => `${v}/6` },
+        { key: "k", label: "k/3", fmt: v => `${v}/3` },
         { key: "pass", label: "Colour", fmt: v => v === "pass" ? "✓" : "✗" },
       ],
       rows: tableRows,
@@ -795,15 +830,13 @@ async function main() {
     const key = modelKey();
     const seg = segmenters.find(model => model.key === key);
     const fullKm = Number(cur[seg.scoreKey]);
-    const fullOk = fullKm >= state.cuts[seg.id];
     const cut = pack ? threshold() * 255 : 0;
     const every = pack ? Object.fromEntries(SEG_KEYS.map(name => [name, maskOf(name, cut)])) : null;
     const livePx = every ? every[key].reduce((n, v) => n + v, 0) : 0;
     q("#v-seg").innerHTML = [
       [`Preview area`, `${fmtKm(livePx)} `, `live-area`, String(livePx)],
-      [`Full-resolution area at 0.15`, `${fmtKm(fullKm)} ${fullOk ? "pass" : "fail"}`, `full-area`, String(fullKm)],
-      [`Area cutoff`, fmtKm(state.cuts[seg.id]), `area-cut`, String(state.cuts[seg.id])],
-    ].map(([k, v, metric, raw]) => `<span class="k">${esc(k)}</span><span class="v" data-metric="${metric}" data-value="${raw}" data-pass="${metric === "full-area" ? (fullOk ? 1 : 0) : ""}">${v}</span>`).join("");
+      [`Full-resolution area at 0.15`, fmtKm(fullKm), `full-area`, String(fullKm)],
+    ].map(([k, v, metric, raw]) => `<span class="k">${esc(k)}</span><span class="v" data-metric="${metric}" data-value="${raw}">${v}</span>`).join("");
     const pairs = [["e1", "e4", "n_e1", "n_e4", "n_e1_and_e4"], ["e1", "e1e4", "n_e1", "n_e1e4", "n_e1_and_e1e4"], ["e4", "e1e4", "n_e4", "n_e1e4", "n_e4_and_e1e4"]];
     const liveMasks = every || {};
     q("#v-cmp").innerHTML = pairs.map(([a, b, na, nb, ni]) => {
@@ -821,7 +854,7 @@ async function main() {
     const sibs = scans.filter(scan => scan.night === cur.night).sort((a, b) => a.id - b.id);
     el.innerHTML = `<div class="chips">` + sibs.map(scan => {
       const k = kOf(scan);
-      return `<button type="button" class="chip k${k}${scan.id === cur.id ? " on" : ""}" data-ts="${scan.id}">${stamp(scan.id).hm} · ${k}/6</button>`;
+      return `<button type="button" class="chip k${k}${scan.id === cur.id ? " on" : ""}" data-ts="${scan.id}">${stamp(scan.id).hm} · ${k}/3</button>`;
     }).join("") + `</div><p class="small">${sibs.length} scored scans on ${esc(cur.night)}, in time order.</p>`;
     el.querySelectorAll(".chip").forEach(button => button.addEventListener("click", () => loadScene(button.dataset.ts)));
   }
@@ -969,6 +1002,9 @@ async function main() {
   indexScans();
   recomputeNights();
   draw();
+  window.addEventListener("resize", () => {
+    if (state.view === "grid" && state.cell === "fit") measureFit();
+  });
   const initial = legacyId();
   if (initial) open(initial);
   window.__explore = {

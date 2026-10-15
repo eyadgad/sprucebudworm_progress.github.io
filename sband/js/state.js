@@ -5,6 +5,22 @@
    Corrections never change the JSON files. */
 
 const STORAGE_KEY = "sband-v2-state";
+const CLS_IDS = ["swin_e1", "swin_e4", "swin_e1e4"];
+const CLS_DEFAULT = 0.5;
+
+function isClassifier(id) {
+  return CLS_IDS.includes(id);
+}
+
+/** One probability cutoff for every classifier. Values outside 0–1 are refused. */
+function setClsCut(next, value) {
+  if (value === "" || value === null || value === undefined) return false;
+  const v = Math.round(Number(value) * 100) / 100;
+  if (!Number.isFinite(v) || v < 0 || v > 1) return false;
+  next.clsCut = v;
+  for (const id of CLS_IDS) if (id in next.thresholds) next.thresholds[id] = v;
+  return true;
+}
 
 let models = null;
 let order = [];
@@ -33,17 +49,18 @@ function defaultsFrom(doc) {
   const thresholds = {};
   const included = {};
   for (const m of [...doc.classifiers, ...doc.segmenters]) {
-    thresholds[m.id] = m.family === "classifier" ? Number(m.default_threshold) : Number(m.threshold_km2);
+    thresholds[m.id] = m.family === "classifier" ? CLS_DEFAULT : Number(m.threshold_km2);
     included[m.id] = true;
   }
   return {
+    clsCut: CLS_DEFAULT,
     thresholds,
     included,
     nightRule: { mode: "every", fraction: 0.5, minScans: 10, hourStart: 0, hourEnd: 8 },
     filters: { qualifies: false, status: "all", month: "all", annotation: false, minModels: 0 },
     explore: {
       year: "all", night: "all", status: "all", qualifies: false, annotation: false,
-      q: "", colour: "all6", view: "grid", cell: "72",
+      q: "", colour: "cls", view: "grid", cell: "fit",
     },
     corrections: [],
     selection: { year: "2021", night: "", scan: "" },
@@ -62,6 +79,7 @@ function defaultsFrom(doc) {
 
 function blankCopy(base) {
   return {
+    clsCut: base.clsCut,
     thresholds: { ...base.thresholds },
     included: { ...base.included },
     nightRule: { ...base.nightRule },
@@ -102,7 +120,7 @@ function hashParams() {
   const raw = location.hash.replace(/^#/, "");
   if (!raw) return null;
   const q = new URLSearchParams(raw);
-  const known = ["y", "n", "night", "s", "th", "inc", "rule", "fq", "fs", "fm", "fa", "fk", "cx", "cm", "cid", "sk", "sid", "tv", "vm", "vo", "vk", "vp", "ey", "q", "cb", "vw", "cz"];
+  const known = ["y", "n", "night", "s", "th", "cc", "inc", "rule", "fq", "fs", "fm", "fa", "fk", "cx", "cm", "cid", "sk", "sid", "tv", "vm", "vo", "vk", "vp", "ey", "q", "cb", "vw", "cz"];
   return known.some(k => q.has(k)) ? q : null;
 }
 
@@ -133,10 +151,12 @@ function applyStored(base, stored) {
   if (!stored) return next;
   if (stored.thresholds) {
     for (const id of base.ids) {
+      if (isClassifier(id) || id.startsWith("attunet_")) continue;
       const v = Number(stored.thresholds[id]);
       if (Number.isFinite(v)) next.thresholds[id] = v;
     }
   }
+  if (stored.clsCut !== undefined) setClsCut(next, stored.clsCut);
   // included and nightRule are fixed. Stale copies in localStorage are ignored.
   if (stored.filters) {
     const f = stored.filters;
@@ -156,9 +176,11 @@ function applyStored(base, stored) {
     if (typeof src.qualifies === "boolean") exp.qualifies = src.qualifies;
     if (typeof src.annotation === "boolean") exp.annotation = src.annotation;
     if (typeof src.q === "string") exp.q = src.q;
-    if (["all6", "cls", "seg", "swin_e1", "swin_e4", "swin_e1e4", "attunet_e1", "attunet_e4", "attunet_e1e4"].includes(src.colour)) exp.colour = src.colour;
+    if (["cls", "swin_e1", "swin_e4", "swin_e1e4"].includes(src.colour)) exp.colour = src.colour;
+    else exp.colour = "cls";
     if (["grid", "thumbs", "table"].includes(src.view)) exp.view = src.view;
-    if (["48", "72", "110"].includes(String(src.cell))) exp.cell = String(src.cell);
+    if (["fit", "48", "72", "110"].includes(String(src.cell))) exp.cell = String(src.cell);
+    else exp.cell = "fit";
   } else {
     next.explore.annotation = next.filters.annotation;
     next.explore.qualifies = next.filters.qualifies;
@@ -219,10 +241,13 @@ function applyHash(base, q) {
       if (i < 0) continue;
       const id = part.slice(0, i);
       const v = Number(part.slice(i + 1));
+      // Old links stored a different cutoff for each classifier. Those values are ignored.
+      if (isClassifier(id) || id.startsWith("attunet_")) continue;
       if (id in next.thresholds && Number.isFinite(v)) next.thresholds[id] = v;
     }
   }
-  // inc= and rule= are ignored. Every page uses all six models and the 00-08 UTC rule.
+  if (q.has("cc")) setClsCut(next, q.get("cc"));
+  // inc= and rule= are ignored. Models stay available for inspection. The night rule uses the three classifiers and hours 00-08 UTC.
   if (q.has("fq")) {
     next.filters.qualifies = q.get("fq") === "1";
     next.explore.qualifies = next.filters.qualifies;
@@ -239,11 +264,10 @@ function applyHash(base, q) {
     next.explore.annotation = next.filters.annotation;
   }
   if (q.has("q")) next.explore.q = q.get("q") || "";
-  if (q.has("cb") && ["all6", "cls", "seg", "swin_e1", "swin_e4", "swin_e1e4", "attunet_e1", "attunet_e4", "attunet_e1e4"].includes(q.get("cb"))) {
-    next.explore.colour = q.get("cb");
-  }
+  if (q.has("cb") && ["cls", "swin_e1", "swin_e4", "swin_e1e4"].includes(q.get("cb"))) next.explore.colour = q.get("cb");
+  else if (q.has("cb")) next.explore.colour = "cls";
   if (q.has("vw") && ["grid", "thumbs", "table"].includes(q.get("vw"))) next.explore.view = q.get("vw");
-  if (q.has("cz") && ["48", "72", "110"].includes(q.get("cz"))) next.explore.cell = q.get("cz");
+  if (q.has("cz") && ["fit", "48", "72", "110"].includes(q.get("cz"))) next.explore.cell = q.get("cz");
   if (q.has("fk")) {
     const v = Number(q.get("fk"));
     if (Number.isFinite(v)) next.filters.minModels = v;
@@ -283,6 +307,7 @@ function writeHash() {
   q.set("y", state.selection.year || "");
   q.set("n", state.selection.night || "");
   q.set("s", state.selection.scan || "");
+  q.set("cc", String(state.clsCut));
   q.set("th", state.ids.map(id => `${id}:${state.thresholds[id]}`).join(","));
   q.set("ey", state.explore.year);
   q.set("q", state.explore.q);
@@ -310,6 +335,7 @@ function writeHash() {
 }
 
 function lockAgreement(next) {
+  setClsCut(next, next.clsCut);
   for (const id of next.ids) next.included[id] = true;
   next.nightRule.mode = "every";
   next.nightRule.fraction = 0.5;
@@ -343,6 +369,57 @@ export function boot(doc) {
   writeHash();
   emit();
   return state;
+}
+
+export function setClassificationCutoff(value) {
+  if (!setClsCut(state, value)) return false;
+  persist();
+  return true;
+}
+
+/** Number box and slider for the one classifier cutoff. `after` runs once it is applied. */
+export function mountClassificationCutoff(parent, after) {
+  if (!parent || !state) return;
+  const value = state.clsCut;
+  parent.insertAdjacentHTML("beforeend", `
+    <label class="cut cls-cut">
+      <span>Classification cutoff</span>
+      <input id="cls-cut" class="th-num" type="number" min="0" max="1" step="0.01" value="${value}" aria-invalid="false">
+      <input id="cls-cut-range" type="range" min="0" max="1" step="0.01" value="${value}" aria-label="Classification cutoff">
+    </label>`);
+  const number = parent.querySelector("#cls-cut");
+  const range = parent.querySelector("#cls-cut-range");
+  const read = raw => {
+    if (String(raw).trim() === "") return null;
+    const v = Math.round(Number(raw) * 100) / 100;
+    if (!Number.isFinite(v) || v < 0 || v > 1) return null;
+    return v;
+  };
+  const commit = (v, rewrite) => {
+    number.classList.remove("invalid");
+    number.setAttribute("aria-invalid", "false");
+    range.value = String(v);
+    if (rewrite) number.value = String(v);
+    if (v !== state.clsCut) setClassificationCutoff(v);
+    if (after) after(state.clsCut);
+  };
+  number.addEventListener("input", () => {
+    const v = read(number.value);
+    const ok = v !== null;
+    number.classList.toggle("invalid", !ok);
+    number.setAttribute("aria-invalid", ok ? "false" : "true");
+    if (ok) commit(v, false);
+  });
+  number.addEventListener("blur", () => {
+    number.value = String(state.clsCut);
+    range.value = String(state.clsCut);
+    number.classList.remove("invalid");
+    number.setAttribute("aria-invalid", "false");
+  });
+  range.addEventListener("input", () => {
+    const v = read(range.value);
+    if (v !== null) commit(v, true);
+  });
 }
 
 export function patch(mutator) {
