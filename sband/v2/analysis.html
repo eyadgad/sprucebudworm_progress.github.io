@@ -20,11 +20,21 @@
       <span class="sp"></span>
       <button id="theme" type="button" aria-label="Switch colour theme">Theme</button>
     </div>
-    <main id="main" tabindex="-1">
+    <main id="main" class="analysis-ui" tabindex="-1">
       <p id="corrections-banner" class="banner" hidden></p>
       <h1>S-band analysis</h1>
-      <p class="lede">Charts come later. Thresholds and corrections already come from the shared state, and nothing here is called accuracy.</p>
+      <p class="lede">Charts use the thresholds and included models from the shared state. S-band has no labels, so every figure is agreement between models.</p>
+      <div id="state-line" class="state-line"></div>
       <p id="rule-line"></p>
+      <h2>Distributions</h2>
+      <div id="distributions" class="dist-grid"></div>
+      <h2>Model comparison</h2>
+      <div id="compare"></div>
+      <h2>Patterns</h2>
+      <div id="patterns"></div>
+      <h2>Segmentation</h2>
+      <div id="segmentation"></div>
+      <p id="cband-ref"></p>
       <h2>Corrections</h2>
       <ul id="active-corrections"></ul>
     </main>

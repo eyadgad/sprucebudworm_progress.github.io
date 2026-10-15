@@ -200,7 +200,8 @@ function fmtKm(pixels) {
 }
 
 function paintStats(scan, state) {
-  const table = root.querySelector("#mask-stats");
+  const table = document.getElementById("mask-stats");
+  if (!table) return;
   if (!scan) { table.innerHTML = ""; return; }
   const keys = selectedMasks(state).map(m => m.key);
   const rows = MASKS.map(m => {
@@ -295,6 +296,7 @@ function syncControls(state) {
   root.querySelector("#tilt").value = view.tilt;
   root.querySelector("#mask-mode").value = view.mode;
   root.querySelector("#only-model").value = view.only;
+  root.querySelector("#only-wrap").hidden = view.mode !== "only";
   for (const mask of MASKS) {
     root.querySelector(`.mask-on[data-mask="${mask.id}"]`).checked = !!view.masks[mask.id];
     root.querySelector(`.mask-op[data-mask="${mask.id}"]`).value = String(view.opacity[mask.id]);
@@ -307,6 +309,12 @@ export function bindViewer(el, api) {
   getState = api.getState;
   nextOf = api.nextId;
   el.innerHTML = `
+    <div id="stages"></div>
+    <div class="cbar-wrap">
+      <div id="cbar" class="cbar-ramp" title="−5 to 40 dBZ"></div>
+      <div class="cbar-labels"><span>40</span><span>−5</span></div>
+      <p id="clip-note">Values below −5 dBZ use the −5 colour. Values above 40 dBZ use the 40 colour.</p>
+    </div>
     <div class="viewer-bar">
       <label>DBZH
         <select id="tilt">
@@ -323,23 +331,18 @@ export function bindViewer(el, api) {
           <option value="only">Only one mask</option>
         </select>
       </label>
-      <label>Only
+      <label id="only-wrap" hidden>Only
         <select id="only-model">
           ${MASKS.map(m => `<option value="${m.id}">${m.label}</option>`).join("")}
         </select>
       </label>
     </div>
     <div class="mask-picks">
-      ${MASKS.map(m => `<label class="check"><input type="checkbox" class="mask-on" data-mask="${m.id}"> ${m.label}</label>
-        <input type="range" class="mask-op" data-mask="${m.id}" min="0" max="1" step="0.05" aria-label="${m.label} opacity">`).join("")}
-    </div>
-    <div id="stages"></div>
-    <div class="cbar-wrap">
-      <div id="cbar" class="cbar-ramp" title="−5 to 40 dBZ"></div>
-      <div class="cbar-labels"><span>40</span><span>−5</span></div>
-      <p id="clip-note">Values below −5 dBZ use the −5 colour. Values above 40 dBZ use the 40 colour.</p>
-    </div>
-    <table class="v2-table" id="mask-stats"></table>`;
+      ${MASKS.map(m => `<div class="mask-line">
+        <label class="check"><input type="checkbox" class="mask-on" data-mask="${m.id}"><i class="swatch" style="background:rgb(${m.color.join(",")})"></i> ${m.label}</label>
+        <input type="range" class="mask-op" data-mask="${m.id}" min="0" max="1" step="0.05" aria-label="${m.label} opacity">
+      </div>`).join("")}
+    </div>`;
   root.querySelector("#tilt").addEventListener("change", () => patch(s => { s.viewer.tilt = root.querySelector("#tilt").value; }));
   root.querySelector("#mask-mode").addEventListener("change", () => patch(s => { s.viewer.mode = root.querySelector("#mask-mode").value; }));
   root.querySelector("#only-model").addEventListener("change", () => patch(s => { s.viewer.only = root.querySelector("#only-model").value; s.viewer.mode = "only"; }));

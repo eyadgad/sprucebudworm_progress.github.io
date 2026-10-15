@@ -63,10 +63,6 @@ function utcFromStamp(id) {
   };
 }
 
-function edtClock(hour, minute) {
-  return `${pad((hour + 20) % 24)}:${pad(minute)} EDT`;
-}
-
 function inWindow(hour, rule) {
   const a = Number(rule.hourStart);
   const b = Number(rule.hourEnd);
@@ -156,12 +152,21 @@ function withBands(pieces) {
   return html;
 }
 
+function edtHm(hour, minute) {
+  return `${pad((hour + 20) % 24)}:${pad(minute)}`;
+}
+
+function hourHead(hour) {
+  const title = `${pad(hour)}:00–${pad(hour)}:30 UTC (${edtHm(hour, 0)}–${edtHm(hour, 30)} EDT)`;
+  return `<span class="sh" data-hour="${hour}" title="${title}">${pad(hour)}</span>`;
+}
+
 function slotHeads() {
-  const bits = SLOTS.map(([hour, minute]) => {
-    const label = `${pad(hour)}:${pad(minute)} UTC (${edtClock(hour, minute)})`;
-    return `<span class="sh" data-hour="${hour}" data-minute="${minute}" title="${label}"><b>${pad(hour)}:${pad(minute)}</b></span>`;
-  });
-  return withBands(bits);
+  let html = "";
+  for (let hour = 19; hour <= 23; hour++) html += hourHead(hour);
+  html += `<span class="midnight-bar" title="Midnight UTC"></span>`;
+  for (let hour = 0; hour <= 8; hour++) html += hourHead(hour);
+  return html;
 }
 
 function rowHtml(night, scans, dropped) {
@@ -192,10 +197,10 @@ function rowHtml(night, scans, dropped) {
   return `<article class="erow" data-night="${night.night}" data-year="${night.night.slice(0, 4)}" data-status="${night.status}" data-role="${night.annotation_role || ""}">
     <div class="sum">
       <button type="button" class="night-link night-pick" data-night="${night.night}">${night.night}</button>
-      ${badgeHtml(night, dropped)}
+      <span class="badges">${badgeHtml(night, dropped)}</span>
       <span data-part="qual"></span>
       <span data-part="window"></span>
-      ${models}
+      <span class="model-cols">${models}</span>
     </div>
     <p class="why"${why ? "" : " hidden"}>${why}</p>
     <div class="slots">${slots}</div>
@@ -469,6 +474,15 @@ function paintGroups(st) {
   document.getElementById("group-segmenters").textContent = `Segmenters ${word(seg)}`;
 }
 
+function revealImage() {
+  const panel = document.getElementById("scan-panel");
+  if (!panel) return;
+  const sticky = 58;
+  const top = panel.getBoundingClientRect().top;
+  if (top > sticky + 1) window.scrollBy({ top: top - sticky, left: 0, behavior: "instant" });
+  panel.scrollTop = 0;
+}
+
 function paintPanel(st) {
   const scan = st.selection.scan ? scanById.get(st.selection.scan) : null;
   document.getElementById("mask-area-note").textContent = modelDoc.mask_area_note || "";
@@ -481,6 +495,7 @@ function paintPanel(st) {
     when.textContent = "";
     qual.textContent = "";
     table.innerHTML = "";
+    paintPanel.scan = "";
     if (paintPanel.sig !== "none") {
       paintPanel.sig = "none";
       updateViewer(null, st);
@@ -491,7 +506,8 @@ function paintPanel(st) {
   const edt = edtFromStamp(scan.id);
   const night = document.querySelector(`.scell[data-scan="${scan.id}"]`)?.dataset.night || scan.night;
   idEl.textContent = String(scan.id);
-  when.textContent = `${utc.hm} UTC on ${utc.date}. ${edt.hm} EDT on ${edt.date}. Night ${night}.`;
+  when.textContent = `${utc.hm} UTC · ${edt.hm} EDT`;
+  when.title = `${utc.hm} UTC on ${utc.date}. ${edt.hm} EDT on ${edt.date}.`;
   const row = document.querySelector(`.erow[data-night="${night}"]`);
   qual.textContent = row?.dataset.qualifies === "1" ? "✓ qualifies" : "✗ does not qualify";
   const body = modelList.map(m => {
@@ -507,6 +523,10 @@ function paintPanel(st) {
   if (sig !== paintPanel.sig) {
     paintPanel.sig = sig;
     updateViewer(scan, st);
+  }
+  if (paintPanel.scan !== String(scan.id)) {
+    paintPanel.scan = String(scan.id);
+    revealImage();
   }
 }
 

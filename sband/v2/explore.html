@@ -116,19 +116,21 @@
           <p id="grid-ready" class="small"></p>
         </div>
         <aside id="scan-panel">
-          <h2>Scan panel</h2>
-          <p>Selected night <b id="selected-night">none</b>.</p>
-          <p id="panel-id"></p>
-          <p id="panel-when"></p>
-          <p id="panel-qual"></p>
-          <div class="nav-row">
-            <button type="button" id="prev-night">Previous night</button>
-            <button type="button" id="prev-scan">Previous scan</button>
-            <button type="button" id="next-scan">Next scan</button>
-            <button type="button" id="next-night">Next night</button>
+          <div id="panel-head">
+            <b id="panel-id"></b>
+            <span id="panel-when"></span>
+            <b id="selected-night">none</b>
+            <span id="panel-qual"></span>
+            <div class="nav-row">
+              <button type="button" id="prev-night">Night −</button>
+              <button type="button" id="prev-scan">Scan −</button>
+              <button type="button" id="next-scan">Scan +</button>
+              <button type="button" id="next-night">Night +</button>
+            </div>
           </div>
-          <table class="v2-table" id="panel-scores"></table>
           <div id="viewer"></div>
+          <table class="v2-table" id="panel-scores"></table>
+          <table class="v2-table" id="mask-stats"></table>
           <p id="mask-area-note"></p>
         </aside>
       </div>
