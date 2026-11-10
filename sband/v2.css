@@ -206,6 +206,7 @@ body.viewer-large .stage .dbzh-canvas{width:100%;max-height:min(900px,calc(100vh
 .chart .bar{fill:var(--accent)}
 .chart .cut{stroke:var(--bad);stroke-width:0.6}
 .matrix,.heat{table-layout:fixed;width:100%;font-size:11px}
+.analysis-ui .matrix{width:max-content;max-width:100%;table-layout:auto}
 .analysis-ui .matrix th,.analysis-ui .matrix td,.analysis-ui .heat th,.analysis-ui .heat td{
   white-space:normal;position:static;text-align:center;padding:3px 2px;background:transparent;vertical-align:middle
 }
@@ -320,4 +321,12 @@ body.viewer-large .stage .dbzh-canvas{width:100%;max-height:min(900px,calc(100vh
 @media(max-width:720px){
   .ng-sum{flex-basis:9.2rem;width:9.2rem;padding:3px 5px}
   .ng-counts{font-size:9px}
+}
+/* 17rem + 33 px gaps + 28 cells at 32 px needs a 1201 px body. At a 1440 px viewport the body is about 1115 px, so this starts at 1526. */
+@media(min-width:1526px){
+  .ng-sum{flex-basis:17rem;width:17rem;padding:6px 8px}
+  .ng-id{font-size:14px;line-height:1.35}
+  .ng-meta{font-size:12px;white-space:normal}
+  .ng-line{font-size:12.5px;line-height:1.3;grid-template-columns:2.6rem repeat(3,minmax(0,1fr));gap:2px 4px}
+  .ng-line small{font-size:11px}
 }
